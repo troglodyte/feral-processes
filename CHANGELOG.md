@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.23
+
+**The Workbench's Build routine and Build weapon pages show what you're making in a box on the right.** The description, cost and materials used to sit under the part rows, where a long build pushed them off the bottom of the page. They now sit beside the rows, in a faint box that grows and shrinks with them.
+
+**Each part row says how many choices it has, or that nothing is researched.** A row reads `Range (3): none`, or `Proc (nothing researched)` when its list would be empty, so you know which rows to skip without opening each one.
+
+**Coming back from a part list or the name field puts the highlight back on the row you opened.** It used to jump to the top of the page after every pick, so building a routine meant walking back down to the next row each time.
+
+**A new design is named after its Core or Frame.** Pick Heal and the routine is called Heal until you type a name of your own; changing the Core renames it, and a name you typed stays put.
+
 ## 0.21.22
 
 **The Study a program screen now says why it wants a program, and what happens to it.** Picking research that needs a subject opens the screen straight away, and the list of base staff used to appear with no explanation. Above the list it now says the research needs a program to study, that it's going to hurt, and that the program won't survive it.

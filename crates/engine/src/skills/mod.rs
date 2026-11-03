@@ -97,7 +97,7 @@ impl Skill {
             Skill::Farm => "farmer",
             Skill::Aim => "marksman",
             Skill::Force => "bruiser",
-            Skill::Defence => "defender",
+            Skill::Defence => "guardian",
             Skill::Routines => "scripter",
         }
     }

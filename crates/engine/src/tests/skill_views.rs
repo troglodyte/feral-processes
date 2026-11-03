@@ -152,7 +152,7 @@ fn a_combat_level_names_a_plain_role_and_the_player_is_you() {
         .collect();
     for want in [
         "You are now a level 4 marksman.".to_string(),
-        format!("{name} is now a level 2 defender."),
+        format!("{name} is now a level 2 guardian."),
         format!("{name} is now a level 3 bruiser."),
         format!("{name} is now a level 5 scripter."),
     ] {

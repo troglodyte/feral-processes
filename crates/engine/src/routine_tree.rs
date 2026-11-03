@@ -114,3 +114,50 @@ pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
     }
     nodes
 }
+
+/// The parts of `parts` a program carrying them could let you find now
+/// (ADR 0041), in `Subroutine` order with duplicates collapsed. A carried
+/// Core offers its lowest unknown version whose rung below is `known`, so a
+/// find never skips a rung; a modifier has no rung. `eligible` answers the
+/// node's own terms (hidden, unfound, unresearched, inside the zone gate).
+/// Read once, so nothing found from this call makes another findable.
+pub fn findable_parts(
+    parts: &[Subroutine],
+    known: impl Fn(&str) -> bool,
+    eligible: impl Fn(&str) -> bool,
+) -> Vec<Subroutine> {
+    let mut found = std::collections::BTreeSet::new();
+    for part in parts {
+        let rungs: Vec<Subroutine> = match *part {
+            Subroutine::Core(core, top) => Version::ALL[..=top.index()]
+                .iter()
+                .map(|&v| Subroutine::Core(core, v))
+                .collect(),
+            other => vec![other],
+        };
+        let mut below_known = true;
+        for rung in rungs {
+            let id = part_node_id(&rung);
+            if below_known && eligible(&id) {
+                found.insert(rung);
+            }
+            below_known = known(&id);
+        }
+    }
+    found.into_iter().collect()
+}
+
+/// Which of `findable` an extraction finds: one draw at `chance` per part,
+/// in order, and no draw at all for an empty list.
+pub fn roll_part_finds(
+    findable: &[Subroutine],
+    chance: f64,
+    rng: &mut rand::rngs::StdRng,
+) -> Vec<Subroutine> {
+    use rand::RngExt;
+    findable
+        .iter()
+        .copied()
+        .filter(|_| rng.random_bool(chance))
+        .collect()
+}

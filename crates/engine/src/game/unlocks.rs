@@ -383,7 +383,7 @@ impl Game {
     /// the one definition of the gate — `research_nodes` explains it and
     /// `select_research` refuses on it, so a menu cannot promise a node the
     /// purchase would turn down.
-    fn research_zone_gate(&self, def: &ResearchDef) -> Option<u32> {
+    pub(crate) fn research_zone_gate(&self, def: &ResearchDef) -> Option<u32> {
         (def.min_zone > self.world.resource::<ZoneLevel>().0).then_some(def.min_zone)
     }
 
@@ -1464,7 +1464,8 @@ impl Game {
     }
 
     /// Every node a study may find right now: a **base** node (or an Affixes
-    /// node, while that tree is open) that is
+    /// node, while that tree is open, or a part the pinned subject carries —
+    /// `subject_findable_part_ids`) that is
     /// `discoverable`, not already discovered, not already researched, has
     /// every prerequisite satisfied and is inside the zone the party has
     /// reached.
@@ -1486,6 +1487,7 @@ impl Game {
         // And the Weapons tree's, for the same reason: `discoverable` alone
         // does not admit a new tree.
         let weapons_open = self.weapon_tree_open();
+        let routine_finds = self.subject_findable_part_ids();
         let discovered = &self
             .world
             .resource::<crate::resources::DiscoveredResearch>()
@@ -1495,14 +1497,39 @@ impl Game {
                 ResearchTree::Base => true,
                 ResearchTree::Affixes => affixes_open,
                 ResearchTree::Weapons => weapons_open,
-                ResearchTree::Routines => false,
+                ResearchTree::Routines => routine_finds.contains(&d.id),
             })
             .filter(|d| d.discoverable)
             .filter(|d| !discovered.contains(&d.id))
             .filter(|d| !self.node_researched(d))
-            .filter(|d| d.requires.iter().all(|r| self.is_researched(r)))
+            // A part's rung only has to be found, not researched (ADR 0041),
+            // and `findable_parts` already asked it.
+            .filter(|d| {
+                d.tree == ResearchTree::Routines || d.requires.iter().all(|r| self.is_researched(r))
+            })
             .filter(|d| self.research_zone_gate(d).is_none())
             .map(|d| d.id.clone())
+            .collect()
+    }
+
+    /// The part nodes the pinned subject's routines could let a study find,
+    /// empty while the routine tree is closed — so until then the pool, and
+    /// every seeded study roll indexing into it, is what it was before.
+    fn subject_findable_part_ids(&self) -> HashSet<String> {
+        if !self.routine_tree_open() {
+            return HashSet::new();
+        }
+        let Some(subject) = self.pinned_subject() else {
+            return HashSet::new();
+        };
+        let parts: Vec<_> = self
+            .world
+            .get::<crate::components::Routines>(subject)
+            .map(|r| r.0.iter().flat_map(|a| self.parts_of_routine(a)).collect())
+            .unwrap_or_default();
+        self.findable_routine_parts(&parts)
+            .iter()
+            .map(crate::routine_tree::part_node_id)
             .collect()
     }
 

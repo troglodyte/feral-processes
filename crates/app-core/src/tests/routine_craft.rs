@@ -92,6 +92,13 @@ fn building_a_routine_through_the_screen_compiles_and_installs_it() {
     // Name row, type, Enter back.
     pick_row(&mut app, NAME_ROW);
     assert_eq!(app.mode, Mode::RoutineBuildName);
+    assert_eq!(
+        app.routine_draft.name, "Heal",
+        "the Core's name is the default"
+    );
+    for _ in 0.."Heal".len() {
+        app.handle_key(GameKey::Backspace);
+    }
     type_text(&mut app, "Mend All");
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::RoutineBuild);
@@ -220,4 +227,70 @@ fn the_part_list_and_name_field_keep_the_workbench_hub_open() {
     assert!(app.structure_hub.is_some(), "the name field keeps the hub");
     app.handle_key(GameKey::Enter);
     assert!(app.hub_at().is_some(), "back on a live hub page");
+}
+
+fn damage() -> Subroutine {
+    Subroutine::Core(Core::Damage, Version::V1)
+}
+
+/// Opens `row`'s part list and picks `part` from it.
+fn choose(app: &mut App, row: usize, part: Subroutine) {
+    pick_row(app, row);
+    assert_eq!(app.mode, Mode::RoutineBuildPick);
+    let options = app
+        .game
+        .as_ref()
+        .unwrap()
+        .build_part_options(part.slot(), &app.routine_draft.parts);
+    let at = options.iter().position(|o| o.part == part).unwrap();
+    pick_row(app, at);
+    assert_eq!(app.mode, Mode::RoutineBuild);
+}
+
+#[test]
+fn leaving_a_part_list_or_the_name_field_keeps_the_highlight_on_its_row() {
+    let mut app = app_at_a_workbench(80_011);
+    for part in [heal(), group()] {
+        know(&mut app, &part);
+    }
+    open_page(&mut app, Mode::RoutineBuild);
+    choose(&mut app, 0, heal());
+    choose(&mut app, 2, group());
+    assert_eq!(app.menu_selected, 2, "a pick comes back to its row");
+    pick_row(&mut app, 2);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::RoutineBuild);
+    assert_eq!(app.menu_selected, 2, "Esc comes back to its row");
+    pick_row(&mut app, NAME_ROW);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.menu_selected, NAME_ROW);
+}
+
+#[test]
+fn the_name_follows_the_core_until_the_player_types_one() {
+    let mut app = app_at_a_workbench(80_012);
+    for part in [heal(), damage()] {
+        know(&mut app, &part);
+    }
+    open_page(&mut app, Mode::RoutineBuild);
+    choose(&mut app, 0, heal());
+    assert_eq!(app.routine_draft.name, "Heal");
+    choose(&mut app, 0, damage());
+    assert_eq!(app.routine_draft.name, "Damage", "a new Core renames it");
+    pick_row(&mut app, 0);
+    let clear = app
+        .game
+        .as_ref()
+        .unwrap()
+        .build_part_options("Core", &app.routine_draft.parts)
+        .len();
+    pick_row(&mut app, clear);
+    assert_eq!(app.routine_draft.name, "", "clearing the Core clears it");
+
+    choose(&mut app, 0, heal());
+    pick_row(&mut app, NAME_ROW);
+    type_text(&mut app, "s");
+    app.handle_key(GameKey::Enter);
+    choose(&mut app, 0, damage());
+    assert_eq!(app.routine_draft.name, "Heals", "a typed name stays");
 }

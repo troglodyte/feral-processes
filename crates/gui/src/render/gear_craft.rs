@@ -8,7 +8,9 @@
 
 use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;
-use super::routine_craft::{count_label, dim_lines, text_lines};
+use super::routine_craft::{
+    OUTPUT_HEADING, colored_lines, count_label, dim_lines, name_row_text, options_note, text_lines,
+};
 use super::*;
 use feral_processes_app_core::{
     DESIGN_AFFIX_ROW, DESIGN_COMPILE_ROW, DESIGN_NAME_ROW, DesignDraft, DesignPicking, affix_label,
@@ -26,19 +28,19 @@ fn materials_rows(materials: &[MaterialLine], uncraftable: &[String]) -> Vec<Row
     let mut rows = vec![text_row("Materials")];
     for line in materials {
         let color = if line.have >= line.need { GREEN } else { RED };
-        rows.push(Row::TextColored(
-            format!("{} {}/{}", line.label, line.have, line.need),
+        rows.extend(colored_lines(
+            &format!("{} {}/{}", line.label, line.have, line.need),
             color,
         ));
     }
     for line in uncraftable {
-        rows.push(Row::TextColored(line.clone(), RED));
+        rows.extend(colored_lines(line, RED));
     }
     rows
 }
 
 fn preview_rows(game: &Game, preview: &DesignPreview) -> Vec<Row> {
-    let mut rows = vec![text_row("")];
+    let mut rows = vec![text_row(OUTPUT_HEADING), text_row("")];
     if preview.description.is_empty() {
         rows.push(text_row("Pick a Frame to see what the weapon does."));
     } else {
@@ -72,43 +74,51 @@ fn preview_rows(game: &Game, preview: &DesignPreview) -> Vec<Row> {
     rows
 }
 
-/// The Build weapon page: Frame and modifier rows, affixes, name, Compile, then
-/// the preview.
+/// The Build weapon page as its two columns: Frame and modifier rows,
+/// affixes, name and Compile on the left, the preview on the right.
 pub(super) fn weapon_build_page_rows(
     game: &Game,
     draft: &DesignDraft,
     selected: usize,
-) -> Vec<Row> {
-    let mut rows = vec![
-        text_row("Enter on a row to choose a part. Name the weapon, then Compile."),
-        text_row(""),
-    ];
+) -> (Vec<Row>, Vec<Row>) {
+    let mut rows = text_lines("Enter on a row to choose a part. Name the weapon, then Compile.");
+    rows.push(text_row(""));
     for (i, slot) in game.design_slot_rows(&draft.parts).iter().enumerate() {
-        let (text, color) = match slot.chosen {
-            Some(part) => (format!("{}: {}", slot.category.label(), part.label()), TEXT),
-            None => (format!("{}: (none)", slot.category.label()), TEXT_DIM),
-        };
         debug_assert_eq!(design_row_category(i), Some(slot.category));
+        let options = game.design_part_options(slot.category, &draft.parts, draft.affixes.len());
+        let fitting = options.iter().filter(|o| o.unavailable.is_none()).count();
+        let none = if options
+            .iter()
+            .all(|o| matches!(o.unavailable, Some(GearCraftRefusal::PartNotResearched(_))))
+        {
+            "nothing researched"
+        } else {
+            "none fit"
+        };
+        let label = slot.category.label();
+        let note = options_note(fitting, none);
+        let (text, color) = match (slot.chosen, fitting) {
+            // A held part can be in the design with nothing else to swap
+            // it for, so the count is plain here rather than a reason.
+            (Some(part), _) => (format!("{label} ({fitting}): {}", part.label()), TEXT),
+            (None, 0) => (format!("{label} {note}"), TEXT_DIM),
+            (None, _) => (format!("{label} {note}: none"), TEXT_DIM),
+        };
         rows.push(colored_item_row(text, i == selected, color));
     }
-    let (affixes, color) = if draft.affixes.is_empty() {
-        ("(none)".to_string(), TEXT_DIM)
+    let known = game.design_affix_options(&draft.affixes).len();
+    let note = options_note(known, "none known");
+    let (text, color) = if known == 0 {
+        (format!("Affixes {note}"), TEXT_DIM)
+    } else if draft.affixes.is_empty() {
+        (format!("Affixes {note}: none"), TEXT_DIM)
     } else {
         let labels: Vec<String> = draft.affixes.iter().map(affix_label).collect();
-        (labels.join(", "), TEXT)
+        (format!("Affixes {note}: {}", labels.join(", ")), TEXT)
     };
-    rows.push(colored_item_row(
-        format!("Affixes: {affixes}"),
-        selected == DESIGN_AFFIX_ROW,
-        color,
-    ));
-    let name = if draft.name.is_empty() {
-        "(select to type a name, 1-24 characters)".to_string()
-    } else {
-        draft.name.clone()
-    };
+    rows.push(colored_item_row(text, selected == DESIGN_AFFIX_ROW, color));
     rows.push(item_row(
-        format!("Name: {name}"),
+        name_row_text(&draft.name),
         selected == DESIGN_NAME_ROW,
     ));
     let preview = game.design_preview(&draft.name, &draft.gear_parts());
@@ -122,8 +132,7 @@ pub(super) fn weapon_build_page_rows(
         selected == DESIGN_COMPILE_ROW,
         color,
     ));
-    rows.extend(preview_rows(game, &preview));
-    rows
+    (rows, preview_rows(game, &preview))
 }
 
 /// The list one design row opens: each part with how many are held, greyed
@@ -357,14 +366,15 @@ mod tests {
             parts: parts.clone(),
             ..DesignDraft::default()
         };
-        let design = weapon_build_page_rows(&game, &draft, 0);
+        let (left, design) = weapon_build_page_rows(&game, &draft, 0);
         assert!(
             design
                 .iter()
                 .any(|r| row_label_text(r).contains("Materials")),
             "premise: the preview lists a bill"
         );
-        super::super::base_report::assert_rows_fit(&design, "build weapon");
+        super::super::base_report::assert_column_rows_fit(&left, "build weapon rows");
+        super::super::base_report::assert_column_rows_fit(&design, "build weapon output");
         for category in std::iter::once(Category::Frame).chain(Category::MODIFIERS) {
             let draft = DesignDraft {
                 picking: Some(DesignPicking::Category(category)),
@@ -387,6 +397,30 @@ mod tests {
         );
         let salvage = salvage_page_rows(&game, 0);
         super::super::base_report::assert_rows_fit(&salvage, "salvage");
+    }
+
+    /// Each part row says how many choices its list holds, and a row with
+    /// none says why, so the player knows to skip it.
+    #[test]
+    fn every_build_row_counts_its_choices() {
+        let (game, parts) = bench_with_every_kind_of_line();
+        let draft = DesignDraft {
+            parts: parts[..1].to_vec(),
+            ..DesignDraft::default()
+        };
+        let (left, _) = weapon_build_page_rows(&game, &draft, 0);
+        let row = |prefix: &str| {
+            left.iter()
+                .find_map(|r| match r {
+                    Row::Item { text, .. } if text.starts_with(prefix) => Some(text.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("a {prefix} row"))
+        };
+        assert_eq!(row("Frame"), "Frame (1): Edge v1");
+        assert_eq!(row("Rider"), "Rider (1): none");
+        assert_eq!(row("Proc"), "Proc (nothing researched)");
+        assert_eq!(row("Affixes"), "Affixes (none known)");
     }
 
     #[test]

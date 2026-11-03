@@ -1,7 +1,7 @@
 (
     id: "factory",
     name: "Factory",
-    description: "Turns raw materials into basic parts. Set what it makes beside it with R.",
+    description: "Turns raw materials into basic parts. Stand beside it, press c and open its Recipe page to pick what it makes.",
     glyph: 'B',
     color: Orange,
     build_cost: [("core_fragment", 16)],

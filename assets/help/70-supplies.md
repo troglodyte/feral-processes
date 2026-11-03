@@ -8,7 +8,7 @@ Three things are worth never leaving home without, and only one of them is optio
 - Power Cells. 25 Power each, drained with e. Power drains every tick whatever you are doing, your
   own attacks weaken below half, and at zero it takes Integrity off you every tick until you find
   some. Two Core Fragments each, and an Extractor set to Power Cells is the fastest cronjob a base can run.
-- Patch Routines. The one thing your base builds that helps you in the field: run before a fight,
+- Patch Routines. The only buff your base builds: run before a fight,
   it blunts incoming damage for the next 120 ticks. Its clock is its own, so it stacks under a
   routine of the same kind rather than replacing it.
 

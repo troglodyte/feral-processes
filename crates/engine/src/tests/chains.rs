@@ -1569,20 +1569,12 @@ fn a_chain_carries_its_products_authored_description() {
 
     let wrong: Vec<&str> = chains
         .iter()
-        .filter(|c| {
-            let material = game
-                .world
-                .resource::<ItemDb>()
-                .all()
-                .find(|d| d.name == c.product)
-                .is_some_and(|d| d.category() == ItemCategory::Material);
-            c.description.is_none() != material
-        })
+        .filter(|c| c.description.is_none())
         .map(|c| c.product.as_str())
         .collect();
     assert!(
         wrong.is_empty(),
-        "a material carries no description and every other shipped item carries one: {wrong:?}"
+        "every shipped item with a recipe carries its description: {wrong:?}"
     );
 }
 

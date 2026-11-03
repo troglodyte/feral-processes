@@ -1,7 +1,7 @@
 (
     id: "assembler",
     name: "Assembler",
-    description: "Builds finished goods from parts. Set what it makes beside it with R.",
+    description: "Builds finished goods from parts. Stand beside it, press c and open its Recipe page to pick what it makes.",
     glyph: 'A',
     color: Magenta,
     build_cost: [("core_fragment", 18)],

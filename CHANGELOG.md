@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**The base report has a Recipes page after Compile.** It lists every item you can make right now, A to Z: what it is for, which recipes use it, what it takes and every place it can be made (each machine, the Workbench, or by hand). A recipe appears once its research is done and its machine is unlocked.
+
+The Build menu now shows a `Makes:` line under each machine naming the recipes it can run. Recipes is no longer a row on the Compile page. Several descriptions still told you to press R beside a machine to set it; that is `c` and the Recipe page, and the Extractor, Factory, Assembler, Printer, three contracts and the unset-machine alert now say so. Also fixed: the Bytecode Block no longer mentions the retired Armoury, the extraction help no longer names the Fabricator bench, and Automation says it also lets a Workbench extract routines and programs.
+
 ## 0.21.19
 
 **The routine research list starts short and grows as you meet programs.** A new run lists Heal v1.0, Boost Attack v1.0 (both already researched) and the capacity steps; every other part stays hidden until you find it. Taking a routine apart, at a bench or with a routines tool, gives each part you haven't found a one-in-three chance to show up. Studying a program at a Research Station can find a part it carries, or a part no program carries. A boss drop or a trader's set of parts gets the same chance per part, and the parts only those sets make can also turn up in a study, though less often. Nothing is found until the routine tree is open. A part's next version is only found once you know the version below it.

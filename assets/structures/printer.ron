@@ -1,7 +1,7 @@
 (
     id: "printer",
     name: "Printer",
-    description: "Prints tools and patches. Set what it makes beside it with R.",
+    description: "Prints tools and patches. Stand beside it, press c and open its Recipe page to pick what it makes.",
     glyph: 'P',
     color: Cyan,
     build_cost: [("core_fragment", 16)],

@@ -141,8 +141,8 @@ pub const QUALITY_CAREFUL_COST_PERCENT: u32 = 50;
 /// **One, because the wall clock is the other half of the price.** This was
 /// ten, chosen against a compile bar that ran at thirty times the world's
 /// tick rate — a Hardened Shell was three hundred game ticks and five real
-/// seconds. `app_core::COMPILE_TICKS_PER_SECOND` is the world's own rate
-/// now, so the ten-times price is ten times the *wait* as well: that same
+/// seconds. The bar runs at the world's own rate now (two ticks a second
+/// at normal speed), so the ten-times price is ten times the *wait* as well: that same
 /// shell is two and a half minutes of watching a bar. The two constants are
 /// read together and this is the one that gave.
 ///

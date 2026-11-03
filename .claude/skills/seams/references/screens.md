@@ -252,12 +252,14 @@
   at 60fps, and it ties the cost the engine *charges* to the frame rate the
   machine happens to render at — `hand_craft_ticks` pricing hand-compiling
   as a real cost means nothing if a faster GPU makes the batch cheaper.
-  `COMPILE_TICKS_PER_SECOND` is the rate and `compile_ticks_carry` is
+  `world_speed.ticks_per_second()` is the rate and `compile_ticks_carry` is
   `BattleReveal::accumulated`'s carry, so a frame worth less than one tick is
   not rounded away. The *ticks spent must still be exactly* `hand_craft_ticks`
   — the pace is presentation, the cost is not.
-- **And that rate is the world's own, `WORLD_SPEED_MULTIPLIER`, derived and
-  never restated.** The ticks a compile spends are ordinary world ticks —
+- **And that rate is the world's own at the player's selected speed —
+  `world_speed.ticks_per_second()`, called and never restated.** A rate
+  pinned to `Normal` ignored a player who had fast-forwarded with `,`;
+  `a_compile_fills_at_the_selected_world_speed` gates that half. The ticks a compile spends are ordinary world ticks —
   needs decay, base production, raid pressure and wild spawns all ride them
   — so any rate but the idle one makes the world sprint for as long as the
   bar is up. **The trap is that nothing in the suite can see it**: every

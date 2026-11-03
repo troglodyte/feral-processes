@@ -634,10 +634,23 @@ impl App {
         }
     }
 
-    /// Spends `Mode::Compiling`'s bar at `COMPILE_TICKS_PER_SECOND` against
+    /// Spends `Mode::Compiling`'s bar at `world_speed`'s rate against
     /// wall-clock `dt` — `advance_reveal`'s shape exactly, an accumulator
     /// rather than one call per frame, so a slow frame does not lose the
     /// tick it was owed and a fast one does not spend more than `dt` bought.
+    ///
+    /// **The idle clock's rate, at the speed the player picked, because a
+    /// compile is not a cutscene.** The ticks this spends are ordinary world
+    /// ticks — needs decay, base production, raid pressure and wild spawns
+    /// all ride them — so any other rate makes the world sprint (it shipped
+    /// at 60/sec and aged a base by minutes per batch) or crawl (a fixed
+    /// `Normal` rate ignored a player who had fast-forwarded with `,`).
+    /// `tuning::HAND_CRAFT_TICK_MULT` is the other half of the wall-clock
+    /// wait: the tick price divided by this rate.
+    ///
+    /// **dt-scaled rather than one tick per rendered frame**: one tick a
+    /// frame ties the cost the engine charges to the machine's frame rate,
+    /// so the same batch would finish sooner on better hardware.
     ///
     /// **Every tick this spends is a real `Game::advance_hand_craft` call**,
     /// so what it charges the batch can never come apart from what the bar
@@ -661,7 +674,7 @@ impl App {
         if self.game.is_none() {
             return;
         }
-        self.compile_ticks_carry += dt * COMPILE_TICKS_PER_SECOND;
+        self.compile_ticks_carry += dt * self.world_speed.ticks_per_second();
         let mut spent_a_tick = false;
         while self.compile_ticks_carry >= 1.0 {
             let Some(game) = &mut self.game else { break };

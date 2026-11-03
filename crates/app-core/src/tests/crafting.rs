@@ -274,7 +274,7 @@ fn a_key_during_compiling_aborts_and_returns_to_playing() {
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Compiling);
     // A tick or two in, but nowhere near finished. Sized in whole seconds
-    // because `COMPILE_TICKS_PER_SECOND` is the world's own rate: a tenth
+    // because the bar runs at the world's own rate: a tenth
     // of a second buys no tick at all, so the abort would be tested against
     // a batch that had not started.
     app.advance_compile(1.0);
@@ -289,6 +289,35 @@ fn a_key_during_compiling_aborts_and_returns_to_playing() {
     assert!(
         !app.game.as_ref().unwrap().hand_craft_in_progress(),
         "an abort should clear the engine's in-flight compile"
+    );
+}
+
+/// The bar spends ticks at the speed the player picked with `,`, not at
+/// `Normal` whatever the setting — a fast-forwarded base compiles on the
+/// same fast clock it was already running on.
+#[test]
+fn a_compile_fills_at_the_selected_world_speed() {
+    // Half a second, because Fastest finishes an Ice Breaker inside one.
+    let ticks_after_half_a_second = |speed: WorldSpeed| {
+        let mut app = stocked_app(713);
+        app.world_speed = speed;
+        open_compile_of(&mut app, "ice_breaker");
+        app.handle_key(GameKey::Enter);
+        app.advance_compile(0.5);
+        assert_eq!(
+            app.mode,
+            Mode::Compiling,
+            "the batch should still be running"
+        );
+        app.compile_progress.as_ref().unwrap().ticks_done
+    };
+
+    let normal = ticks_after_half_a_second(WorldSpeed::Normal);
+    assert_eq!(normal, (WorldSpeed::Normal.ticks_per_second() / 2.0) as u32);
+    assert_eq!(
+        ticks_after_half_a_second(WorldSpeed::Fastest),
+        normal * WorldSpeed::Fastest.multiple(),
+        "Fastest should fill the bar four times as fast"
     );
 }
 

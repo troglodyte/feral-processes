@@ -2065,7 +2065,7 @@ impl Game {
             // replaces `Stats::atk` outright.
             Kit::Emulated { stats, .. } => self.emulated_base(entity, &stats).0,
             Kit::Unarmed | Kit::Innate(_) => {
-                self.world.get::<Stats>(entity).map(|s| s.atk).unwrap_or(0)
+                self.base_figure(entity, crate::attributes::DerivedStat::Atk) as i32
             }
         };
         let bonus = self
@@ -2133,11 +2133,9 @@ impl Game {
             // receipt are both added back through `Game::emulated_base`
             // rather than read off `Stats`.
             Kit::Emulated { stats, .. } => self.emulated_base(entity, &stats).1,
-            Kit::Unarmed | Kit::Innate(_) => self
-                .world
-                .get::<Stats>(entity)
-                .map(|s| s.mitigation)
-                .unwrap_or(0),
+            Kit::Unarmed | Kit::Innate(_) => {
+                self.base_figure(entity, crate::attributes::DerivedStat::Mitigation) as i32
+            }
         };
         let bonus = self
             .world

@@ -678,8 +678,7 @@ fn view_entities_reports_a_con_read_for_hostiles_and_none_for_anyone_else() {
     let mut game = Game::new(53, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     let player_pos = *game.world.get::<Position>(player).unwrap();
-    game.world.get_mut::<Stats>(player).unwrap().atk = 0;
-    game.world.get_mut::<Stats>(player).unwrap().mitigation = 0;
+    set_player_figures(&mut game, 0, 0);
     game.world.get_mut::<Stats>(player).unwrap().max_hp = 100;
     game.world.get_mut::<Stats>(player).unwrap().hp = 100;
     // Player power is now 100. An easy hostile is well under that; a

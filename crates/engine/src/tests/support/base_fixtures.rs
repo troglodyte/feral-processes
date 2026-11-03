@@ -577,3 +577,21 @@ pub(crate) fn pin_player_combat(game: &mut Game) {
         set_skill_level(game, player, skill, 10);
     }
 }
+
+/// Gives the player exactly this ATK and mitigation through the door combat
+/// reads (`base_figure`, which derives the player's figures): the difference
+/// goes into the `BoughtStats` receipt, so the next recompute keeps it. A
+/// write to the player's `Stats` alone is invisible to `effective_atk`.
+pub(crate) fn set_player_figures(game: &mut Game, atk: i32, mitigation: i32) {
+    use crate::attributes::DerivedStat;
+    let player = game.player_entity();
+    let mut bought = game
+        .world
+        .get::<crate::components::BoughtStats>(player)
+        .copied()
+        .unwrap_or_default();
+    bought.atk += atk - game.base_figure(player, DerivedStat::Atk) as i32;
+    bought.mitigation += mitigation - game.base_figure(player, DerivedStat::Mitigation) as i32;
+    game.world.entity_mut(player).insert(bought);
+    game.recompute_derived(player);
+}

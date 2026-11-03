@@ -3729,10 +3729,7 @@ fn rock_cell_of(game: &mut Game, kind: &str) -> (i32, i32) {
 fn no_shipped_kind_falls_to_one_swing_however_hard_you_hit() {
     let mut game = game(7731);
     let player = game.player_entity();
-    {
-        let mut stats = game.world.get_mut::<Stats>(player).unwrap();
-        stats.atk = 5_000;
-    }
+    set_player_figures(&mut game, 5_000, 0);
     let kinds: Vec<(String, u32)> = game
         .world
         .resource::<crate::rock::RockDb>()

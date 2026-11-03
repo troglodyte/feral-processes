@@ -633,3 +633,32 @@ fn an_old_player_save_keeps_its_atk_through_load_and_a_derive() {
     loaded.recompute_derived(player);
     assert_eq!(stats_of(&loaded, player).atk, atk);
 }
+
+/// `effective_atk` and `effective_mitigation` read the base through
+/// `base_figure`, the one door; with no buff, wield, skill offset or low Power
+/// that must be the `Stats` read it replaced, for the player and a program.
+#[test]
+fn effective_atk_and_mitigation_equal_the_stats_reads_for_the_player_and_a_program() {
+    let mut game = Game::new(7023, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let player = game.player_entity();
+    set_attribute(&mut game, "amplitude", 13);
+    game.recompute_derived(player);
+    let species = game
+        .species_defs()
+        .into_iter()
+        .find(|d| !d.is_hybrid())
+        .unwrap()
+        .id
+        .to_string();
+    let program = game
+        .spawn_wild_creature_scaled(&species, 40, 40, 1.0, false)
+        .unwrap();
+    for entity in [player, program] {
+        let stats = stats_of(&game, entity);
+        assert_eq!(game.effective_atk(entity), stats.atk);
+        assert_eq!(
+            game.effective_mitigation(entity),
+            stats.mitigation.min(crate::tuning::MAX_MITIGATION_PERCENT)
+        );
+    }
+}

@@ -516,7 +516,8 @@ fn wear_with_mitigation(game: &mut Game, copy: &GearCopy, percent: i32) -> Entit
     let player = game.player_entity();
     game.add_copies(copy, 1);
     game.equip(player, copy).unwrap();
-    game.world.get_mut::<Stats>(player).unwrap().mitigation = percent;
+    let atk = game.base_figure(player, crate::attributes::DerivedStat::Atk) as i32;
+    super::support::set_player_figures(game, atk, percent);
     player
 }
 

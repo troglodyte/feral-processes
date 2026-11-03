@@ -79,6 +79,9 @@ Hidden as written, they could never be found.
 **Decision:** a part outside `routine_tree::program_carried_parts` (a species' kit, the wild pool and the exclusives, with a Core's lower rungs) joins the study pool off **any** pinned subject, under the same findability rule. A carried part still needs a subject carrying it, and extraction is unchanged.
 The census `routine_craft::tests::the_parts_no_shipped_program_carries_are_named` names the set; a new carrier moves a part out of it.
 
+**Second amendment (2026-11-03, user).** Exclusive routines are not carried: no program ever has one, they come only from a boss drop and a trader. So `program_carried_parts` no longer counts them, and `exclusive_only_parts` names the parts only they make (`core.field_mitigation.1`, `type.magnetic`; Field Mitigation v2/v3 follow once v1 is known).
+**Decision:** a drop or a trade that pays an exclusive's parts is a **third find door**, rolling the same per-part chance as extraction (`Game::roll_part_finds_for`, logged as "Looking it over shows you how X is made"). Exclusive-only parts also join the study pool off any subject, but weigh `STUDY_EXCLUSIVE_PART_PICK_WEIGHT` (1) against `STUDY_PICK_WEIGHT` (3) in the pick; a pool with none of them draws exactly as before. All three doors find nothing while the routine tree is closed.
+
 ## Evidence
 
 Current as of the build (2026-11-03).

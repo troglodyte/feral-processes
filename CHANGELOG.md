@@ -55,7 +55,7 @@ the same kind and list it here.
 
 ## Unreleased
 
-- **The routine research list starts short and grows as you meet programs.** A new run lists Heal v1.0, Boost Attack v1.0 (both already researched) and the capacity steps; every other part stays hidden until you find it. Taking a routine apart, at a bench or with a routines tool, gives each part you haven't found a one-in-three chance to show up. Studying a program at a Research Station can find a part it carries, or a part no program carries. A part's next version is only found once you know the version below it.
+- **The routine research list starts short and grows as you meet programs.** A new run lists Heal v1.0, Boost Attack v1.0 (both already researched) and the capacity steps; every other part stays hidden until you find it. Taking a routine apart, at a bench or with a routines tool, gives each part you haven't found a one-in-three chance to show up. Studying a program at a Research Station can find a part it carries, or a part no program carries. A boss drop or a trader's set of parts gets the same chance per part, and the parts only those sets make can also turn up in a study, though less often. Nothing is found until the routine tree is open. A part's next version is only found once you know the version below it.
 
 ## 0.21.18
 

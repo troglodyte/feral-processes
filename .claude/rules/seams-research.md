@@ -17,7 +17,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A routine-tree node is synthesised from the Rust part catalogue, never
   authored, and "researched" means `Research` contains its id** — `part/<key>`
   or `capacity/<n>`; no research grants a finished routine.
-- **A routine part is found only through `Game::take_routine` and the study
-  pool, both over `routine_tree::findable_parts`; an all-known extraction
-  draws nothing, and a part no shipped program carries is studied off any
-  subject.**
+- **A routine part is found through exactly three doors — extraction, a
+  drop or trade that pays an exclusive's parts, and the study pool — all over
+  `routine_tree::findable_parts` and rolled by `Game::roll_part_finds_for`;
+  nothing findable (or a closed tree) draws nothing, an exclusive is never
+  "carried", and a part no program carries is studied off any subject.**

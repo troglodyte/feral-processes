@@ -1163,6 +1163,33 @@ fn a_striker_at_the_threshold_swings_twice_in_one_turn() {
     }
 }
 
+#[test]
+fn haste_v3_doubles_the_swing_count_and_v2_does_not() {
+    let (mut game, player, _) = battle_for_swing_outcomes(52);
+    game.world.get_mut::<PlayerIdentity>(player).unwrap().class =
+        Some(classes::PlayerClass::Striker);
+    game.world.get_mut::<Experience>(player).unwrap().level = 1;
+    assert_eq!(game.attacks_for(player), 1);
+    game.arm_haste(player, 2);
+    assert_eq!(game.attacks_for(player), 1, "v2 leaves the count alone");
+    game.arm_haste(player, 3);
+    assert_eq!(game.attacks_for(player), 2, "plain v3");
+    game.world.get_mut::<Experience>(player).unwrap().level = crate::tuning::EXTRA_ATTACK_LEVEL;
+    assert_eq!(game.attacks_for(player), 4, "a Striker's two, doubled");
+}
+
+#[test]
+fn a_hasted_v3_member_logs_two_swings_in_a_round() {
+    let (mut game, player, wild) = battle_for_swing_outcomes(52);
+    game.world.get_mut::<Experience>(player).unwrap().level = 1;
+    game.arm_haste(player, 3);
+    let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+    stats.max_hp = 9_000;
+    stats.hp = 9_000;
+    player_swings_at_group(&mut game, 0);
+    assert_eq!(party_swing_lines(&game), 2);
+}
+
 /// Counts the swing lines the wild side produced. Both enemy kinds count: a
 /// move carrying a condition logs `EnemySpecial` rather than `EnemyAttack`,
 /// and which one it is has nothing to do with how many times it swung.

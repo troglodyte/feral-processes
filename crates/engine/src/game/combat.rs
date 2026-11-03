@@ -311,7 +311,13 @@ impl Game {
                 .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
                 .and_then(|def| def.affinity_class()),
         };
-        crate::battle::attacks_per_round(class, level)
+        let swings = crate::battle::attacks_per_round(class, level);
+        // A v3 Haste doubles the count on top of a Striker's, so it can
+        // exceed `MAX_ATTACKS_PER_ROUND`; the swing loops don't read that.
+        match self.world.get::<crate::components::Hasted>(entity) {
+            Some(h) if h.version >= crate::tuning::HASTE_DOUBLE_SWING_VERSION => swings * 2,
+            _ => swings,
+        }
     }
 
     pub(crate) fn swing_damage(&self, attacker: Entity) -> u32 {

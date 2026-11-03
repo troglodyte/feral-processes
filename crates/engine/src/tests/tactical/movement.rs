@@ -147,6 +147,101 @@ fn a_hasted_body_s_field_reaches_past_the_old_ceiling() {
     );
 }
 
+/// The player beside one hostile on `hp`, with the turn, hasted to `version`
+/// when asked. Returns the game, the hostile, and the swing lines logged by
+/// one `tactical_attack` on `stream`.
+fn map_swing(version: Option<u8>, hp: i32, stream: u64) -> (Game, Entity, usize) {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, hp);
+    let player = game.player_entity();
+    let wild = pack[0];
+    game.world
+        .resource_mut::<TacticalBattle>()
+        .set_initiative(vec![player, wild]);
+    {
+        let battle = game.world.resource::<TacticalBattle>();
+        let (px, py) = battle.cell_of(player).expect("the player is seated");
+        assert!(
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(wild, (px + 1, py))
+        );
+    }
+    {
+        let mut stats = game.world.get_mut::<Stats>(wild).unwrap();
+        stats.mitigation = 0;
+    }
+    if let Some(v) = version {
+        game.arm_haste(player, v);
+    }
+    crate::tests::support::reseed_rng(&mut game, stream);
+    assert!(wait_for_turn(&mut game, player));
+    assert!(game.tactical_attack(wild));
+    let lines = game
+        .message_log(50)
+        .into_iter()
+        .filter(|l| l.kind == crate::resources::MessageKind::PartyDamage && l.outcome.is_some())
+        .count();
+    (game, wild, lines)
+}
+
+#[test]
+fn a_hasted_v3_map_attack_swings_twice_for_one_action() {
+    let mut twice = 0;
+    for stream in 0..48 {
+        let (game, _, lines) = map_swing(Some(3), 9_000, stream);
+        let player = game.player_entity();
+        if game.creature_alive(player) && !game.is_stunned(player) {
+            assert_eq!(lines, 2, "stream {stream}");
+            twice += 1;
+        } else {
+            assert!(lines <= 2);
+        }
+        assert_ne!(
+            game.tactical_actor(),
+            Some(player),
+            "one action ends the turn"
+        );
+        let (_, _, plain) = map_swing(Some(2), 9_000, stream);
+        assert_eq!(plain, 1, "v2 still swings once");
+    }
+    assert!(twice > 0);
+}
+
+#[test]
+fn a_map_first_swing_that_kills_gets_no_second_swing() {
+    let mut killed = 0;
+    for stream in 0..48 {
+        // The same stream's first swing is the plain swing's.
+        let (plain, wild, _) = map_swing(None, 1, stream);
+        let (_, _, lines) = map_swing(Some(3), 1, stream);
+        if !plain.creature_alive(wild) {
+            killed += 1;
+            assert_eq!(lines, 1, "stream {stream}: swung at a dead body");
+        }
+    }
+    assert!(killed > 0, "no stream landed a kill");
+}
+
+/// The player has no `Creature`-free guarantees, so a kill also has to pay
+/// XP exactly as an unhasted one does.
+#[test]
+fn a_hasted_kill_pays_the_same_xp_as_a_plain_one() {
+    for stream in 0..48 {
+        let xp = |version| {
+            let (game, wild, _) = map_swing(version, 1, stream);
+            let dead = !game.creature_alive(wild);
+            let player = game.player_entity();
+            (dead, game.world.get::<Experience>(player).unwrap().xp)
+        };
+        let (plain_dead, plain_xp) = xp(None);
+        let (fast_dead, fast_xp) = xp(Some(3));
+        if plain_dead && fast_dead {
+            assert_eq!(plain_xp, fast_xp, "stream {stream}");
+        }
+    }
+}
+
 /// The mean y of `bodies`' cells — which side of the board a rank sits on.
 fn mean_y(game: &Game, bodies: &[Entity]) -> f32 {
     let battle = game.world.resource::<TacticalBattle>();

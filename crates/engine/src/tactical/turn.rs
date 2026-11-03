@@ -713,8 +713,9 @@ impl Game {
         // the range gate above is untouched — a reach is breadth and the
         // weapon's own `range` is distance.
         //
-        // One swing a turn here, so there is no once-per-turn problem to
-        // solve: `party_member_attacks`' `Option::take` has no counterpart.
+        // One swing a turn here (two for a v3 Haste, below), so there is no
+        // once-per-turn problem to solve: `party_member_attacks`'
+        // `Option::take` has no counterpart.
         let wide = self.swing_reach(actor);
         let mut bodies = vec![target];
         if let Some(spec) = wide {
@@ -744,18 +745,31 @@ impl Game {
         // The swinger's own hue, read once: a fumble's Recoil rung can kill
         // the body that swung, and a lookup inside the loop would then have
         // nothing to ask.
+        // **Haste's extra swing is a second visit to the target, last in the
+        // list**, so it rides the same per-body machinery and is skipped
+        // below if the first blow (or a fumble) already ended it. The cloak
+        // break is idempotent and a kill pays once, because the target only
+        // dies once.
+        let hasted_twice = self.swings_twice(actor);
+        if hasted_twice {
+            bodies.push(target);
+        }
         let bolt_color = self
             .world
             .get::<crate::components::Glyph>(actor)
             .map(|g| g.color)
             .unwrap_or(crate::components::GlyphColor::White);
         let bolt_fx = self.weapon_fx(actor);
+        let last = bodies.len() - 1;
         for (index, body) in bodies.into_iter().enumerate() {
             // `party_member_swing`'s guard, and its reason: a fumble's
             // Recoil or Opening rung damages the swinger, so it really can
             // die on its own first body. The opening swing is unguarded, or
             // the narrow path stops behaving as it always has.
             if index > 0 && !self.creature_alive(actor) {
+                break;
+            }
+            if hasted_twice && index == last && !self.extra_swing_open(actor, body) {
                 break;
             }
             // **Before the blow lands**, so a body that dies to it still gets
@@ -794,6 +808,20 @@ impl Game {
         self.reap_tactical_dead(Some(target));
         self.hand_on_turn(actor, round_before);
         true
+    }
+
+    /// Whether `actor`'s ordinary swing strikes twice: a v3 Haste.
+    fn swings_twice(&self, actor: Entity) -> bool {
+        self.world
+            .get::<crate::components::Hasted>(actor)
+            .is_some_and(|h| h.version >= crate::tuning::HASTE_DOUBLE_SWING_VERSION)
+    }
+
+    /// Haste's second swing needs a target still standing and an actor that
+    /// a fumbled Crash has not stunned, the guards the group model's swing
+    /// loop keeps.
+    fn extra_swing_open(&self, actor: Entity, target: Entity) -> bool {
+        self.creature_alive(target) && !self.is_stunned(actor)
     }
 
     /// The acting body braces: `DEFEND_MITIGATION_BONUS` percentage points

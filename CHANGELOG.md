@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.22
+
+**The Study a program screen now says why it wants a program, and what happens to it.** Picking research that needs a subject opens the screen straight away, and the list of base staff used to appear with no explanation. Above the list it now says the research needs a program to study, that it's going to hurt, and that the program won't survive it.
+
 ## 0.21.21
 
 **The base report has a Recipes page after Compile.** It lists every item you can make right now, A to Z: what it is for, which recipes use it, what it takes and every place it can be made (each machine, the Workbench, or by hand). A recipe appears once its research is done and its machine is unlocked.

@@ -153,8 +153,8 @@ pub use icon::{
 use items::{EquipmentSlot, EquipmentStats, GearCopy, ItemCategory, ItemId, ids};
 use items_db::{ItemDb, ItemDef};
 pub use perks::{Perk, PerkDb, PerkDef};
+pub use research::{DiscoverySource, ResearchId, ResearchRecipe, ResearchTree};
 use research::{ResearchDb, ResearchDef};
-pub use research::{ResearchId, ResearchRecipe, ResearchTree};
 use resources::{
     AnchorEntity, BattleRewards, BattleState, BattleTimeline, BoltQueue, BuybackLedger,
     ClosingRoster, CurrentStack, EffectQueue, GameClock, GameOver, GameRng, KnownTools,

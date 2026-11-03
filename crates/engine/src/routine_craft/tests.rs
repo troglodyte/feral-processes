@@ -640,3 +640,97 @@ fn a_part_held_once_and_needed_twice_spends_one_and_crafts_one() {
     assert_eq!(needs.craft, vec![(heal, 1), (Subroutine::Trickle, 1)]);
     assert!(needs.unresearched.is_empty());
 }
+
+/// The parts no program carries (2026-11-03): `decompose` never yields a
+/// Range, no shipped program runs a field Core or most of the late Cores,
+/// and no kit carries these rungs, types or statuses. The two that only an
+/// exclusive makes are also in `EXCLUSIVE_ONLY_PARTS`.
+const UNCARRIED_PARTS: [&str; 53] = [
+    "core.boost_attack.3",
+    "core.sap_attack.2",
+    "core.sap_attack.3",
+    "core.sap_mitigation.2",
+    "core.sap_mitigation.3",
+    "core.cloak.1",
+    "core.fork.1",
+    "core.fork.2",
+    "core.fork.3",
+    "core.cold_sample.1",
+    "core.heat_injection.1",
+    "core.profile.1",
+    "core.inject.1",
+    "core.hallucinate.1",
+    "core.teleport.1",
+    "core.reinforce.1",
+    "core.emulate.1",
+    "core.field_regen.1",
+    "core.field_regen.2",
+    "core.field_regen.3",
+    "core.recharge.1",
+    "core.recharge.2",
+    "core.recharge.3",
+    "core.field_attack.1",
+    "core.field_attack.2",
+    "core.field_attack.3",
+    "core.field_mitigation.1",
+    "core.field_mitigation.2",
+    "core.field_mitigation.3",
+    "core.capture_boost.1",
+    "core.capture_boost.2",
+    "core.capture_boost.3",
+    "core.xp_boost.1",
+    "core.xp_boost.2",
+    "core.xp_boost.3",
+    "core.encounter_damp.1",
+    "core.encounter_damp.2",
+    "core.encounter_damp.3",
+    "core.drop_boost.1",
+    "core.drop_boost.2",
+    "core.drop_boost.3",
+    "core.phase.1",
+    "core.jump.1",
+    "core.symlink.1",
+    "range.near",
+    "range.far",
+    "type.thermal",
+    "type.magnetic",
+    "type.voltage",
+    "status.exposed",
+    "status.poison",
+    "status.throttled",
+    "status.locked",
+];
+
+/// A part is found only off a program carrying it, or by a study when no
+/// shipped program does (ADR 0041). This census names which parts depend
+/// on that second door: a content finding, not a list to fix here.
+#[test]
+fn the_parts_no_shipped_program_carries_are_named() {
+    let db = abilities();
+    let (species, _) =
+        crate::species::SpeciesDb::load_dir(&test_assets_dir().join("species"), &db).unwrap();
+    let carried = crate::routine_tree::program_carried_parts(&db, &species);
+    let uncarried: Vec<String> = Subroutine::all()
+        .into_iter()
+        .filter(|p| !crate::tuning::STARTING_PARTS.contains(p))
+        .filter(|p| !carried.contains(p))
+        .map(|p| p.key())
+        .collect();
+    assert_eq!(uncarried, UNCARRIED_PARTS);
+}
+
+/// The parts only an exclusive routine makes: found from the boss drop or
+/// the trade that pays them, or by a study at a lower weight (ADR 0041).
+const EXCLUSIVE_ONLY_PARTS: [&str; 2] = ["core.field_mitigation.1", "type.magnetic"];
+
+#[test]
+fn the_parts_only_an_exclusive_makes_are_named() {
+    let db = abilities();
+    let (species, _) =
+        crate::species::SpeciesDb::load_dir(&test_assets_dir().join("species"), &db).unwrap();
+    let only: Vec<String> = crate::routine_tree::exclusive_only_parts(&db, &species)
+        .into_iter()
+        .map(|p| p.key())
+        .collect();
+    assert_eq!(only, EXCLUSIVE_ONLY_PARTS);
+}

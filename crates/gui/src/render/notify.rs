@@ -462,7 +462,7 @@ mod tests {
         // measures content against a screen with no scroll, and
         // `research_nodes` narrows to what has been discovered.
         for def in game.research_defs() {
-            game.discover_research(&def.id);
+            game.discover_research(&def.id, feral_processes_engine::DiscoverySource::Study);
         }
         let nodes = game.research_nodes(ResearchTree::Base);
         assert!(

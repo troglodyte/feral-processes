@@ -55,7 +55,10 @@ fn discovering_a_node_writes_one_id_one_line_and_one_notification() {
         .clone();
     while game.take_notification().is_some() {}
 
-    assert!(game.discover_research("paging"), "a fresh node is news");
+    assert!(
+        game.discover_research("paging", crate::DiscoverySource::Study),
+        "a fresh node is news"
+    );
 
     assert_eq!(
         game.world
@@ -78,7 +81,10 @@ fn discovering_a_node_writes_one_id_one_line_and_one_notification() {
 
     // Inert the second time: no second id, no second line, no second popup.
     while game.take_notification().is_some() {}
-    assert!(!game.discover_research("paging"), "already found");
+    assert!(
+        !game.discover_research("paging", crate::DiscoverySource::Study),
+        "already found"
+    );
     assert_eq!(game.notifications_pending(), 0);
     assert_eq!(
         game.message_history(500)
@@ -90,7 +96,7 @@ fn discovering_a_node_writes_one_id_one_line_and_one_notification() {
 
     // An id nothing defines is refused rather than written — a save editor's
     // typo must not mint a node the tree has never heard of.
-    assert!(!game.discover_research("not_a_node"));
+    assert!(!game.discover_research("not_a_node", crate::DiscoverySource::Study));
     assert_eq!(
         game.world
             .resource::<crate::resources::DiscoveredResearch>()
@@ -121,7 +127,7 @@ fn a_discoverable_node_is_absent_from_both_research_surfaces_until_discovered() 
     assert!(!listed(&game), "an undiscovered node is not a menu row");
     assert!(!drawn(&game), "and not a box on the chart either");
 
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
 
     assert!(listed(&game));
     assert!(drawn(&game));
@@ -149,7 +155,7 @@ fn select_research_refuses_an_undiscovered_node_before_anything_is_written() {
 
     // The reachability half: discovering it makes the identical call succeed,
     // so the refusal cannot ship permanent.
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging")
         .expect("a discovered node is an ordinary node");
 }
@@ -279,7 +285,7 @@ fn a_project_sitting_at_its_cost_banks_nothing_toward_a_study() {
         .get("cold_archive")
         .expect("a deep, expensive node nothing in this fixture will finish")
         .cost;
-    game.discover_research("cold_archive");
+    game.discover_research("cold_archive", crate::DiscoverySource::Study);
     {
         let mut research = game
             .world

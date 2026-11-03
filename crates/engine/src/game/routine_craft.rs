@@ -186,8 +186,8 @@ impl Game {
         self.destroy_built(&ids);
     }
 
-    /// Hands the player `parts` as items, the one door extraction and boss
-    /// drops share.
+    /// Hands the player `parts` as items, the one door extraction, boss
+    /// drops and an exclusive's trade share.
     pub(crate) fn grant_parts(&mut self, parts: &[Subroutine], source: LootSource) {
         for (part, count) in routine_craft::parts_used(parts) {
             self.grant_loot(ItemId::part(&part), count, source);
@@ -217,13 +217,14 @@ impl Game {
     }
 
     /// The routine a new run starts with beside Decompile: Heal v1.0, built
-    /// and installed, and the Heal part researched so it can be built again.
+    /// and installed, and the starting parts researched so Heal can be built
+    /// again and Boost Attack built at all.
     pub(crate) fn grant_starting_routine(&mut self) {
         let heal = Subroutine::Core(routine_craft::Core::Heal, Version::V1);
-        self.world
-            .resource_mut::<Research>()
-            .0
-            .insert(part_node_id(&heal));
+        let mut research = self.world.resource_mut::<Research>();
+        for part in crate::tuning::STARTING_PARTS {
+            research.0.insert(part_node_id(&part));
+        }
         let id = self.mint_built(CRAFT_STARTER_NAME, &[heal]);
         let player = self.player_entity();
         self.write_routine(player, &id);

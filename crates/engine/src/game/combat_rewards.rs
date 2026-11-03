@@ -169,6 +169,7 @@ impl Game {
             if hit {
                 let name = self.ability_display_name(&ability);
                 self.grant_parts(&parts, LootSource::Kill);
+                self.roll_part_finds_for(&parts, crate::DiscoverySource::Looted);
                 self.log(format!(
                     "{name} comes apart in the wreckage: parts to build with."
                 ));

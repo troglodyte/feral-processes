@@ -14,6 +14,7 @@ mod fed_bill;
 mod gating;
 mod lifecycle;
 mod projects;
+mod routine_parts;
 mod saves_and_stalls;
 mod subject_gated;
 mod zone_gates;

@@ -45,7 +45,7 @@ fn the_tree_is_closed_before_weapon_bench_and_open_after() {
         !open_with.contains(&bleed),
         "a modifier waits for a study, a salvage or a shelf"
     );
-    game.discover_research(&bleed);
+    game.discover_research(&bleed, crate::DiscoverySource::Study);
     assert!(listed(&game).contains(&bleed));
 }
 
@@ -175,7 +175,7 @@ fn the_weapon_tree_hint_says_how_to_reach_the_opener() {
         )
     );
 
-    assert!(game.discover_research(opener));
+    assert!(game.discover_research(opener, crate::DiscoverySource::Study));
     assert_eq!(
         game.weapon_tree_hint().unwrap(),
         format!("Research {} to design weapons at a Workbench.", def.name)

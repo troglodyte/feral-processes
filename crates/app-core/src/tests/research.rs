@@ -341,6 +341,11 @@ fn the_research_page_opens_routine_research_and_esc_closes_it() {
 #[test]
 fn routine_research_lists_only_routine_nodes_and_row_keys_take_one_on() {
     let mut app = app_in_base_with_routine_tree_open(561);
+    // A zone-1 Core is found before it is listed (ADR 0041).
+    app.game.as_mut().unwrap().discover_research(
+        "part/core.damage.1",
+        feral_processes_engine::DiscoverySource::Study,
+    );
     open_command(&mut app, "Routine research");
     to_the_list(&mut app);
     let ids: Vec<String> = app

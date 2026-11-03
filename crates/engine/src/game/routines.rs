@@ -432,9 +432,60 @@ impl Game {
 
     /// The one place a routine comes off a program — `extract_routine`'s
     /// tamed-program door and `extract_program`'s `Routines`-tool door both
-    /// call this. It hands over the routine's parts (ADR 0029) and nothing
-    /// else.
+    /// call this. It hands over the routine's parts (ADR 0029) and may let
+    /// you find the ones you have not met (ADR 0041) — no draw when nothing
+    /// is findable, so an all-known routine leaves `GameRng` untouched.
     pub(crate) fn take_routine(&mut self, parts: &[crate::routine_craft::Subroutine]) {
         self.grant_parts(parts, LootSource::Extract);
+        self.roll_part_finds_for(parts, DiscoverySource::Extraction);
+    }
+
+    /// The find half of every door that hands over a routine's parts
+    /// (extraction, a boss drop, a trader): one `GameRng` draw per findable
+    /// part in `Subroutine` order, none when nothing is findable or the
+    /// routine tree is closed.
+    pub(crate) fn roll_part_finds_for(
+        &mut self,
+        parts: &[crate::routine_craft::Subroutine],
+        source: DiscoverySource,
+    ) {
+        if !self.routine_tree_open() {
+            return;
+        }
+        let findable = self.findable_routine_parts(parts);
+        if findable.is_empty() {
+            return;
+        }
+        let finds = {
+            let mut rng = self.world.resource_mut::<GameRng>();
+            crate::routine_tree::roll_part_finds(
+                &findable,
+                crate::tuning::ROUTINE_PART_DISCOVERY_CHANCE,
+                &mut rng.0,
+            )
+        };
+        for part in finds {
+            self.discover_research(&crate::routine_tree::part_node_id(&part), source);
+        }
+    }
+
+    /// The gather half of every find door: the parts of `parts` whose nodes
+    /// could be found right now.
+    pub(crate) fn findable_routine_parts(
+        &self,
+        parts: &[crate::routine_craft::Subroutine],
+    ) -> Vec<crate::routine_craft::Subroutine> {
+        let db = self.world.resource::<crate::research::ResearchDb>();
+        crate::routine_tree::findable_parts(
+            parts,
+            |id| self.research_id_known(id),
+            |id| {
+                db.get(id).is_some_and(|d| {
+                    d.discoverable
+                        && !self.base_node_visible(d)
+                        && self.research_zone_gate(d).is_none()
+                })
+            },
+        )
     }
 }

@@ -487,6 +487,7 @@ fn a_new_game_can_rebuild_patch_but_not_yet_craft_a_damage_core() {
 fn a_part_node_is_listed_once_its_zone_is_reached_and_not_before() {
     let mut game = Game::new(70_022, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     unlock_research_chain(&mut game, "routine_fabrication");
+    crate::tests::support::discover_all_research(&mut game);
     let listed = |game: &mut Game, id: &str| {
         game.research_nodes(ResearchTree::Routines)
             .iter()
@@ -695,7 +696,12 @@ fn a_slots_list_shows_researched_and_held_parts() {
         .into_iter()
         .map(|o| o.part)
         .collect();
-    assert_eq!(cores, vec![heal()], "a new run knows only Heal v1.0");
+    let boost = Subroutine::Core(Core::BoostAttack, Version::V1);
+    assert_eq!(
+        cores,
+        vec![heal(), boost],
+        "a new run knows only the starting parts"
+    );
     assert!(game.build_part_options("Area", &[damage()]).is_empty());
 
     // Held but unresearched, as an extraction or a boss drop leaves it:
@@ -709,7 +715,7 @@ fn a_slots_list_shows_researched_and_held_parts() {
         .into_iter()
         .map(|o| o.part)
         .collect();
-    assert_eq!(cores.len(), 3);
+    assert_eq!(cores.len(), 4);
     assert!(cores.contains(&heal()) && cores.contains(&damage()) && cores.contains(&drain));
     let areas: Vec<_> = game
         .build_part_options("Area", &[damage()])

@@ -143,7 +143,7 @@ impl Game {
         self.take_copies(copy, 1);
         for part in &parts {
             self.grant_loot(ItemId::weapon_part(*part), 1, LootSource::Salvage);
-            self.discover_research(&part.node_id());
+            self.discover_research(&part.node_id(), crate::DiscoverySource::Extraction);
         }
         self.world
             .resource_mut::<KnownAffixes>()

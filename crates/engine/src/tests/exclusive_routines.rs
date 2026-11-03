@@ -177,6 +177,70 @@ fn killing_a_boss_can_drop_its_signature_parts() {
     }
 }
 
+/// The boss door is also a find door (ADR 0041): a drop that pays an
+/// exclusive's parts may show you how the ones you have not met are made.
+#[test]
+fn killing_a_boss_can_find_the_parts_it_drops() {
+    let mut game = Game::new(9013, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    unlock_research_chain(&mut game, "routine_fabrication");
+    set_zone(&mut game, 12);
+    let (boss, wanted) = {
+        let db = game.world.resource::<AbilityDb>();
+        let def = db
+            .exclusive_pool()
+            .into_iter()
+            .find(|d| d.boss_drop.is_some())
+            .expect("some exclusive routine names a boss");
+        let (species, _) = def.boss_drop.as_ref().unwrap()[0].clone();
+        (species, def.id.clone())
+    };
+    let parts = game.parts_of_routine(&wanted);
+    assert!(
+        !game.findable_routine_parts(&parts).is_empty(),
+        "fixture: the drop has something to find"
+    );
+    let player = game.player_entity();
+    game.world.entity_mut(player).insert(FieldBuff {
+        active: vec![ActiveFieldBuff {
+            kind: FieldBuffKind::DropBoost,
+            name: "test harness".to_string(),
+            power: 900,
+            remaining: 999,
+            interval: 1,
+            source: BuffSource::Routine,
+        }],
+    });
+    let pos = *game.world.get::<Position>(player).unwrap();
+    for _ in 0..40 {
+        let corpse = game
+            .spawn_wild_creature(&boss, pos.x + 1, pos.y)
+            .expect("the boss species ships with the game");
+        game.award_loot(corpse, 0.0);
+        if !game
+            .world
+            .resource::<crate::resources::DiscoveredResearch>()
+            .0
+            .is_empty()
+        {
+            break;
+        }
+    }
+    let found = game
+        .world
+        .resource::<crate::resources::DiscoveredResearch>();
+    assert!(!found.0.is_empty(), "forty drops found nothing");
+    // A boss may drop more than one exclusive; every find is a part of one.
+    let db = game.world.resource::<AbilityDb>();
+    let ids: Vec<String> = db
+        .exclusive_pool()
+        .into_iter()
+        .filter_map(crate::routine_craft::decompose)
+        .flatten()
+        .map(|p| crate::routine_tree::part_node_id(&p))
+        .collect();
+    assert!(found.0.iter().all(|id| ids.contains(id)));
+}
+
 /// Extraction is the one way an installed exclusive routine can be moved,
 /// and it hands back its *parts*, never the disk or the knowledge.
 #[test]

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+- **The routine research list starts short and grows as you meet programs.** A new run lists Heal v1.0, Boost Attack v1.0 (both already researched) and the capacity steps; every other part stays hidden until you find it. Taking a routine apart, at a bench or with a routines tool, gives each part you haven't found a one-in-three chance to show up. Studying a program at a Research Station can find a part it carries, or a part no program carries. A boss drop or a trader's set of parts gets the same chance per part, and the parts only those sets make can also turn up in a study, though less often. Nothing is found until the routine tree is open. A part's next version is only found once you know the version below it.
+
 ## 0.21.18
 
 **Your crew no longer holds a grudge for waiting its turn.** A program queueing behind another for the one tile that reaches a Depot or a machine is now waiting, not stranded, and gets no "Left stranded here" memory for it. Before, every few-tick wait at a single-faced Depot wrote a fresh grudge, and on a busy base the grudges piled up until most of the crew sulked or downed tools. A wait that runs past 250 ticks still counts as stranded, so a carrier stuck behind a program that never moves still sets its load down and says so.

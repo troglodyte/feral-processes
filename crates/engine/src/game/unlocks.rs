@@ -383,7 +383,7 @@ impl Game {
     /// the one definition of the gate — `research_nodes` explains it and
     /// `select_research` refuses on it, so a menu cannot promise a node the
     /// purchase would turn down.
-    fn research_zone_gate(&self, def: &ResearchDef) -> Option<u32> {
+    pub(crate) fn research_zone_gate(&self, def: &ResearchDef) -> Option<u32> {
         (def.min_zone > self.world.resource::<ZoneLevel>().0).then_some(def.min_zone)
     }
 
@@ -508,11 +508,22 @@ impl Game {
             .unwrap_or_else(|| "the routine tree".to_string())
     }
 
-    /// Whether a routine-tree node is visible: the zone gate is its only
-    /// visibility, so a part above the party's zone is absent rather than
-    /// `Locked`.
+    /// Whether a routine-tree node is visible: inside the zone gate, so a
+    /// part above the party's zone is absent rather than `Locked`, and found
+    /// if it is a part that must be found (ADR 0041) — the base tree's rule.
     fn routine_node_visible(&self, def: &ResearchDef) -> bool {
-        def.tree == ResearchTree::Routines && self.research_zone_gate(def).is_none()
+        def.tree == ResearchTree::Routines
+            && self.research_zone_gate(def).is_none()
+            && self.base_node_visible(def)
+    }
+
+    /// Whether the node `id` is known: researched or listed by the base
+    /// tree's rule — the rung a part's next version is findable above.
+    pub(crate) fn research_id_known(&self, id: &str) -> bool {
+        self.world
+            .resource::<ResearchDb>()
+            .get(id)
+            .is_some_and(|d| self.base_node_visible(d))
     }
 
     /// Whether `def` is reachable at all once the routine tree is open —
@@ -1411,8 +1422,7 @@ impl Game {
     /// refundable. The materials step spends nothing: what was delivered was
     /// consumed as it landed (`absorb_research_deliveries`, run first).
     /// **The one door a discovery is written through** — `Game::remember`'s
-    /// rule. `Game::settle_study` is its only caller today; a second
-    /// discovery source is a second caller of this and nothing else.
+    /// rule. `source` picks only the log line.
     ///
     /// Reports whether this was news. Idempotent by construction: a node
     /// already in the set writes nothing, says nothing and pops nothing, so
@@ -1423,7 +1433,7 @@ impl Game {
     /// No `detail`: `Game::research_unlocks` is what *finishing* the node
     /// buys, and quoting it on the discovery would read as the node already
     /// being researched.
-    pub fn discover_research(&mut self, id: &str) -> bool {
+    pub fn discover_research(&mut self, id: &str, source: DiscoverySource) -> bool {
         let Some(def) = self.world.resource::<ResearchDb>().get(id).cloned() else {
             return false;
         };
@@ -1439,7 +1449,15 @@ impl Game {
         // discovery is base news and can land while the party is four frames
         // down the Stack. A plain `log()` is `MessageKind::Info`, which
         // `retain_outcomes_since_battle` prunes.
-        self.log_base(format!("The study uncovers {}.", def.name));
+        self.log_base(match source {
+            DiscoverySource::Study => format!("The study uncovers {}.", def.name),
+            DiscoverySource::Extraction => {
+                format!("Taking it apart shows you how {} is made.", def.name)
+            }
+            DiscoverySource::Looted => {
+                format!("Looking it over shows you how {} is made.", def.name)
+            }
+        });
         self.notify_filled(
             crate::notifications::NotificationKind::ResearchDiscovered,
             &[("name", &def.name), ("description", &def.description)],
@@ -1449,7 +1467,8 @@ impl Game {
     }
 
     /// Every node a study may find right now: a **base** node (or an Affixes
-    /// node, while that tree is open) that is
+    /// node, while that tree is open, or a part `study_findable_part_ids`
+    /// names) that is
     /// `discoverable`, not already discovered, not already researched, has
     /// every prerequisite satisfied and is inside the zone the party has
     /// reached.
@@ -1471,6 +1490,7 @@ impl Game {
         // And the Weapons tree's, for the same reason: `discoverable` alone
         // does not admit a new tree.
         let weapons_open = self.weapon_tree_open();
+        let routine_finds = self.study_findable_part_ids();
         let discovered = &self
             .world
             .resource::<crate::resources::DiscoveredResearch>()
@@ -1480,15 +1500,74 @@ impl Game {
                 ResearchTree::Base => true,
                 ResearchTree::Affixes => affixes_open,
                 ResearchTree::Weapons => weapons_open,
-                ResearchTree::Routines => false,
+                ResearchTree::Routines => routine_finds.contains(&d.id),
             })
             .filter(|d| d.discoverable)
             .filter(|d| !discovered.contains(&d.id))
             .filter(|d| !self.node_researched(d))
-            .filter(|d| d.requires.iter().all(|r| self.is_researched(r)))
+            // A part's rung only has to be found, not researched (ADR 0041),
+            // and `findable_parts` already asked it.
+            .filter(|d| {
+                d.tree == ResearchTree::Routines || d.requires.iter().all(|r| self.is_researched(r))
+            })
             .filter(|d| self.research_zone_gate(d).is_none())
             .map(|d| d.id.clone())
             .collect()
+    }
+
+    /// The part nodes a study could find: the findable parts of the pinned
+    /// subject's routines, and of every part no shipped program carries
+    /// (`routine_tree::program_carried_parts`), which would otherwise never
+    /// be found. Empty while the routine tree is closed — so until then the
+    /// pool, and every seeded study roll indexing into it, is what it was
+    /// before.
+    fn study_findable_part_ids(&self) -> HashSet<String> {
+        if !self.routine_tree_open() {
+            return HashSet::new();
+        }
+        let carried = crate::routine_tree::program_carried_parts(
+            self.world.resource::<AbilityDb>(),
+            self.world.resource::<SpeciesDb>(),
+        );
+        let uncarried: Vec<_> = crate::routine_craft::Subroutine::all()
+            .into_iter()
+            .filter(|p| !carried.contains(p))
+            .collect();
+        // A carried rung found here would bypass the subject, so the
+        // uncarried walk keeps only uncarried finds.
+        let mut finds: Vec<_> = self
+            .findable_routine_parts(&uncarried)
+            .into_iter()
+            .filter(|p| !carried.contains(p))
+            .collect();
+        if let Some(subject) = self.pinned_subject() {
+            let parts: Vec<_> = self
+                .world
+                .get::<crate::components::Routines>(subject)
+                .map(|r| r.0.iter().flat_map(|a| self.parts_of_routine(a)).collect())
+                .unwrap_or_default();
+            finds.extend(self.findable_routine_parts(&parts));
+        }
+        finds
+            .iter()
+            .map(crate::routine_tree::part_node_id)
+            .collect()
+    }
+
+    /// The part nodes only an exclusive routine makes
+    /// (`routine_tree::exclusive_only_parts`), which a study weighs lighter
+    /// than the rest. Empty while the routine tree is closed.
+    fn exclusive_only_node_ids(&self) -> HashSet<String> {
+        if !self.routine_tree_open() {
+            return HashSet::new();
+        }
+        crate::routine_tree::exclusive_only_parts(
+            self.world.resource::<AbilityDb>(),
+            self.world.resource::<SpeciesDb>(),
+        )
+        .iter()
+        .map(crate::routine_tree::part_node_id)
+        .collect()
     }
 
     /// One study attempt, if the base has banked one and can spend it.
@@ -1534,11 +1613,17 @@ impl Game {
             return;
         }
         // One draw, over an order `ResearchDb::all` documents as stable.
+        let exclusive_only = self.exclusive_only_node_ids();
         let id = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            pool[rng.0.random_range(0..pool.len())].clone()
+            let at = crate::routine_tree::study_pick(
+                pool.len(),
+                |i| exclusive_only.contains(&pool[i]),
+                &mut rng.0,
+            );
+            pool[at].clone()
         };
-        self.discover_research(&id);
+        self.discover_research(&id, DiscoverySource::Study);
         self.spend_subject(subject);
     }
 

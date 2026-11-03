@@ -120,6 +120,7 @@ fn completing_a_part_node_marks_it_researched_and_the_part_known() {
     // node until this is researched.
     unlock_research_chain(&mut game, "routine_fabrication");
     research_prereqs_of(&mut game, &node_id);
+    game.discover_research(&node_id, crate::DiscoverySource::Study);
     let zone = game
         .world
         .resource::<ResearchDb>()
@@ -163,7 +164,7 @@ fn selecting_research_fails_while_a_prerequisite_is_missing() {
     let mut game = Game::new(65, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     base_with_a_research_node(&mut game);
 
-    game.discover_research("weapon_bench");
+    game.discover_research("weapon_bench", crate::DiscoverySource::Study);
     let err = game.select_research("weapon_bench").unwrap_err();
 
     assert!(
@@ -379,7 +380,7 @@ fn a_bill_naming_a_banked_item_is_refused_rather_than_flagged() {
     ))
     .unwrap();
     game.world.resource_mut::<ResearchDb>().insert_for_test(def);
-    game.discover_research("banked_bill");
+    game.discover_research("banked_bill", crate::DiscoverySource::Study);
 
     let err = game.select_research("banked_bill").unwrap_err();
 

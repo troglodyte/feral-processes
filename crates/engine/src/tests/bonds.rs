@@ -442,7 +442,7 @@ fn a_program_spent_in_the_study_is_let_go() {
     pin_subject_at_pen(&mut game, leaving, node);
     // After the pin: a cast member standing in the pen would refuse it.
     let cast = cast_around(&mut game, leaving);
-    game.discover_research("paging");
+    game.discover_research("paging", crate::DiscoverySource::Study);
     game.select_research("paging").unwrap();
     fill_research_bill(&mut game, "paging");
     fill_research_progress(&mut game, "paging");

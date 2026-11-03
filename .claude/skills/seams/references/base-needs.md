@@ -111,8 +111,22 @@
   authored, and "researched" means `Research` contains its id.**
   `routine_tree::synthesise_part_nodes` mints one node per part and one per
   capacity step, and `listed_research` gates the whole filter on "is the tree
-  open" — a closed tree lists nothing — with the zone gate as a part's only
-  other visibility.
+  open" — a closed tree lists nothing — and a part node is then listed by
+  the zone gate *and* the base tree's found-or-researched rule
+  (`base_node_visible`), so only the starting parts and capacity steps show
+  unfound (ADR 0041).
+- **A routine part is found through exactly three doors — extraction
+  (`Game::take_routine`), a drop or trade that pays an exclusive's parts, and
+  the study pool — over one pure rule, `routine_tree::findable_parts`, and
+  every paying door rolls through `Game::roll_part_finds_for`**, which draws
+  nothing when nothing is findable or the tree is closed. The trap is
+  coverage, not the rule: a part no shipped program carries cannot be found
+  off a program, so `study_findable_part_ids` admits it off any subject — the
+  census `the_parts_no_shipped_program_carries_are_named` found 53 such
+  parts, and without that arm they were unreachable. An exclusive is never
+  carried (no program has one), so the two parts only exclusives make
+  (`exclusive_only_parts`) are found by drop or trade, or by study at the
+  lower `STUDY_EXCLUSIVE_PART_PICK_WEIGHT`.
 - **A downed program lives in four places now, and the rack is the only one
   that is not a queue.** `DownedPrograms` on the player, `Racked` on a
   Quarantine Rack, `Hopper` on a rig, and `StudyYield` on a Research Station

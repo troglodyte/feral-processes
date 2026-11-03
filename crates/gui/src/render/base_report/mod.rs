@@ -204,6 +204,7 @@ fn screen_rows(
         Mode::DownedPrograms => extraction::downed_program_list_rows(game, selected),
         Mode::Tools => tools::tools_rows(game, selected),
         Mode::Companion => party::roster_rows(game, selected),
+        Mode::ManifestIntro => party::manifest_intro_rows(),
         Mode::Perks => progression::perks_rows(game, app_screens.perk_previews, selected),
         other => vec![text_row(format!("No report for {other:?}."))],
     }

@@ -1,4 +1,4 @@
-//! The party's pages: Companions, Programs, Routines and Perks sit on the
+//! The party's pages: Companions, Manifests, Programs, Routines and Perks sit on the
 //! inventory rail after Tools, and every screen that hung off the old `p`
 //! menu still has its door. Driven through `handle_key` throughout, so a lost door fails here.
 
@@ -7,8 +7,9 @@ use feral_processes_engine::save;
 use super::support::*;
 use crate::*;
 
-const RAIL: [Mode; 4] = [
+const RAIL: [Mode; 5] = [
     Mode::Companion,
+    Mode::ManifestIntro,
     Mode::PartyPrograms,
     Mode::PartyRoutines,
     Mode::Perks,
@@ -93,7 +94,7 @@ fn right_and_enter_go_into_the_page_and_esc_climbs_back_out() {
 fn i_reopens_on_a_party_page_and_the_base_keeps_its_own_slot() {
     let mut app = test_app(31004);
     open_companions(&mut app);
-    press(&mut app, &[GameKey::Down, GameKey::Down]);
+    press(&mut app, &[GameKey::Down, GameKey::Down, GameKey::Down]);
     assert_eq!(app.mode, Mode::PartyRoutines);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -120,7 +121,7 @@ fn a_command_page_with_every_row_hidden_still_turns_and_escapes() {
         "premise: one companion and no fusion research hides Fuse"
     );
     open_companions(&mut app);
-    app.handle_key(GameKey::Char(']'));
+    press(&mut app, &[GameKey::Char(']'), GameKey::Char(']')]);
     assert_eq!(app.mode, Mode::PartyPrograms);
     // Rows are selected by key, not by walking onto a hidden one.
     app.handle_key(GameKey::Right);

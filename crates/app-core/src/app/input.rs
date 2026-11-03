@@ -269,6 +269,8 @@ impl App {
             }
             // Only the hub's own keys; `GameMenu::key` opens the picker.
             Mode::SpriteOptions | Mode::ManualOptions => {}
+            // Only the hub's own keys; `InventoryHub::key` opens the sheet.
+            Mode::ManifestIntro => {}
             Mode::LoadGame => self.handle_load_game_key(key),
             Mode::SaveAction => self.handle_save_action_key(key),
             Mode::CreateCharacter => self.handle_creation_key(key),

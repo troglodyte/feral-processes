@@ -86,6 +86,67 @@ fn a_species_file_can_author_a_movement_figure() {
     assert_eq!(authored.movement, Some(5));
 }
 
+fn body_at_speed(game: &mut Game, speed: i32) -> Entity {
+    let mut species = generic_species();
+    species.base_speed = speed;
+    species.movement = None;
+    let id = species.id.clone();
+    game.world.resource_mut::<SpeciesDb>().insert(species);
+    body(game, &id)
+}
+
+#[test]
+fn haste_adds_its_bonus_after_the_clamp() {
+    let mut game = game();
+    let slow = body_at_speed(&mut game, DEFAULT_BASE_SPEED);
+    assert_eq!(game.movement_allowance(slow), 4);
+    game.arm_haste(slow, 1);
+    assert_eq!(game.movement_allowance(slow), 8);
+
+    let fast = body_at_speed(&mut game, 1000);
+    assert_eq!(game.movement_allowance(fast), TACTICAL_MOVE_MAX);
+    game.arm_haste(fast, 2);
+    assert_eq!(game.movement_allowance(fast), 16);
+}
+
+#[test]
+fn a_charging_hasted_body_does_not_move() {
+    let mut game = game();
+    let entity = body_at_speed(&mut game, DEFAULT_BASE_SPEED);
+    game.arm_haste(entity, 3);
+    game.world
+        .entity_mut(entity)
+        .insert(crate::components::Charging {
+            ability: "any".to_string(),
+            rounds: 2,
+            progress: 1,
+            aim: crate::components::ChargeAim::Cells(vec![]),
+        });
+    assert_eq!(game.movement_allowance(entity), 0);
+}
+
+#[test]
+fn a_hasted_body_s_field_reaches_past_the_old_ceiling() {
+    let mut game = game();
+    let pack = tactical_fight(&mut game, 1, 10);
+    let entity = pack[0];
+    game.arm_haste(entity, 2);
+    let allowance = game.movement_allowance(entity);
+    assert!(allowance > TACTICAL_MOVE_MAX);
+    let battle = game.world.resource::<TacticalBattle>();
+    let origin = battle.cell_of(entity).unwrap();
+    let field = reach::movement_field(battle, entity, allowance);
+    let farthest = field
+        .keys()
+        .map(|&(x, y)| (x - origin.0).abs().max((y - origin.1).abs()))
+        .max()
+        .unwrap();
+    assert!(
+        farthest > TACTICAL_MOVE_MAX as i32,
+        "reached only {farthest} cells"
+    );
+}
+
 /// The mean y of `bodies`' cells — which side of the board a rank sits on.
 fn mean_y(game: &Game, bodies: &[Entity]) -> f32 {
     let battle = game.world.resource::<TacticalBattle>();

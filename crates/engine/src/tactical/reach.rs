@@ -13,14 +13,14 @@ use bevy_ecs::prelude::Entity;
 
 use crate::Game;
 use crate::abilities::{AbilityRange, AbilityShape};
-use crate::components::{Charging, Creature};
+use crate::components::{Charging, Creature, Hasted};
 use crate::game::pursuit::walk_field;
 use crate::species::SpeciesDb;
 use crate::tactical::map::Board;
 use crate::tactical::{TacticalBattle, deploy, footprint_cells_at, footprint_clear};
 use crate::tuning::{
-    DEFAULT_BASE_SPEED, TACTICAL_MELEE_RANGE, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX,
-    TACTICAL_MOVE_MIN, TACTICAL_MOVE_SPEED_STEP,
+    DEFAULT_BASE_SPEED, HASTE_MOVE_BONUS, TACTICAL_MELEE_RANGE, TACTICAL_MOVE_BASE,
+    TACTICAL_MOVE_MAX, TACTICAL_MOVE_MIN, TACTICAL_MOVE_SPEED_STEP,
 };
 use crate::world::NEIGHBOURS;
 
@@ -76,7 +76,14 @@ impl Game {
             .get::<Creature>(entity)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
             .and_then(|def| def.movement);
-        allowance(self.combat_speed(entity), authored)
+        let base = allowance(self.combat_speed(entity), authored);
+        // After the clamp, so haste is the one thing that carries a body past
+        // `TACTICAL_MOVE_MAX`; the search box grows with it by construction.
+        let haste = self
+            .world
+            .get::<Hasted>(entity)
+            .map_or(0, |h| HASTE_MOVE_BONUS[usize::from(h.version) - 1]);
+        base + haste
     }
 }
 

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.24
+
+**Your staff now wear their names on the field.** Since the base moved onto the open field, a program on your staff and a wild program of the same kind looked the same. Every staff program you can see now has a small name tag above it, whether it is at its post, hauling or walking, and wild programs have none. When two tags would overlap, the lower one moves up a row, and if there is still no room it is left off. A program you are studying or holding in a Holding Cell is yours but not working, so it gets no tag; hold Alt to see its name beside it. Holding Alt also hides the staff tags while the room and machine labels show.
+
 ## 0.21.23
 
 **The Workbench's Build routine and Build weapon pages show what you're making in a box on the right.** The description, cost and materials used to sit under the part rows, where a long build pushed them off the bottom of the page. They now sit beside the rows, in a faint box that grows and shrinks with them.

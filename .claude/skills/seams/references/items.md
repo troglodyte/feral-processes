@@ -284,7 +284,7 @@
   refunds the one in flight; that is *materials are not spent until the
   structure is raised* again, and it closes the edge where a build crew
   empties the pack (`Source::Pack`) part-way through a compile. **The
-  multiplier is 1 and is paired with `app_core::COMPILE_TICKS_PER_SECOND`**
+  multiplier is 1 and is paired with the bar's rate, `WorldSpeed::ticks_per_second`**
   — the tick price divided by the bar's rate *is* the wall-clock wait, so
   raising this without checking that rate ships a stare nobody measured; it
   was 10 against a bar running at thirty times the world's tick rate, and

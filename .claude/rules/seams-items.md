@@ -119,8 +119,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **Hand-compiling is priced at `Game::hand_craft_ticks`, the cycle of the
   machine that exists to do the job times a constant, and `Game::craft` is
   that loop drained to completion.**
-- **That constant and `COMPILE_TICKS_PER_SECOND` are read together**, because
-  the tick price divided by the bar's rate is the wall-clock wait.
+- **That constant and the bar's rate (`WorldSpeed::ticks_per_second`) are
+  read together**, because the tick price divided by the bar's rate is the
+  wall-clock wait.
 - **A player's slot takes a built routine and nothing else
   (`Game::install_built`); a species kit goes in through `write_routine`
   with no ownership check, and popping a built routine out destroys it.**

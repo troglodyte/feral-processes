@@ -96,8 +96,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A path that spends ticks owes `after_tick()`**, and there are three:
   `handle_key`'s tail, `update_realtime` and `App::advance_compile`.
 - **A screen that spends the engine's ticks paces them against `dt`, never
-  one per rendered frame** — `COMPILE_TICKS_PER_SECOND`.
-- **And it spends them at the world's own rate**, `COMPILE_TICKS_PER_SECOND`
-  derived from `WORLD_SPEED_MULTIPLIER` rather than restated.
+  one per rendered frame** — `App::advance_compile`.
+- **And it spends them at the world's own rate at the player's selected
+  speed** — `world_speed.ticks_per_second()`, the idle clock's call, never a
+  rate of its own.
 - **Engine test fixtures live in `crates/engine/src/tests/support/`.**
   Look there before writing a new one.

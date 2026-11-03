@@ -527,6 +527,9 @@ pub const STUDY_PICK_WEIGHT: u32 = 3;
 /// the nodes with no other door.
 pub const STUDY_EXCLUSIVE_PART_PICK_WEIGHT: u32 = 1;
 
+// A zero weight would leave an all-exclusive pool nothing to draw over.
+const _: () = assert!(STUDY_EXCLUSIVE_PART_PICK_WEIGHT > 0);
+
 /// Extra units of a program's `rich_in` item (or its `work_resource`
 /// fallback, `Game::rich_in`) that `extraction_yield` adds on top of the
 /// tool's own draw — from any tool, regardless of category (spec section

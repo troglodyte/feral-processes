@@ -412,3 +412,45 @@ fn a_study_of_a_carrier_can_find_its_part() {
         "two hundred attempts found none of the subject's parts"
     );
 }
+
+/// `settle_study` applies the lighter weight to an exclusive-only part, not
+/// just `study_pick` in isolation: on a seed where the weighted and uniform
+/// picks differ, the study lands on the weighted one.
+#[test]
+fn a_study_weighs_exclusive_only_parts_in_its_own_pick() {
+    use rand::RngExt;
+    let magnetic = part_node_id(&Subroutine::DamageType(crate::damage::DamageType::Magnetic));
+    let probe = studied_game(4620, true);
+    let pool = probe.eligible_discoveries();
+    assert!(pool.contains(&magnetic), "fixture: Magnetic is in the pool");
+    let heavy = |i: usize| {
+        pool[i] == magnetic || part_node_id(&core(Core::FieldMitigation, Version::V1)) == pool[i]
+    };
+    let seed = (0..500u64)
+        .find(|&seed| {
+            let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+            if !rng.random_bool(crate::tuning::STUDY_DISCOVERY_CHANCE) {
+                return false;
+            }
+            let mut uniform = rand::rngs::StdRng::seed_from_u64(seed);
+            uniform.random_bool(crate::tuning::STUDY_DISCOVERY_CHANCE);
+            let weighted = crate::routine_tree::study_pick(pool.len(), heavy, &mut rng);
+            weighted != uniform.random_range(0..pool.len())
+        })
+        .expect("some seed tells the two picks apart");
+    let expected = {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+        rng.random_bool(crate::tuning::STUDY_DISCOVERY_CHANCE);
+        pool[crate::routine_tree::study_pick(pool.len(), heavy, &mut rng)].clone()
+    };
+
+    let mut game = studied_game(4620, true);
+    assert_eq!(game.eligible_discoveries(), pool);
+    game.world
+        .resource_mut::<crate::resources::ActiveResearch>()
+        .study = crate::tuning::STUDY_ATTEMPT_DATA;
+    reseed_rng(&mut game, seed);
+    game.settle_study();
+
+    assert_eq!(discovered(&game), vec![expected]);
+}

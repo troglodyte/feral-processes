@@ -469,8 +469,8 @@ impl Game {
         }
     }
 
-    /// The gather half of both find doors: the parts of `parts` whose nodes
-    /// a program carrying them could let you find right now.
+    /// The gather half of every find door: the parts of `parts` whose nodes
+    /// could be found right now.
     pub(crate) fn findable_routine_parts(
         &self,
         parts: &[crate::routine_craft::Subroutine],

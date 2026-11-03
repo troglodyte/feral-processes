@@ -19,6 +19,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   or `capacity/<n>`; no research grants a finished routine.
 - **A routine part is found through exactly three doors — extraction, a
   drop or trade that pays an exclusive's parts, and the study pool — all over
-  `routine_tree::findable_parts` and rolled by `Game::roll_part_finds_for`;
+  `routine_tree::findable_parts`, the two paying doors rolled by
+  `Game::roll_part_finds_for`;
   nothing findable (or a closed tree) draws nothing, an exclusive is never
   "carried", and a part no program carries is studied off any subject.**

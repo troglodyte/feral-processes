@@ -186,8 +186,8 @@ impl Game {
         self.destroy_built(&ids);
     }
 
-    /// Hands the player `parts` as items, the one door extraction and boss
-    /// drops share.
+    /// Hands the player `parts` as items, the one door extraction, boss
+    /// drops and an exclusive's trade share.
     pub(crate) fn grant_parts(&mut self, parts: &[Subroutine], source: LootSource) {
         for (part, count) in routine_craft::parts_used(parts) {
             self.grant_loot(ItemId::part(&part), count, source);

@@ -21,7 +21,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A body is a wall in `reach::movement_field`, and the allowance is both
   the budget and `walk_field`'s search box** — safe only because no step
   costs less than one, which is what makes `TACTICAL_MOVE_MIN`/`MAX`
-  correctness bounds.
+  correctness bounds. Haste's bonus is added *after* that clamp, so
+  `movement_allowance` is the one door and a hasted body may pass `MAX`.
 - **A fight ends through `Game::finish_fight`, and a `FightVerdict` is what
   each model answers it with** — `won` is the roster *emptied*, never
   "nothing is alive".

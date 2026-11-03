@@ -26,6 +26,12 @@
   as taste and are not. An unbounded allowance is an unbounded search, and a
   body that cannot move at all can neither close nor walk off the board, so
   an authored `SpeciesDef::movement` is clamped exactly as a derived figure
+  is. **Haste is the one deliberate exception**: `HASTE_MOVE_BONUS` is added
+  in `movement_allowance` *after* the clamp, so a hasted body may exceed
+  `TACTICAL_MOVE_MAX`; the search box is that same allowance, so it grows
+  with it, and the bonus must stay in that one function or the box and the
+  budget part ways. Likewise `attacks_for` doubles its count for a v3
+  `Hasted` body on top of a Striker's, past `MAX_ATTACKS_PER_ROUND`.
   is. See `seam:a-body-is-a-wall-and-the-allowance-is-both-the-budget-and` for the argument.
 
 - **A fight ends through `Game::finish_fight`, and a `FightVerdict` is what

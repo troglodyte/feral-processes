@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Companions can now be hasted in battle.** A new Haste routine core, built at three versions in the routine crafter, lets a companion cover four cells more on the battle map at v1 and eight more at v2 and v3. At v3 it also swings twice with each ordinary attack, on top of any second swing the class already grants. Haste lasts until the fight ends, a recast keeps the stronger version, and a hasted program shows a double chevron on the map and a "Hasted vN" row in the buffs list.
+
 ## 0.21.25
 
 **Compiling an item by hand now runs at your chosen game speed.** The progress bar used to fill at normal speed even when you had sped the game up, so at Fast or Fastest it now finishes two or four times sooner. It costs the same game time as before; you just wait less.

@@ -38,7 +38,7 @@
   is the one door that decides whether *this* swing is wide; each model
   converts it with the converter it already has, and `components::ReachCharge`
   is battle-scoped beside `Cloaked` so nothing reaches `save/`. **Three
-  traps.** `attacks_for` loops a Striker's second swing *inside* the turn, so
+  traps.** `attacks_for` (which a v3 `Hasted` body doubles) loops a Striker's second swing *inside* the turn, so
   the reach is read once in `party_member_attacks` and spent with
   `Option::take` — armed per swing it silently doubles the weapon and
   `BattleState::planned` never learns the feature exists

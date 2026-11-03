@@ -1164,6 +1164,11 @@ pub(super) const ROW_WRAP_COLUMNS: usize = 100;
 /// The screens' censuses hold it against the real pixels.
 pub(super) const HUB_WRAP_COLUMNS: usize = ROW_WRAP_COLUMNS - super::base_report::RAIL_CELLS;
 
+/// The same budget for one column of a two-column hub page: half the hub's,
+/// less a cell each side of the pad between them. The censuses hold it
+/// against the real pixels.
+pub(super) const HUB_COLUMN_WRAP_COLUMNS: usize = HUB_WRAP_COLUMNS / 2 - 2;
+
 /// How wide a refusal may run inside a popup of `size` before it wraps.
 ///
 /// Derived from `ROW_WRAP_COLUMNS` and the popup's own width fraction

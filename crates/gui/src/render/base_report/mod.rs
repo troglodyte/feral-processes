@@ -10,7 +10,7 @@
 mod commands;
 mod frame;
 #[cfg(test)]
-pub(in crate::render) use fit::{assert_rows_fit, content_rows_at_720};
+pub(in crate::render) use fit::{assert_column_rows_fit, assert_rows_fit, content_rows_at_720};
 pub(in crate::render) use frame::RAIL_CELLS;
 #[cfg(test)]
 pub(in crate::render) use frame::content_rect_at;
@@ -119,6 +119,36 @@ pub(super) fn draw_hub_page(
 ) {
     let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
     draw_rows_in(content, rows, !on_rail, painter, m);
+}
+
+/// `draw_hub_page` in two columns: the rows the cursor walks on the left,
+/// and what they add up to on the right, which no cursor reaches — the
+/// Workbench's build pages, whose output reads beside the parts making it.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn draw_hub_split_page(
+    frame: &HubFrame,
+    mode: Mode,
+    rows: &[Row],
+    side: &[Row],
+    on_rail: bool,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
+    let (left, right) = split_columns(content, m);
+    draw_rows_in(left, rows, !on_rail, painter, m);
+    draw_rows_in(right, side, false, painter, m);
+}
+
+/// The content rect cut into two equal columns with a pad between them.
+/// Equal because `HUB_COLUMN_WRAP_COLUMNS` is one budget for both.
+fn split_columns(content: Rect, m: &Metrics) -> (Rect, Rect) {
+    let w = (content.w - m.pad) / 2.0;
+    (
+        Rect::new(content.x, content.y, w, content.h),
+        Rect::new(content.x + w + m.pad, content.y, w, content.h),
+    )
 }
 
 /// Draws the shared hub at `mode`, which `HubFrame::of` has already placed
@@ -247,12 +277,21 @@ pub(in crate::render) mod fit {
     /// past the right edge is lost. Held at the smallest supported window,
     /// where the content rect is narrowest in characters.
     pub(in crate::render) fn assert_rows_fit(rows: &[Row], what: &str) {
+        assert_fit_in(rows, what, |content, _| content);
+    }
+
+    /// `assert_rows_fit` for one column of `draw_hub_split_page`.
+    pub(in crate::render) fn assert_column_rows_fit(rows: &[Row], what: &str) {
+        assert_fit_in(rows, what, |content, m| super::split_columns(content, m).1);
+    }
+
+    fn assert_fit_in(rows: &[Row], what: &str, rect: impl Fn(Rect, &Metrics) -> Rect) {
         crate::paint::with_painter(|p| {
             for (w, h) in [(1280.0, 720.0), (1440.0, 900.0), (1920.0, 1080.0)] {
                 let m = crate::text::ui_metrics(h);
                 let char_w = p.measure_ui_advance("M", m.font_size);
                 let content = crate::render::base_report::content_rect_at(w, h, char_w, &m);
-                let room = content.w - m.pad * 2.0;
+                let room = rect(content, &m).w - m.pad * 2.0;
                 for row in rows {
                     let line = row_label_text(row);
                     let drawn = p.measure_ui_advance(&line, m.font_size);

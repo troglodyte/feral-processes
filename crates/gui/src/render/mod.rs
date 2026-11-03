@@ -1234,6 +1234,27 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         _ => Vec::new(),
     };
     let Some(game) = &mut app.game else { return };
+    // The Workbench's build pages: the parts on the left, what they make
+    // on the right.
+    let split_rows = hub_frame.as_ref().and_then(|_| match app.mode {
+        Mode::RoutineBuild => Some(routine_craft::build_page_rows(
+            game,
+            &routine_draft,
+            selected,
+        )),
+        Mode::WeaponBuild => Some(gear_craft::weapon_build_page_rows(
+            game,
+            &design_draft,
+            selected,
+        )),
+        _ => None,
+    });
+    if let (Some(frame), Some((rows, side))) = (&hub_frame, split_rows) {
+        base_report::draw_hub_split_page(
+            frame, app.mode, &rows, &side, on_rail, refusal, painter, m,
+        );
+        return;
+    }
     // A hub page whose screen is also a popup: the same rows, in the hub's
     // frame instead. Every other hub screen is drawn by `draw_base_report`,
     // further down.
@@ -1256,15 +1277,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             crafting::craft_page_rows(game, craft_at_bench, &list_filter, selected),
             None,
         )),
-        Mode::RoutineBuild => Some((
-            routine_craft::build_page_rows(game, &routine_draft, selected),
-            None,
-        )),
         Mode::BuiltRoutines => Some((routine_craft::built_page_rows(game, selected), None)),
-        Mode::WeaponBuild => Some((
-            gear_craft::weapon_build_page_rows(game, &design_draft, selected),
-            None,
-        )),
         Mode::WeaponSalvage => Some((gear_craft::salvage_page_rows(game, selected), None)),
         Mode::SpliceRig => Some((splice_rig::page_rows(splice_rig.as_ref(), selected), None)),
         Mode::FarmRecipe => Some((farm_recipe::body_rows(&farm_recipe, selected), None)),

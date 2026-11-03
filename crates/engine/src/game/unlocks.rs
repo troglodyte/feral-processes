@@ -1554,6 +1554,22 @@ impl Game {
             .collect()
     }
 
+    /// The part nodes only an exclusive routine makes
+    /// (`routine_tree::exclusive_only_parts`), which a study weighs lighter
+    /// than the rest. Empty while the routine tree is closed.
+    fn exclusive_only_node_ids(&self) -> HashSet<String> {
+        if !self.routine_tree_open() {
+            return HashSet::new();
+        }
+        crate::routine_tree::exclusive_only_parts(
+            self.world.resource::<AbilityDb>(),
+            self.world.resource::<SpeciesDb>(),
+        )
+        .iter()
+        .map(crate::routine_tree::part_node_id)
+        .collect()
+    }
+
     /// One study attempt, if the base has banked one and can spend it.
     ///
     /// A `Game` method for `run_repair_bays`' own reason: it draws
@@ -1597,9 +1613,15 @@ impl Game {
             return;
         }
         // One draw, over an order `ResearchDb::all` documents as stable.
+        let exclusive_only = self.exclusive_only_node_ids();
         let id = {
             let mut rng = self.world.resource_mut::<GameRng>();
-            pool[rng.0.random_range(0..pool.len())].clone()
+            let at = crate::routine_tree::study_pick(
+                pool.len(),
+                |i| exclusive_only.contains(&pool[i]),
+                &mut rng.0,
+            );
+            pool[at].clone()
         };
         self.discover_research(&id, DiscoverySource::Study);
         self.spend_subject(subject);

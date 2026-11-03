@@ -218,3 +218,41 @@ fn parts_with_rungs(
         .into_iter()
         .collect()
 }
+
+/// The index `roll` (below the weights' sum) lands on when each weight is
+/// a slice of the line, in order. A zero weight is never landed on.
+pub fn weighted_pick(weights: &[u32], roll: u32) -> usize {
+    let mut rest = roll;
+    for (i, &w) in weights.iter().enumerate() {
+        if rest < w {
+            return i;
+        }
+        rest -= w;
+    }
+    weights.len().saturating_sub(1)
+}
+
+/// Which of a study's `len` pool entries it finds. With no exclusive-only
+/// entry this is the one uniform draw it always was, so no seeded study
+/// shifts; otherwise one draw over the weights
+/// (`STUDY_EXCLUSIVE_PART_PICK_WEIGHT` against `STUDY_PICK_WEIGHT`).
+pub fn study_pick(
+    len: usize,
+    is_exclusive_only: impl Fn(usize) -> bool,
+    rng: &mut rand::rngs::StdRng,
+) -> usize {
+    use rand::RngExt;
+    if !(0..len).any(&is_exclusive_only) {
+        return rng.random_range(0..len);
+    }
+    let weights: Vec<u32> = (0..len)
+        .map(|i| {
+            if is_exclusive_only(i) {
+                crate::tuning::STUDY_EXCLUSIVE_PART_PICK_WEIGHT
+            } else {
+                crate::tuning::STUDY_PICK_WEIGHT
+            }
+        })
+        .collect();
+    weighted_pick(&weights, rng.random_range(0..weights.iter().sum()))
+}

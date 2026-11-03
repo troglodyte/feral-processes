@@ -90,6 +90,51 @@ fn an_empty_roll_draws_nothing() {
     assert_eq!(rng.random::<u64>(), untouched.random::<u64>());
 }
 
+#[test]
+fn a_weighted_pick_walks_the_cumulative_weights() {
+    use crate::routine_tree::weighted_pick;
+    let weights = [3, 1, 0, 3];
+    let picks: Vec<usize> = (0..7).map(|r| weighted_pick(&weights, r)).collect();
+    assert_eq!(picks, vec![0, 0, 0, 1, 3, 3, 3]);
+}
+
+#[test]
+fn a_study_pick_with_nothing_exclusive_is_the_plain_uniform_draw() {
+    use rand::RngExt;
+    let mut picked = rand::rngs::StdRng::seed_from_u64(9);
+    let mut plain = rand::rngs::StdRng::seed_from_u64(9);
+    for _ in 0..50 {
+        assert_eq!(
+            crate::routine_tree::study_pick(7, |_| false, &mut picked),
+            plain.random_range(0..7)
+        );
+    }
+}
+
+#[test]
+fn a_study_pick_lands_on_an_exclusive_only_entry_a_third_as_often() {
+    let mut rng = rand::rngs::StdRng::seed_from_u64(9);
+    let mut hits = [0u32; 2];
+    for _ in 0..8000 {
+        hits[crate::routine_tree::study_pick(2, |i| i == 1, &mut rng)] += 1;
+    }
+    // 3:1 over 8000 draws is 6000:2000.
+    assert!((5700..6300).contains(&hits[0]), "{hits:?}");
+    assert!((1700..2300).contains(&hits[1]), "{hits:?}");
+}
+
+#[test]
+fn the_exclusive_only_parts_join_the_study_pool_off_any_subject() {
+    let game = studied_game(4609, true);
+    let pool = routine_pool(&game);
+    for part in [
+        core(Core::FieldMitigation, Version::V1),
+        Subroutine::DamageType(crate::damage::DamageType::Magnetic),
+    ] {
+        assert!(pool.contains(&part_node_id(&part)), "{part:?}");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // The extraction door
 // ---------------------------------------------------------------------------

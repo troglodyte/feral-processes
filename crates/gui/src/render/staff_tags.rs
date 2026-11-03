@@ -5,7 +5,7 @@
 //! is the measuring and painting either side of it, `alt_overlay`'s split.
 
 use super::alt_labels::TileRect;
-use super::base::MapClickLayout;
+use super::base::{MapClickLayout, takes_tile_from};
 use super::*;
 
 /// Point size of a staff tag: under the Alt room label's 14, since a tag
@@ -16,23 +16,34 @@ const TAG_SIZE: u16 = 12;
 const TAG_PAD: f32 = 2.0;
 
 /// A name tag over every drawn program on the staff. `entities` is what the
-/// tile loop drew, so a program out of sight or posted out of view carries
-/// no tag for a tile that shows nothing.
+/// tile loop drew from, so a program out of sight carries no tag; and only
+/// the body a tile actually shows is named — the tile loop's own
+/// `takes_tile_from` — so a staffer under the player's `@`, or a second
+/// body on a shared tile, does not float a name over someone else's glyph.
 pub(super) fn draw_staff_tags(painter: &Painter, view: &MapClickLayout, entities: &[EntityView]) {
     let t = view.tile_px;
-    let staff: Vec<&EntityView> = entities
+    let mut shown: std::collections::HashMap<(i32, i32), &EntityView> = Default::default();
+    for ev in entities
         .iter()
-        .filter(|e| e.is_tamed && !e.is_player && !e.is_companion && !e.is_structure)
+        .filter(|e| !e.is_structure && e.build.is_none())
+    {
+        if takes_tile_from(shown.get(&ev.pos).copied()) {
+            shown.insert(ev.pos, ev);
+        }
+    }
+    // `place` orders its own claims by tile, so the map's order is harmless.
+    let measured: Vec<(&EntityView, f32)> = shown
+        .into_values()
+        .filter(|e| e.is_tamed && !e.is_player && !e.is_companion)
+        .map(|e| (e, painter.measure_ui(&e.label, TAG_SIZE).width))
         .collect();
-    let requests: Vec<TagRequest> = staff
+    let h = (painter.measure_ui("Ag", TAG_SIZE).height + 2.0 * TAG_PAD) / t;
+    let requests: Vec<TagRequest> = measured
         .iter()
-        .map(|e| {
-            let dims = painter.measure_ui(&e.label, TAG_SIZE);
-            TagRequest {
-                at: e.pos,
-                w: (dims.width + 2.0 * TAG_PAD) / t,
-                h: (dims.height + 2.0 * TAG_PAD) / t,
-            }
+        .map(|(e, text_w)| TagRequest {
+            at: e.pos,
+            w: (text_w + 2.0 * TAG_PAD) / t,
+            h,
         })
         .collect();
     let origin = (
@@ -45,13 +56,12 @@ pub(super) fn draw_staff_tags(painter: &Painter, view: &MapClickLayout, entities
         w: view.pane.w / t,
         h: view.pane.h / t,
     };
-    for (rect, ev) in place(&requests, bounds).iter().zip(&staff) {
+    for (rect, (ev, text_w)) in place(&requests, bounds).iter().zip(&measured) {
         let Some(rect) = rect else { continue };
         let x = view.pane.x + (rect.x - origin.0) * t;
         let y = view.pane.y + (rect.y - origin.1) * t;
         let (w, h) = (rect.w * t, rect.h * t);
         painter.rect(x, y, w, h, hud::palette::STATUS_BG);
-        let text_w = painter.measure_ui(&ev.label, TAG_SIZE).width;
         painter.ui(
             &ev.label,
             x + (w - text_w) / 2.0,
@@ -82,6 +92,17 @@ pub(crate) fn place(tags: &[TagRequest], bounds: TileRect) -> Vec<Option<TileRec
     let mut boxes: Vec<TileRect> = Vec::new();
     for i in order {
         let t = &tags[i];
+        // The view hands over bodies a ring or two past the pane; a tag
+        // inside the pane for a program outside it names nothing on screen.
+        let tile = TileRect {
+            x: t.at.0 as f32,
+            y: t.at.1 as f32,
+            w: 1.0,
+            h: 1.0,
+        };
+        if !bounds.contains(&tile) {
+            continue;
+        }
         let pick = [0.0, 1.0]
             .into_iter()
             .map(|lift| TileRect {
@@ -150,6 +171,38 @@ mod tests {
         let got = place(&[tag(0, 0, 3.0), tag(1, 0, 3.0), tag(2, 0, 3.0)], BOUNDS);
         assert!(got[0].is_some() && got[1].is_some());
         assert_eq!(got[2], None);
+    }
+
+    #[test]
+    fn the_higher_row_claims_first_even_when_it_is_further_right() {
+        // Tall tags, so rows contest: (5, 0)'s lift-0 box reaches down into
+        // row -1, where (0, 1)'s would sit. Row order, not column, decides.
+        let tall = |x, y| TagRequest {
+            at: (x, y),
+            w: 12.0,
+            h: 1.5,
+        };
+        let got = place(&[tall(0, 1), tall(5, 0)], BOUNDS);
+        assert_eq!(
+            got[1].map(|r| r.y),
+            Some(-1.5),
+            "the higher row keeps its spot"
+        );
+        // Both of its spots overlap that box, so it is the one dropped.
+        assert_eq!(got[0], None);
+    }
+
+    #[test]
+    fn a_program_past_the_bottom_of_the_map_gets_no_tag() {
+        let bounds = TileRect {
+            x: 0.0,
+            y: 0.0,
+            w: 10.0,
+            h: 10.0,
+        };
+        // Its tag would sit wholly inside the pane, over a tile that is not it.
+        assert_eq!(place(&[tag(5, 10, 2.0)], bounds), vec![None]);
+        assert!(place(&[tag(5, 9, 2.0)], bounds)[0].is_some());
     }
 
     #[test]

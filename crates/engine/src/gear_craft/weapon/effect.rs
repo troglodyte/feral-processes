@@ -15,10 +15,14 @@ impl WeaponPart {
             let fig = t::GEAR_FRAME[frame.index()];
             let band = rounded_band(exact_band(frame, version, 1.0));
             let atk = scaled(fig.atk, t::GEAR_VERSION_MAGNITUDE[version.index()]);
+            let accuracy = if fig.accuracy == 0 {
+                String::new()
+            } else {
+                format!(", accuracy {:+}", fig.accuracy)
+            };
             return format!(
-                "The base of a design: hits for {}, {atk:+} ATK, accuracy {:+}, from {} cell{} away.",
+                "The base of a design: hits for {}, {atk:+} ATK{accuracy}, from {} cell{} away.",
                 crate::damage::band_label(band, None),
-                fig.accuracy,
                 fig.range,
                 if fig.range == 1 { "" } else { "s" },
             );
@@ -99,6 +103,11 @@ mod tests {
         assert!(line.contains(&label), "{line:?} lacks {label:?}");
         let range = t::GEAR_FRAME[Frame::Lance.index()].range;
         assert!(line.contains(&format!("{range} cells away")), "{line}");
+        let whip = WeaponPart::Frame(Frame::Whip, Version::V1).effect();
+        assert!(
+            !whip.contains("accuracy"),
+            "a frame with none says none: {whip}"
+        );
     }
 
     #[test]

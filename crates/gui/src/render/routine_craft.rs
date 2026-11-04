@@ -163,8 +163,8 @@ pub(super) fn build_page_rows(
         };
         rows.push(colored_item_row(text, i == selected, color));
     }
-    rows.push(item_row(name_row_text(&draft.name), selected == 6));
-    let preview = game.build_preview(&draft.name, &draft.parts);
+    rows.push(item_row(name_row_text(draft.name.as_str()), selected == 6));
+    let preview = game.build_preview(draft.name.as_str(), &draft.parts);
     let color = if preview.blocked.is_some() {
         TEXT_DIM
     } else {
@@ -254,9 +254,13 @@ pub(super) fn name_rows(draft: &RoutineDraft) -> Vec<Row> {
     vec![
         text_row("Name the routine (1-24 characters)"),
         text_row(""),
-        text_row(format!("> {}_", draft.name)),
+        text_entry_row(&draft.name),
         text_row(""),
-        text_row(key_hints(&["Type a name", "Enter or Esc finish"])),
+        text_row(key_hints(&[
+            "Type a name",
+            "Left/Right move",
+            "Enter or Esc finish",
+        ])),
     ]
 }
 
@@ -337,7 +341,7 @@ mod tests {
         for core in cores {
             let draft = RoutineDraft {
                 parts: vec![core],
-                name: "W".repeat(24),
+                name: "W".repeat(24).as_str().into(),
                 ..RoutineDraft::default()
             };
             let (left, output) = build_page_rows(&game, &draft, 0);

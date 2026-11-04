@@ -2,6 +2,7 @@
 //! its sizing, and the scroll window that keeps the selected row visible.
 
 use super::*;
+use feral_processes_app_core::TextField;
 
 /// One line of a popup's body. `Item` rows are the options a menu's
 /// highlight and Enter resolve to (see `App::selected_index`);
@@ -37,6 +38,13 @@ pub(super) enum Row {
         /// column was lifted out of the row text for: it says how well this
         /// copy was compiled, which nothing else on the row can say.
         tag: Option<ItemTag>,
+    },
+    /// A text field being typed into, with a blinking bar before byte
+    /// `caret` of `text`. The bar is painted over the text rather than
+    /// spliced into it, so the text does not shift as it blinks.
+    TextEntry {
+        text: String,
+        caret: usize,
     },
 }
 
@@ -379,6 +387,25 @@ pub(super) const BASKET_STEP_KEYS: &[&str] = &[
 /// The footer of every "which way?" prompt; the handler reads the arrows and
 /// hjkl alike.
 pub(super) const DIRECTION_KEYS: &[&str] = &["Arrows/hjkl pick", "Esc cancel"];
+
+/// The prompt a `Row::TextEntry` draws ahead of its text.
+const TEXT_ENTRY_PROMPT: &str = "> ";
+/// How long the text cursor stays lit, and then dark, per blink.
+const CARET_BLINK_SECS: f64 = 0.5;
+
+pub(super) fn text_entry_row(field: &TextField) -> Row {
+    let (before, after) = field.split_at_cursor();
+    Row::TextEntry {
+        text: format!("{TEXT_ENTRY_PROMPT}{before}{after}"),
+        caret: TEXT_ENTRY_PROMPT.len() + before.len(),
+    }
+}
+
+/// Whether the cursor is lit at `now`. No clock (effects off) holds it lit,
+/// for the reason a sprite sheet shows frame one then.
+fn caret_lit(now: Option<f64>) -> bool {
+    now.is_none_or(|t| ((t / CARET_BLINK_SECS) as u64).is_multiple_of(2))
+}
 
 pub(super) fn text_row(s: impl Into<String>) -> Row {
     Row::Text(s.into())
@@ -940,7 +967,7 @@ pub(super) const fn row_prefix(selected: bool) -> &'static str {
 /// prefix and the icon slot exactly where a row is tightest.
 pub(super) fn row_label_text(row: &Row) -> String {
     match row {
-        Row::Text(s) | Row::TextColored(s, _) => s.clone(),
+        Row::Text(s) | Row::TextColored(s, _) | Row::TextEntry { text: s, .. } => s.clone(),
         Row::Item {
             text,
             selected,
@@ -1028,6 +1055,16 @@ pub(super) fn draw_row(
         }
         Row::TextColored(s, color) => {
             painter.ui(s, x + m.pad, cy, m.font_size, *color);
+        }
+        Row::TextEntry { text, caret } => {
+            painter.ui(text, x + m.pad, cy, m.font_size, TEXT);
+            if caret_lit(painter.anim_now()) {
+                let lead = &text[..*caret];
+                let caret_x = x + m.pad + painter.measure_ui_advance(lead, m.font_size);
+                let width = (m.font_size as f32 / 10.0).max(1.0);
+                // The selection highlight's vertical span, so the bar is a line tall.
+                painter.rect(caret_x, cy - m.font_size as f32, width, m.line_height, TEXT);
+            }
         }
         Row::Item {
             text: s,
@@ -1335,6 +1372,23 @@ pub(super) fn wrap_text(text: &str, columns: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_text_cursor_blinks_and_holds_lit_with_effects_off() {
+        assert!(caret_lit(None));
+        assert!(caret_lit(Some(0.1)));
+        assert!(!caret_lit(Some(CARET_BLINK_SECS + 0.1)));
+        assert!(caret_lit(Some(2.0 * CARET_BLINK_SECS + 0.1)));
+    }
+
+    #[test]
+    fn a_text_entry_row_measures_as_its_whole_text() {
+        let mut field = feral_processes_app_core::TextField::from("Mend");
+        field.edit(feral_processes_app_core::GameKey::Left, 24);
+        let row = text_entry_row(&field);
+        assert!(matches!(&row, Row::TextEntry { text, caret } if &text[..*caret] == "> Men"));
+        assert_eq!(row_label_text(&row), "> Mend");
+    }
 
     #[test]
     fn key_hints_join_chips_with_the_one_separator() {

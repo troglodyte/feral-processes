@@ -157,7 +157,9 @@ fn buff_panel_width(rows: &[Row], title: &str, painter: &Painter, m: &Metrics) -
                 }
                 w
             }
-            Row::Text(s) | Row::TextColored(s, _) => painter.measure_ui(s, m.font_size).width,
+            Row::Text(_) | Row::TextColored(..) | Row::TextEntry { .. } => {
+                painter.measure_ui(row_label_text(row), m.font_size).width
+            }
         };
         width = width.max(w);
     }
@@ -708,7 +710,7 @@ mod tests {
                         }
                         (w, text.clone())
                     }
-                    Row::Text(t) | Row::TextColored(t, _) => {
+                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
                         (p.measure_ui(t, m.font_size).width, t.clone())
                     }
                 };

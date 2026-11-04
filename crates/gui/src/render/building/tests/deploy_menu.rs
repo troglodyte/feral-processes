@@ -286,7 +286,7 @@ fn no_deploy_row_overflows_its_popup_in_pixels() {
             .chain(prompt.iter())
         {
             let text = match row {
-                Row::Text(t) | Row::TextColored(t, _) => t.clone(),
+                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t.clone(),
                 // `draw_row`'s own prefix on an item row.
                 Row::Item { text, .. } => format!("     {text}"),
             };

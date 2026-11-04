@@ -298,6 +298,22 @@ fn leaving_a_part_list_or_the_name_field_keeps_the_highlight_on_its_row() {
 }
 
 #[test]
+fn the_design_name_field_edits_where_the_cursor_is() {
+    let mut app = forge_app(81_021);
+    open_page(&mut app, Mode::WeaponBuild);
+    choose(&mut app, 0, edge());
+    pick_row(&mut app, DESIGN_NAME_ROW);
+    for _ in 0..4 {
+        app.handle_key(GameKey::Left);
+    }
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Backspace);
+    type_text(&mut app, "L");
+    assert_eq!(app.design_draft.name.as_str(), "Ldge");
+    assert_eq!(app.mode, Mode::WeaponBuildName, "Left stays in the field");
+}
+
+#[test]
 fn the_name_follows_the_frame_until_the_player_types_one() {
     let mut app = forge_app(81_021);
     let lance = WeaponPart::Frame(Frame::Lance, Version::V1);
@@ -308,12 +324,20 @@ fn the_name_follows_the_frame_until_the_player_types_one() {
         .dev_unlock_research(&lance.node_id());
     open_page(&mut app, Mode::WeaponBuild);
     choose(&mut app, 0, edge());
-    assert_eq!(app.design_draft.name, "Edge");
+    assert_eq!(app.design_draft.name.as_str(), "Edge");
     choose(&mut app, 0, lance);
-    assert_eq!(app.design_draft.name, "Lance", "a new Frame renames it");
+    assert_eq!(
+        app.design_draft.name.as_str(),
+        "Lance",
+        "a new Frame renames it"
+    );
     pick_row(&mut app, DESIGN_NAME_ROW);
     type_text(&mut app, "r");
     app.handle_key(GameKey::Enter);
     choose(&mut app, 0, edge());
-    assert_eq!(app.design_draft.name, "Lancer", "a typed name stays");
+    assert_eq!(
+        app.design_draft.name.as_str(),
+        "Lancer",
+        "a typed name stays"
+    );
 }

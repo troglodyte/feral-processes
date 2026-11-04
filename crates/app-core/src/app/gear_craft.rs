@@ -47,7 +47,7 @@ pub enum DesignPicking {
 pub struct DesignDraft {
     pub parts: Vec<WeaponPart>,
     pub affixes: Vec<AffixId>,
-    pub name: String,
+    pub name: TextField,
     pub picking: Option<DesignPicking>,
     /// The page row to put the highlight back on after a pick or a name.
     pub row: usize,
@@ -215,7 +215,7 @@ impl App {
     fn compile_weapon_draft(&mut self) {
         let draft = std::mem::take(&mut self.design_draft);
         let Some(game) = &mut self.game else { return };
-        match game.compile_weapon(&draft.name, draft.gear_parts()) {
+        match game.compile_weapon(draft.name.as_str(), draft.gear_parts()) {
             Ok(_) => {
                 self.design_draft = DesignDraft {
                     row: DESIGN_COMPILE_ROW,
@@ -294,13 +294,15 @@ impl App {
     }
 
     fn design_name_is_default(&self) -> bool {
-        self.design_draft.name == default_design_name(&self.design_draft.parts)
+        self.design_draft.name.as_str() == default_design_name(&self.design_draft.parts)
     }
 
     /// A name the player never typed tracks the Frame.
     fn follow_default_name(&mut self, defaulted: bool) {
         if defaulted {
-            self.design_draft.name = default_design_name(&self.design_draft.parts);
+            self.design_draft
+                .name
+                .set(default_design_name(&self.design_draft.parts));
         }
     }
 
@@ -359,15 +361,9 @@ impl App {
                 self.menu_selected = self.design_draft.row;
                 self.mode = Mode::WeaponBuild;
             }
-            GameKey::Backspace => {
-                self.design_draft.name.pop();
+            key => {
+                self.design_draft.name.edit(key, DESIGN_NAME_MAX);
             }
-            GameKey::Char(c)
-                if !c.is_control() && self.design_draft.name.chars().count() < DESIGN_NAME_MAX =>
-            {
-                self.design_draft.name.push(c);
-            }
-            _ => {}
         }
     }
 

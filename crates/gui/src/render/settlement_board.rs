@@ -161,7 +161,10 @@ mod tests {
         let joined = rows
             .iter()
             .map(|r| match r {
-                Row::Text(t) | Row::TextColored(t, _) | Row::Item { text: t, .. } => t.as_str(),
+                Row::Text(t)
+                | Row::TextColored(t, _)
+                | Row::TextEntry { text: t, .. }
+                | Row::Item { text: t, .. } => t.as_str(),
             })
             .collect::<Vec<_>>()
             .join("\n");
@@ -252,7 +255,7 @@ mod tests {
             let mut measured = 0;
             for row in &rows {
                 let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) => t,
+                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, .. } => text,
                 };
                 measured += 1;

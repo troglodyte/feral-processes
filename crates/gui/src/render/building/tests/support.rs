@@ -61,7 +61,7 @@ pub(crate) fn view(tier: u32, ceiling: u32, max_tier: u32) -> EntityView {
 
 pub(super) fn row_text(row: &Row) -> &str {
     match row {
-        Row::Text(t) | Row::TextColored(t, _) => t,
+        Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
         Row::Item { text, .. } => text,
     }
 }

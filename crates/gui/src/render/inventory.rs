@@ -1704,7 +1704,7 @@ mod tests {
                 let rows = super::phase_key_rows(&view, selected);
                 for row in &rows {
                     let text = match row {
-                        Row::Text(t) | Row::TextColored(t, _) => t,
+                        Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
                         Row::Item { text, .. } => text,
                     };
                     let width = p.measure_ui_advance(format!("  {text}"), m.font_size);

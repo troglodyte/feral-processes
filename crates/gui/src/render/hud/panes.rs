@@ -623,6 +623,7 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
                 ),
                 PopupRow::TextColored(t, _) => text(vec![dim(format!("  {t}"))]),
                 PopupRow::Text(t) => text(vec![dim(format!("  {t}"))]),
+                PopupRow::TextEntry { text: t, .. } => text(vec![dim(format!("  {t}"))]),
             });
         }
     }

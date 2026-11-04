@@ -118,10 +118,10 @@ pub(super) fn weapon_build_page_rows(
     };
     rows.push(colored_item_row(text, selected == DESIGN_AFFIX_ROW, color));
     rows.push(item_row(
-        name_row_text(&draft.name),
+        name_row_text(draft.name.as_str()),
         selected == DESIGN_NAME_ROW,
     ));
-    let preview = game.design_preview(&draft.name, &draft.gear_parts());
+    let preview = game.design_preview(draft.name.as_str(), &draft.gear_parts());
     let color = if preview.blocked.is_some() {
         TEXT_DIM
     } else {
@@ -236,9 +236,13 @@ pub(super) fn name_rows(draft: &DesignDraft) -> Vec<Row> {
     vec![
         text_row("Name the design (1-24 characters)"),
         text_row(""),
-        text_row(format!("> {}_", draft.name)),
+        text_entry_row(&draft.name),
         text_row(""),
-        text_row(key_hints(&["Type a name", "Enter or Esc finish"])),
+        text_row(key_hints(&[
+            "Type a name",
+            "Left/Right move",
+            "Enter or Esc finish",
+        ])),
     ]
 }
 
@@ -362,7 +366,7 @@ mod tests {
     fn the_weapon_pages_fit_the_hub_content_rect() {
         let (game, parts) = bench_with_every_kind_of_line();
         let draft = DesignDraft {
-            name: "W".repeat(24),
+            name: "W".repeat(24).as_str().into(),
             parts: parts.clone(),
             ..DesignDraft::default()
         };

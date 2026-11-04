@@ -109,12 +109,12 @@ pub(super) fn coverage_rows(report: &[CoverageRow], selected: usize) -> Vec<Row>
     for (i, r) in report.iter().enumerate() {
         let short = if r.is_short() { " !" } else { "" };
         let text = format!(
-            "{:<name_w$}  built {} · places {}/{} · needed {}{short}  critical {} · low {}  lost ~{}%",
+            "{:<name_w$}  built {} · places {}/{} · waited {}{short}  critical {} · low {}  lost ~{}%",
             elide(&r.name, name_w),
             r.built,
             r.places,
             r.capacity,
-            r.needed,
+            r.waited,
             r.below_critical,
             r.below_content,
             (r.lost_share * 100.0).round() as u32,
@@ -224,7 +224,9 @@ mod tests {
             built: 1,
             places: 1,
             capacity: 2,
-            needed: 2,
+            visits: 4,
+            waited: 2,
+            stranded: 0,
             below_critical: 1,
             below_content: 3,
             lost_share: 0.07,
@@ -239,7 +241,7 @@ mod tests {
         let rows = coverage_rows(&[row], 0);
         assert!(text_of(&rows[0]).contains("Approximate"));
         let t = text_of(&rows[1]);
-        assert!(t.contains("places 1/2") && t.contains("needed 2 !") && t.contains("lost ~7%"));
+        assert!(t.contains("places 1/2") && t.contains("waited 2 !") && t.contains("lost ~7%"));
         assert_eq!(text_of(&rows[2]), "    build a Defrag Bay");
         assert!(text_of(&rows[3]).contains("1 open tile"));
     }
@@ -250,7 +252,9 @@ mod tests {
             built,
             places: built * 2,
             capacity: built * 2,
-            needed,
+            visits: needed,
+            waited: usize::from(built < needed),
+            stranded: 0,
             below_critical: 0,
             below_content: 0,
             lost_share: 0.1,
@@ -325,7 +329,9 @@ mod tests {
             built: 100,
             places: 200,
             capacity: 200,
-            needed: 100,
+            visits: 100,
+            waited: 10,
+            stranded: 100,
             below_critical: 100,
             below_content: 100,
             lost_share: 1.0,

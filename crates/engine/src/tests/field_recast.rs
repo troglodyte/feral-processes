@@ -488,3 +488,27 @@ fn plan_fades_an_expiry_with_no_caster() {
         vec![Plan::Fade("R".to_string())]
     );
 }
+
+#[test]
+fn a_rest_clears_a_flagged_timed_buff_and_nothing_reruns_it() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    stand_in_base_beside_home(&mut game);
+    let player = game.player_entity();
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    game.set_auto_recast(player, &id, true);
+    fill(&mut game, player, 100.0);
+    run_and_age(&mut game, player, &id, FieldRoutineTarget::Ally(player));
+
+    game.rest().unwrap();
+    assert!(
+        buffs(&game, player).is_empty(),
+        "rest ends a timed buff too"
+    );
+    assert!(log_has(&game, "fades"));
+
+    game.tick_field_buffs();
+    assert!(buffs(&game, player).is_empty());
+    assert!(!log_has(&game, "reruns"));
+    assert_eq!(game.auto_recast_of(player), vec![id], "the flag stays on");
+}

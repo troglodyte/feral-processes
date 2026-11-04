@@ -588,13 +588,10 @@ fn a_consumable_buff_of_an_until_rest_kind_still_expires() {
     );
 }
 
-/// Rest is the expiry event for the until-rest ones, and only for those. A
-/// counted buff comes out of a rest **unaged** now that no rest advances the
-/// clock — the drop is a thing `rest` does on purpose, not a side effect of
-/// time passing, and that distinction is the whole of why the counted one
-/// survives.
+/// Rest ends every routine buff, counted ones included, and leaves a
+/// consumable's alone. `runs_until_rest` decides only whether a buff ages.
 #[test]
-fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
+fn resting_drops_every_routine_buff_and_keeps_a_consumables() {
     let mut game = Game::new(622, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     stand_in_base_beside_home(&mut game);
@@ -622,6 +619,18 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
             ability: None,
         },
     );
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Sustain Cell".to_string(),
+            power: 1,
+            remaining: 12,
+            interval: 1,
+            source: BuffSource::Consumable,
+            ability: None,
+        },
+    );
 
     game.rest().unwrap();
 
@@ -629,19 +638,21 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
     assert_eq!(
         active.len(),
         1,
-        "only the until-rest buff should go: {active:?}"
+        "only the consumable's should stay: {active:?}"
     );
-    assert_eq!(active[0].kind, FieldBuffKind::Regen);
+    assert_eq!(active[0].source, BuffSource::Consumable);
     assert_eq!(
         active[0].remaining, 12,
-        "a counted buff is untouched: a rest passes no time to age it with"
+        "a rest passes no time to age it with"
     );
-    assert!(
-        game.message_log(20)
-            .iter()
-            .any(|e| e.text.contains("Overclock Single")),
-        "the drop is announced by the name that armed it, as an expiry is"
-    );
+    for name in ["Overclock Single", "Repair Loop Single"] {
+        assert!(
+            game.message_log(20)
+                .iter()
+                .any(|e| e.text.contains(name) && e.text.contains("fades")),
+            "the drop is announced by the name that armed it, as an expiry is: {name}"
+        );
+    }
 }
 
 /// The drop walks the player *and* the party — the same set

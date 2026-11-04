@@ -1528,7 +1528,7 @@ impl Game {
     /// that takes the charge**, so a free base rest never reaches the roll
     /// and the slab stays safe without a locale check of its own. A jumped
     /// rest **clears nothing** — the heal, the roster walk and
-    /// `drop_until_rest_buffs_on_party` all sit below it, which is the rule
+    /// `drop_routine_buffs_on_party` all sit below it, which is the rule
     /// a *refused* rest already follows, so the two failure modes agree. And
     /// a roll that hits but **fields no pack lapses into an ordinary rest**,
     /// because a charge burnt for no fight at all is the one outcome a
@@ -1628,7 +1628,7 @@ impl Game {
         // Below the gates rather than beside them, so a refused rest clears
         // nothing. The walk is player then `Party` — the same set
         // `tick_field_buffs` ages.
-        self.drop_until_rest_buffs_on_party();
+        self.drop_routine_buffs_on_party();
         // Collected up front: the loop below takes the world mutably.
         let owned: Vec<Entity> = {
             let mut query = self

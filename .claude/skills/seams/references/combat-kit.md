@@ -77,9 +77,13 @@
   cooldown and a reserve is all that ever refuses it.
 
 - **A field buff's lifetime is decided by its kind *and* its source**, and
-  `ActiveFieldBuff::runs_until_rest` is the one predicate. A routine-armed
-  buff of a read-on-demand kind has no turn count: rest, a Forgiving reboot
-  and same-kind displacement are the only things that end it. **The `source`
+  `ActiveFieldBuff::runs_until_rest` is the one predicate, **for ageing
+  only**. A routine-armed buff of a read-on-demand kind has no turn count: rest,
+  a Forgiving reboot and same-kind displacement are the only things that end it.
+  **Rest and a reboot end every routine buff, timed ones too**
+  (`drop_routine_buffs`, consumables excepted), which is also why a flagged
+  auto-recast can never fire on a rest; re-narrowing the drop to
+  `runs_until_rest` would let one survive. **The `source`
   half is the load-bearing one** — `ItemEffect::prebattle_buff` arms the same
   struct from a one-shot item, and `field_buff_power_of` *sums* a
   `Consumable` and a `Routine` entry of one kind, so a kind-only rule would
@@ -87,7 +91,7 @@
   `Regen`/`Trickle` are excluded because they are the only kinds with a
   per-tick effect and the only two that use `interval`, whose cadence is
   phased off the very counter an until-rest buff lacks. The drop is a free
-  function (`components::drop_until_rest_buffs`) because
+  function (`components::drop_routine_buffs`) because
   `death_handling_system` has no `Game`, and in `rest` it sits **with the
   heal, not with the gates** — a rest that never happened clears nothing.
   The tag is `"rest"`: the map's status column is unmeasured and unclipped

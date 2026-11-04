@@ -2,7 +2,7 @@ use bevy_ecs::prelude::*;
 
 use crate::components::{
     BaseAnchor, Derived, Experience, FieldBuff, Player, Position, PowerReserve, Stats,
-    drop_until_rest_buffs, max_power_of,
+    drop_routine_buffs, max_power_of,
 };
 use crate::game::stack::StackLocale;
 use crate::progression;
@@ -14,9 +14,9 @@ use crate::tuning::{FORGIVING_RESPAWN_HP_DIVISOR, FORGIVING_RESPAWN_NEED_FLOOR};
 /// loadout asks for the set rather than for a query and a resource it could
 /// take one of.
 ///
-/// `drop_until_rest` below is the system-side twin of
-/// `Game::drop_until_rest_buffs_on_party`, sharing its implementation
-/// through `components::drop_until_rest_buffs` — and, like that method,
+/// `drop_routine` below is the system-side twin of
+/// `Game::drop_routine_buffs_on_party`, sharing its implementation
+/// through `components::drop_routine_buffs` — and, like that method,
 /// walking the player then `Party`, which is the only set an invocation can arm a
 /// buff on.
 #[derive(bevy_ecs::system::SystemParam)]
@@ -26,13 +26,13 @@ pub(crate) struct PartyFieldBuffs<'w, 's> {
 }
 
 impl PartyFieldBuffs<'_, '_> {
-    /// Ends every until-rest buff on `player` and their party, returning the
+    /// Ends every routine buff on `player` and their party, returning the
     /// names of what went so the caller can announce it.
-    fn drop_until_rest(&mut self, player: Entity) -> Vec<String> {
+    fn drop_routine(&mut self, player: Entity) -> Vec<String> {
         let mut dropped = Vec::new();
         for entity in std::iter::once(player).chain(self.party.0.iter().copied()) {
             if let Ok(mut buff) = self.buffs.get_mut(entity) {
-                dropped.extend(drop_until_rest_buffs(&mut buff));
+                dropped.extend(drop_routine_buffs(&mut buff));
             }
         }
         dropped
@@ -137,13 +137,13 @@ pub(crate) fn death_handling_system(
                 }
                 // A reboot ends the expedition, so it ends the loadout that
                 // was bought for it — the second of the two things that drop
-                // an until-rest buff, and the reason the drop is a free
+                // a routine buff, and the reason the drop is a free
                 // function on the component rather than a `Game` method: a
                 // system has no `Game` to reach through, the same split this
                 // arm already makes for `stack::surfaced` above. The
-                // turn-counted buffs are deliberately untouched; they carry
-                // their own clocks and a death is not one of them.
-                for name in field_buffs.drop_until_rest(player) {
+                // timed ones go too, as on a rest; a consumable's buff keeps
+                // its own clock.
+                for name in field_buffs.drop_routine(player) {
                     report.push(format!("{name} fades."));
                 }
             }
@@ -171,7 +171,7 @@ mod tests {
         world.init_resource::<Locale>();
         world.init_resource::<CurrentStack>();
         world.init_resource::<Trace>();
-        // The Forgiving arm drops the party's until-rest field buffs, so the
+        // The Forgiving arm drops the party's routine field buffs, so the
         // system reads `Party` now. A bare `World` has none.
         world.init_resource::<Party>();
         let mut schedule = Schedule::default();
@@ -277,12 +277,11 @@ mod tests {
     }
 
     /// A reboot ends the expedition, so it ends the loadout bought for it —
-    /// the second of the two things that drop an until-rest buff, and the one
-    /// that has no `Game` to reach through. The turn-counted buffs are
-    /// deliberately untouched: they carry their own clocks and a death is not
-    /// one of them.
+    /// the second of the two things that drop a routine buff, and the one
+    /// that has no `Game` to reach through. The timed ones go too, as on a
+    /// rest; a consumable's buff keeps its own clock.
     #[test]
-    fn a_forgiving_death_drops_until_rest_buffs_and_keeps_counted_ones() {
+    fn a_forgiving_death_drops_every_routine_buff_and_keeps_a_consumables() {
         use crate::components::{ActiveFieldBuff, BuffSource, FieldBuffKind};
 
         let mut world = World::new();
@@ -327,6 +326,15 @@ mod tests {
                             source: BuffSource::Routine,
                             ability: None,
                         },
+                        ActiveFieldBuff {
+                            kind: FieldBuffKind::Regen,
+                            name: "Sustain Cell".to_string(),
+                            power: 1,
+                            remaining: 30,
+                            interval: 1,
+                            source: BuffSource::Consumable,
+                            ability: None,
+                        },
                     ],
                 },
             ))
@@ -336,10 +344,10 @@ mod tests {
 
         let active = &world.get::<FieldBuff>(player).unwrap().active;
         assert_eq!(active.len(), 1, "{active:?}");
-        assert_eq!(active[0].kind, FieldBuffKind::Regen);
+        assert_eq!(active[0].source, BuffSource::Consumable);
         assert_eq!(
             active[0].remaining, 30,
-            "a death does not age a counted buff"
+            "a death does not age a consumable's buff"
         );
     }
 }

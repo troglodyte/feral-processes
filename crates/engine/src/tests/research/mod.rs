@@ -8,6 +8,7 @@ use crate::tests::support::*;
 use crate::views::{PinMark, ResearchReadout};
 use crate::*;
 
+mod ai_gate;
 mod bills;
 mod discovery_and_study;
 mod fed_bill;

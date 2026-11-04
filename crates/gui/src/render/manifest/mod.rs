@@ -952,6 +952,7 @@ mod tests {
                 color: GlyphColor::Green,
                 level: 99,
                 in_party: i < 3,
+                base_ai: false,
                 needs_you: (i % 2 == 0).then_some(CallToAct::Idle),
             })
             .collect()
@@ -1572,6 +1573,7 @@ mod tests {
             color: GlyphColor::Green,
             level: 3,
             in_party: true,
+            base_ai: false,
             needs_you: None,
         }];
         let Some(Band::Party(rows)) = band_for(&player_view(player), &roster) else {

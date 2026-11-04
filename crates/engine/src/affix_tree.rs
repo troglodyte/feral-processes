@@ -43,6 +43,7 @@ pub fn synthesise_nodes(affixes: &AffixDb) -> Vec<ResearchDef> {
                 cost: research.cost,
                 materials: research.materials.clone(),
                 min_zone: research.min_zone,
+                requires_ai_level: None,
                 requires: research
                     .requires
                     .iter()

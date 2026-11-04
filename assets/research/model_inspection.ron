@@ -2,12 +2,13 @@
     id: "model_inspection",
     name: "Model Inspection",
     description: "Two gear recipes built off everything Cortex Hacking taught you about reading a hostile program.",
-    cost: 160,
+    cost: 240,
     materials: [("trace_sniffer", 8), ("logic_wafer", 14)],
     min_zone: 3,
     requires_subject: true,
     discoverable: true,
     requires: ["cortex"],
+    requires_ai_level: Some(3),
     unlocks_recipes: [
         (
             result: "adversarial_patch",

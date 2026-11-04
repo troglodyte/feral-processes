@@ -2,7 +2,7 @@
     id: "capacitance",
     name: "Capacitance",
     description: "Stronger power cells: one refills your whole Power reserve, the other keeps topping it up for a long time. Made at a Workbench.",
-    cost: 90,
+    cost: 135,
     materials: [("power_cell", 24), ("bytecode_block", 12)],
     min_zone: 3,
     requires_subject: true,

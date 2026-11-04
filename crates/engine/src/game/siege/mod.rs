@@ -120,11 +120,17 @@ impl Game {
         // with, raiders excepted.
         let structures = self.structure_footprints();
         // A prisoner is behind bars, not a defender: it occupies its pen
-        // (`walks_the_base`) but is never seated on the board.
+        // (`walks_the_base`) but is never seated on the board. The base AI's host
+        // is fixed to its station and sits out the same way.
         let staff: Vec<_> = self
             .base_bodies()
             .into_iter()
             .filter(|(e, _)| self.world.get::<crate::components::Jailed>(*e).is_none())
+            .filter(|(e, _)| {
+                self.world
+                    .get::<crate::components::BaseAiHost>(*e)
+                    .is_none()
+            })
             .collect();
 
         let mut battle = TacticalBattle::open(

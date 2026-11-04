@@ -2,7 +2,7 @@
     id: "dispatch",
     name: "Dispatch Protocol",
     description: "Send idle base programs out on expeditions to fight on their own while you do something else.",
-    cost: 45,
+    cost: 70,
     materials: [("bytecode_block", 18), ("charge_coil", 10)],
     min_zone: 2,
     requires_subject: true,

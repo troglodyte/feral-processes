@@ -153,7 +153,7 @@ mod study_yield;
 mod sulking;
 mod summons;
 mod supply;
-mod tactical;
+pub(crate) mod tactical;
 mod tactical_pack;
 mod tactical_policy;
 mod tactical_props;

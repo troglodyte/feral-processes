@@ -2,7 +2,7 @@
     id: "wetware_splicing",
     name: "Wetware Splicing",
     description: "A rig that builds implants into your own body. Opens the first three: Ripper Fibers, Ghost Handshake and Dermal Lattice.",
-    cost: 50,
+    cost: 75,
     materials: [("logic_wafer", 8), ("bytecode_block", 8)],
     min_zone: 2,
     requires_subject: true,

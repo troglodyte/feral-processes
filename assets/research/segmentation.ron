@@ -2,7 +2,7 @@
     id: "segmentation",
     name: "Segmentation",
     description: "A bigger Depot.",
-    cost: 120,
+    cost: 180,
     materials: [("cache_grain", 6), ("bytecode_block", 24)],
     min_zone: 3,
     requires_subject: true,

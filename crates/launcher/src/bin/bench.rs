@@ -149,6 +149,7 @@ fn run(
             seed,
             orders,
             sieges,
+            storyline: false,
         },
     )?;
     let ron = ron::ser::to_string_pretty(&report, ron::ser::PrettyConfig::default())

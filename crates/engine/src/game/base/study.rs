@@ -60,6 +60,11 @@ impl Game {
     /// `World::iter_entities` rather than taking the `&mut self` a bevy
     /// query needs.
     pub fn study_station(&self) -> Option<Entity> {
+        // Once fused the AI's station is the only one in use, whichever
+        // anchor sorts first.
+        if self.base_ai_fused() {
+            return self.base_ai_station();
+        }
         let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
@@ -108,6 +113,23 @@ impl Game {
             return false;
         };
         gated
+            && !self.world.iter_entities().any(|e| {
+                e.get::<components::UnderStudy>()
+                    .is_some_and(|u| u.station == station)
+            })
+    }
+
+    /// Whether "Train your AI" is selected and no program is pinned to spend
+    /// on it: `research_wants_subject`'s answer for the training target.
+    pub fn ai_training_wants_subject(&self) -> bool {
+        let training = matches!(
+            &self.storyline.base_ai,
+            crate::storyline::BaseAi::Fused(f) if f.training.selected
+        );
+        let Some(station) = self.study_station() else {
+            return false;
+        };
+        training
             && !self.world.iter_entities().any(|e| {
                 e.get::<components::UnderStudy>()
                     .is_some_and(|u| u.station == station)
@@ -293,6 +315,9 @@ impl Game {
                     .into(),
             );
         }
+        if self.base_ai_fused() && self.base_ai_station() != Some(station) {
+            return Err("Only the base AI's Research Station is in use now.".into());
+        }
         let Some(pen) = self.study_pen(station) else {
             return Err("That structure has no pen to study anyone in.".into());
         };
@@ -471,6 +496,11 @@ impl Game {
     /// will — so calling it beside `clear_pending_build_at` costs every
     /// other destruction path nothing.
     pub(crate) fn release_study_station(&mut self, structure: Entity) {
+        self.release_study_subject(structure, "the Research Station is gone");
+    }
+
+    /// Unpins the subject at `structure`, saying `why` in the log line.
+    pub(crate) fn release_study_subject(&mut self, structure: Entity, why: &str) {
         let subject = self
             .world
             .query::<(Entity, &components::UnderStudy)>()
@@ -484,9 +514,7 @@ impl Game {
             .entity_mut(subject)
             .remove::<components::UnderStudy>();
         let name = self.creature_label(subject);
-        self.log(format!(
-            "{name} is released from the pen — the Research Station is gone."
-        ));
+        self.log(format!("{name} is released from the pen — {why}."));
         // Only a project that actually spends *this* subject has lost
         // anything. An ungated project running alongside an unrelated pin
         // must not be deselected just because some structure's subject was

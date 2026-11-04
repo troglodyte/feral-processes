@@ -39,6 +39,7 @@ mod research;
 mod routine_craft;
 mod routines;
 mod shields;
+mod storyline;
 mod work;
 
 pub use base::*;
@@ -55,4 +56,5 @@ pub use research::*;
 pub use routine_craft::*;
 pub use routines::*;
 pub use shields::*;
+pub use storyline::*;
 pub use work::*;

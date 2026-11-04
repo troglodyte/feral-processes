@@ -390,6 +390,20 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_base_ai_stalled_template_loads_with_its_host_marked() {
+        let out = std::env::temp_dir().join("feral_processes_template_base_ai_host.bin");
+        generate("base-ai-stalled", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        assert_eq!(
+            game.manifest_roster().iter().filter(|r| r.base_ai).count(),
+            1,
+            "a fused host the roster reads as staff is the load not re-marking it"
+        );
+    }
+
     /// Loading is not the bar for `contracts` either: it exists so a session
     /// testing the contracts loop starts *at a board it can sign*, and a
     /// template that parked the player off their own slab would load

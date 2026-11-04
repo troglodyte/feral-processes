@@ -1849,6 +1849,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         next_program_id: 0,
         outposts: Vec::new(),
         outpost_routes: Vec::new(),
+        storyline: Default::default(),
     };
     let path = std::env::temp_dir().join(format!("feral_missing_nest_{}.bin", std::process::id()));
     save::save_to_file(&path, &data).unwrap();

@@ -106,6 +106,18 @@ impl App {
             self.report(outcome);
             return;
         }
+        // The graph has no list row to put "Train your AI" on, so it is a mode
+        // key there, `G`'s and `A`'s kind. In the list it is a row as well.
+        let train_offered = tree == ResearchTree::Base
+            && self
+                .game
+                .as_ref()
+                .and_then(|g| g.base_ai_view())
+                .is_some_and(|v| v.training_available);
+        if key == GameKey::Char('T') && train_offered {
+            self.train_ai();
+            return;
+        }
         // Dev-only and unbound otherwise. Uppercase for `G`'s and `A`'s
         // reason; it needs the id list, so it waits for it below.
         let dev_unlock = key == GameKey::Char('U') && self.dev_console_enabled();
@@ -125,9 +137,16 @@ impl App {
             return;
         }
         if !self.research_graph_view {
-            if let Some(idx) = self.selected_index(key, ids.len()) {
-                let id = ids[idx].clone();
-                self.select_research(&id);
+            // "Train your AI" is the row after the last node.
+            let rows = ids.len() + usize::from(train_offered);
+            if let Some(idx) = self.selected_index(key, rows) {
+                match ids.get(idx) {
+                    Some(id) => {
+                        let id = id.clone();
+                        self.select_research(&id);
+                    }
+                    None => self.train_ai(),
+                }
             }
             return;
         }
@@ -170,6 +189,19 @@ impl App {
         let Some(game) = &mut self.game else { return };
         let outcome = game.select_research(id);
         let wants_subject = outcome.is_ok() && game.research_wants_subject(id);
+        self.report(outcome);
+        if wants_subject {
+            self.menu_selected = 0;
+            self.mode = Mode::PinSubject;
+        }
+    }
+
+    /// Chooses "Train your AI", then opens the study picker for the program
+    /// it will spend, as `select_research` does for a gated node.
+    fn train_ai(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        let outcome = game.select_ai_training();
+        let wants_subject = outcome.is_ok() && game.ai_training_wants_subject();
         self.report(outcome);
         if wants_subject {
             self.menu_selected = 0;

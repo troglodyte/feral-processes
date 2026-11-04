@@ -2,7 +2,7 @@
     id: "neural_amp",
     name: "Neural Interfacing",
     description: "A module that makes decompiling hostile programs more likely to succeed. Made at a Workbench.",
-    cost: 55,
+    cost: 85,
     materials: [("trace_sniffer", 3), ("logic_wafer", 8)],
     min_zone: 2,
     requires_subject: true,

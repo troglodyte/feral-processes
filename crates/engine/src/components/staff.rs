@@ -282,6 +282,14 @@ pub struct UnderStudy {
     pub station: Entity,
 }
 
+/// The program the base AI storyline has claimed (ADR 0042): marks it for
+/// `Game::storyline`'s arc and keeps the labour scheduler off it.
+///
+/// Carries no data: which station and what stage live in
+/// `storyline::BaseAi`, which saves them by `ProgramId` and tile.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BaseAiHost;
+
 /// A tamed program revived as a prisoner in a Holding Cell's pen —
 /// `Game::jail_program`'s one door.
 ///

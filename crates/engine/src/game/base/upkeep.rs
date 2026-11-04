@@ -771,6 +771,7 @@ impl Game {
         // `StructureDef::swept` narrows the pool, never widens it: the
         // `Durability` filter still says what can be damaged at all, and
         // an unswept structure keeps its pool for a siege to spend.
+        let ai_station = self.base_ai_station();
         let targets: Vec<Entity> = {
             let mut query = self
                 .world
@@ -778,7 +779,9 @@ impl Game {
             let db = self.world.resource::<StructureDb>();
             query
                 .iter(&self.world)
-                .filter(|(_, s)| db.get(s.kind.as_str()).is_none_or(|def| def.swept))
+                .filter(|(e, s)| {
+                    Some(*e) != ai_station && db.get(s.kind.as_str()).is_none_or(|def| def.swept)
+                })
                 .map(|(e, _)| e)
                 .collect()
         };

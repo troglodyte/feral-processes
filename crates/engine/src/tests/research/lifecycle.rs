@@ -193,6 +193,7 @@ fn a_locked_node_reports_which_prerequisites_are_missing() {
             // `a_node_can_report_both_a_missing_prereq_and_its_zone` mean
             // something.
             min_zone: None,
+            ai_level: None,
         }
     );
 }

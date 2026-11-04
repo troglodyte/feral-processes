@@ -378,6 +378,16 @@ impl Game {
             .collect()
     }
 
+    /// The base AI level `def` is waiting on, or `None` once it is met. The
+    /// level is 0 before the AI fuses.
+    pub(crate) fn research_ai_gate(&self, def: &ResearchDef) -> Option<u32> {
+        let level = match &self.storyline.base_ai {
+            crate::storyline::BaseAi::Fused(f) => f.level,
+            _ => 0,
+        };
+        def.requires_ai_level.filter(|&need| need > level)
+    }
+
     /// The zone `def` is still waiting on, or `None` if the party has already
     /// reached it. Read the same way `Game::upgrade_ceiling` reads it, and
     /// the one definition of the gate — `research_nodes` explains it and
@@ -822,10 +832,15 @@ impl Game {
                 } else {
                     let missing = self.missing_prereqs(def);
                     let min_zone = self.research_zone_gate(def);
-                    if missing.is_empty() && min_zone.is_none() {
+                    let ai_level = self.research_ai_gate(def);
+                    if missing.is_empty() && min_zone.is_none() && ai_level.is_none() {
                         ResearchState::Available
                     } else {
-                        ResearchState::Locked { missing, min_zone }
+                        ResearchState::Locked {
+                            missing,
+                            min_zone,
+                            ai_level,
+                        }
                     }
                 };
                 let materials: Vec<ResearchMaterial> = def
@@ -1251,6 +1266,9 @@ impl Game {
         if let Some(zone) = self.research_zone_gate(&def) {
             return Err(format!("Requires Zone {zone} first."));
         }
+        if self.research_ai_gate(&def).is_some() {
+            return Err("Seems feasible, but we don't know where to start.".to_string());
+        }
         if let Some(active) = self.world.resource::<ActiveResearch>().id.clone() {
             let name = self
                 .world
@@ -1284,6 +1302,11 @@ impl Game {
         // completed the moment the shelves held it and was gone before the
         // data finished, so anything else eating those units stalled the
         // project for good.
+        // A project and "Train your AI" are the one thing the AI works on;
+        // training keeps what it has earned (`TrainingTarget::progress`).
+        if let crate::storyline::BaseAi::Fused(fused) = &mut self.storyline.base_ai {
+            fused.training.selected = false;
+        }
         self.world.resource_mut::<ActiveResearch>().id = Some(def.id.clone());
         self.refresh_research_reach();
         self.log_base(format!("Research project started: {}.", def.name));
@@ -1715,7 +1738,7 @@ impl Game {
     /// `overkill_term`'s own identity value, so the condition roll is
     /// best-case — a controlled dissection beats overkilling something in the
     /// field.
-    fn spend_subject(&mut self, subject: Entity) {
+    pub(crate) fn spend_subject(&mut self, subject: Entity) {
         let Some(station) = self.study_station() else {
             return;
         };

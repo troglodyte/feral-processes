@@ -144,12 +144,15 @@ impl Game {
 
     /// Whether there is nothing standing for a siege to take or break —
     /// `run_raid`'s own target pool (`With<Durability>, With<Structure>`),
-    /// asked as a hold rather than discovered inside the fire.
+    /// asked as a hold rather than discovered inside the fire. The base AI's
+    /// station is out of that pool, so a base with nothing else standing
+    /// holds rather than firing a siege that can hit nothing.
     fn nothing_to_besiege(&mut self) -> bool {
+        let station = self.base_ai_station();
         let mut query = self
             .world
             .query_filtered::<Entity, (With<Durability>, With<Structure>)>();
-        query.iter(&self.world).next().is_none()
+        query.iter(&self.world).all(|e| Some(e) == station)
     }
 
     /// One interval, jittered, in `resources::SiegePressure`'s units —

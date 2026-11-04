@@ -126,6 +126,7 @@ pub fn achievement_system(
             sprite: None,
             glyph: ACHIEVEMENT_GLYPH,
             color: ACHIEVEMENT_COLOR,
+            category: None,
             detail: None,
             ftue_key: None,
         });

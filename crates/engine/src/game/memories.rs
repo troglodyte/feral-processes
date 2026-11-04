@@ -1022,7 +1022,7 @@ impl crate::Game {
     }
 
     /// The live body a `ProgramId` names, if it is still in the world.
-    fn program_entity(&self, id: ProgramId) -> Option<Entity> {
+    pub(crate) fn program_entity(&self, id: ProgramId) -> Option<Entity> {
         self.world
             .iter_entities()
             .find(|e| e.get::<ProgramId>() == Some(&id))

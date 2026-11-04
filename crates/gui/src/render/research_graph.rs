@@ -426,6 +426,10 @@ pub(super) fn draw_research_graph(
     let graph = game.research_graph(tree);
     let nodes = game.research_nodes(tree);
     let active = game.active_research_progress();
+    let train_offered = tree == ResearchTree::Base
+        && game
+            .base_ai_view()
+            .is_some_and(|view| view.training_available);
     let geo = geometry(screen_w, screen_h, &graph, m);
 
     // The same sentence the list's header carries, through the same
@@ -443,23 +447,16 @@ pub(super) fn draw_research_graph(
         Color::new(0.25, 0.85, 0.85, 1.0),
     );
     painter.ui(
-        &if dev_unlock {
-            key_hints(&[
-                "[G] list",
-                "Arrows move",
-                "Enter work",
-                "[A] abandon",
-                "[U] unlock",
-                "Esc back",
-            ])
-        } else {
-            key_hints(&[
-                "[G] list",
-                "Arrows move",
-                "Enter work",
-                "[A] abandon",
-                "Esc back",
-            ])
+        &{
+            let mut hints = vec!["[G] list", "Arrows move", "Enter work", "[A] abandon"];
+            if train_offered {
+                hints.push("[T] train your AI");
+            }
+            if dev_unlock {
+                hints.push("[U] unlock");
+            }
+            hints.push("Esc back");
+            key_hints(&hints)
         },
         geo.panel.x,
         m.line_height,
@@ -588,6 +585,19 @@ pub(super) fn draw_research_graph(
         painter,
         m,
     );
+    // A node held up by the base AI alone says so: the graph has no tag to
+    // carry it, and the list's `state_tag` is the same sentence.
+    if let feral_processes_engine::ResearchState::Locked {
+        missing,
+        min_zone: None,
+        ai_level: Some(_),
+    } = &node.state
+        && missing.is_empty()
+    {
+        for row in description_rows_at(super::progression::AI_GATED, panel_columns) {
+            cy = draw_row(&row, geo.panel.x, geo.panel.w, cy, max_y, painter, m);
+        }
+    }
     // Why this base cannot work the node yet, wrapped — the list's
     // `block_rows`, so the graph cannot flag a box without saying what it
     // waits on. Above the bill, because it is the reason the bill is

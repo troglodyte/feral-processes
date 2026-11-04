@@ -53,6 +53,8 @@ pub enum AlertKind {
     /// durability, or broke. Posted on the step that crosses the line, not
     /// every fight after it.
     GearWorn,
+    /// The base AI has no progress to make until it is trained.
+    BaseAiWaiting,
     /// Staff went to an amenity and waited for a place or could not reach
     /// one. The subject is the need id. Latched by
     /// `AlertBoard::amenity_blocked`.

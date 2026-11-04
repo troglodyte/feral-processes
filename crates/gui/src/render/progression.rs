@@ -5,7 +5,8 @@ use super::popup::*;
 use super::*;
 use feral_processes_engine::perks::{Perk, PerkDef};
 use feral_processes_engine::{
-    PerkPreview, ResearchMaterial, ResearchStatus, ResearchTree, RespecQuote, RespecSubject,
+    BaseAiView, PerkPreview, ResearchMaterial, ResearchStatus, ResearchTree, RespecQuote,
+    RespecSubject,
 };
 
 /// The perk picker's rows. A perk's description is a *dim item row* rather
@@ -162,6 +163,8 @@ pub(super) fn perks_rows(
 /// breaching. Both stay clear of the dim grey an already-researched row
 /// takes, so the three unpickable states never read as each other.
 pub(super) const LOCKED_BY_PREREQ: Color = Color::new(0.72, 0.50, 0.22, 1.0);
+/// What a node held up by the base AI's level alone says about itself.
+pub(super) const AI_GATED: &str = "Seems feasible, but we don't know where to start";
 const LOCKED_BY_ZONE: Color = Color::new(0.38, 0.52, 0.78, 1.0);
 
 /// What a research row says about itself after its name and price. This is
@@ -179,9 +182,18 @@ fn state_tag(state: &ResearchState) -> String {
         ResearchState::Unlocked => " (researched)".to_string(),
         ResearchState::Active => " (in progress)".to_string(),
         ResearchState::Available => String::new(),
-        ResearchState::Locked { missing, min_zone } => {
+        ResearchState::Locked {
+            missing,
+            min_zone,
+            ai_level,
+        } => {
             let mut reasons = missing.clone();
             reasons.extend(min_zone.map(|z| format!("Zone {z}")));
+            // Held by the AI alone, the line says only that it cannot be
+            // started; beside another wall, that wall is what to clear first.
+            if reasons.is_empty() && ai_level.is_some() {
+                return format!(" ({AI_GATED})");
+            }
             format!(" (needs {})", reasons.join(", "))
         }
     }
@@ -218,6 +230,12 @@ pub(super) fn row_color(node: &ResearchStatus) -> Color {
         ResearchState::Available if node.recommended => GREEN,
         ResearchState::Available => TEXT,
         ResearchState::Locked { min_zone, .. } if min_zone.is_some() => LOCKED_BY_ZONE,
+        // A wall cleared by training the AI, not by anything on this screen.
+        ResearchState::Locked {
+            missing,
+            ai_level: Some(_),
+            ..
+        } if missing.is_empty() => LOCKED_BY_ZONE,
         ResearchState::Locked { .. } => LOCKED_BY_PREREQ,
     }
 }
@@ -385,6 +403,34 @@ pub(super) fn block_rows(blocked_by: Option<&String>, columns: usize) -> Vec<Row
         .collect()
 }
 
+/// The row "Train your AI" is, with what it costs and how far along it is.
+/// The row after the last node, so `selected == nodes.len()` highlights it.
+fn train_rows(view: &BaseAiView, highlighted: bool) -> Vec<Row> {
+    let tag = if view.training_selected {
+        format!(
+            " - {}/{} Research Data (in progress)",
+            view.training_progress, view.training_cost
+        )
+    } else if view.training_progress > 0 {
+        format!(
+            " - {} Research Data ({} banked)",
+            view.training_cost, view.training_progress
+        )
+    } else {
+        format!(" - {} Research Data", view.training_cost)
+    };
+    let colour = if view.training_selected { CYAN } else { GREEN };
+    let mut rows = vec![colored_item_row(
+        format!("Train your AI{tag}"),
+        highlighted,
+        colour,
+    )];
+    rows.extend(description_rows(
+        "Spends one program from the base when the training is done.",
+    ));
+    rows
+}
+
 /// The research picker's rows, in the shape `perks_menu_rows` documents and
 /// for the same reason: nothing may follow the last `Row::Item`.
 ///
@@ -396,6 +442,7 @@ pub(super) fn research_menu_rows(
     currency: &str,
     active: Option<&(String, u32, u32)>,
     dev_unlock: bool,
+    train: Option<&BaseAiView>,
 ) -> Vec<Row> {
     let mut rows = vec![
         Row::TextColored(research_header(active), CYAN),
@@ -434,7 +481,13 @@ pub(super) fn research_menu_rows(
             DESCRIBE_WRAP_COLUMNS - DESCRIPTION_INDENT.chars().count(),
         ));
     }
+    if let Some(view) = train {
+        rows.extend(train_rows(view, nodes.len() == selected));
+    }
     let mut chips = vec!["Enter work the row", "[A] abandon", "[G] tree view"];
+    if train.is_some() {
+        chips.push("[T] train your AI");
+    }
     if dev_unlock {
         chips.push("[U] unlock");
     }
@@ -455,10 +508,19 @@ pub(super) fn draw_research_menu(
     let currency = game.item_name(&game.research_currency()).to_string();
     let nodes = game.research_nodes(tree);
     let active = game.active_research_progress();
+    let train = game
+        .base_ai_view()
+        .filter(|view| view.training_available && tree == ResearchTree::Base);
     let (title, rows) = match tree {
         ResearchTree::Base => {
-            let mut rows =
-                research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock);
+            let mut rows = research_menu_rows(
+                &nodes,
+                selected,
+                &currency,
+                active.as_ref(),
+                dev_unlock,
+                train.as_ref(),
+            );
             // Under the header, above the list.
             let study = game.study_hint().into_iter().flat_map(|hint| {
                 wrap_text(&hint, DESCRIBE_WRAP_COLUMNS)
@@ -480,7 +542,14 @@ pub(super) fn draw_research_menu(
         ),
         ResearchTree::Routines => (
             "Routine research",
-            research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
+            research_menu_rows(
+                &nodes,
+                selected,
+                &currency,
+                active.as_ref(),
+                dev_unlock,
+                None,
+            ),
         ),
         // Two empty lines, because "closed" and "open but nothing found yet"
         // call for different actions from the player.
@@ -494,7 +563,14 @@ pub(super) fn draw_research_menu(
         ),
         ResearchTree::Affixes => (
             "Affix research",
-            research_menu_rows(&nodes, selected, &currency, active.as_ref(), dev_unlock),
+            research_menu_rows(
+                &nodes,
+                selected,
+                &currency,
+                active.as_ref(),
+                dev_unlock,
+                None,
+            ),
         ),
         ResearchTree::Weapons => (
             "Weapon research",
@@ -521,7 +597,7 @@ fn weapon_research_rows(
     dev_unlock: bool,
 ) -> Vec<Row> {
     if !nodes.is_empty() {
-        return research_menu_rows(nodes, selected, currency, active, dev_unlock);
+        return research_menu_rows(nodes, selected, currency, active, dev_unlock, None);
     }
     // An open tree always lists its first frames, so an empty list is the
     // closed tree.
@@ -580,6 +656,55 @@ pub(super) fn draw_respec_confirm(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_node_held_by_the_ai_alone_says_it_cannot_be_started() {
+        let tag = state_tag(&ResearchState::Locked {
+            missing: Vec::new(),
+            min_zone: None,
+            ai_level: Some(1),
+        });
+        assert_eq!(tag, " (Seems feasible, but we don't know where to start)");
+        let both = state_tag(&ResearchState::Locked {
+            missing: vec!["Automation".into()],
+            min_zone: None,
+            ai_level: Some(1),
+        });
+        assert_eq!(both, " (needs Automation)");
+    }
+
+    #[test]
+    fn the_train_row_follows_the_nodes_and_shows_progress() {
+        let view = BaseAiView {
+            level: 0,
+            analysis: 40,
+            next_threshold: Some(40),
+            stalled: true,
+            training_available: true,
+            training_selected: true,
+            training_progress: 5,
+            training_cost: 20,
+        };
+        let rows = research_menu_rows(&[], 0, "Research Data", None, false, Some(&view));
+        let texts: Vec<&str> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { text, .. } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            texts.first().copied(),
+            Some("Train your AI - 5/20 Research Data (in progress)")
+        );
+        let plain = research_menu_rows(&[], 0, "Research Data", None, false, None);
+        assert!(
+            plain
+                .iter()
+                .all(|r| !matches!(r, Row::Item { text, .. } if text.contains("Train your AI")))
+        );
+    }
+
     use crate::paint::with_painter;
     use feral_processes_engine::DifficultyMode;
 
@@ -593,8 +718,8 @@ mod tests {
     /// `U` is advertised only where it is bound: with the dev console on.
     #[test]
     fn the_research_hint_names_u_only_with_the_dev_console() {
-        let off = research_menu_rows(&[], 0, "Research Data", None, false);
-        let on = research_menu_rows(&[], 0, "Research Data", None, true);
+        let off = research_menu_rows(&[], 0, "Research Data", None, false, None);
+        let on = research_menu_rows(&[], 0, "Research Data", None, true, None);
         assert!(!hint_of(&off).contains("[U] unlock"));
         assert!(hint_of(&on).contains("[U] unlock"));
     }
@@ -609,6 +734,7 @@ mod tests {
             state_tag(&ResearchState::Locked {
                 missing: Vec::new(),
                 min_zone: Some(3),
+                ai_level: None,
             }),
             " (needs Zone 3)",
             "a node whose only obstacle is the breach has to say so — this is \
@@ -618,6 +744,7 @@ mod tests {
             state_tag(&ResearchState::Locked {
                 missing: vec!["Neural Interfacing".to_string()],
                 min_zone: Some(3),
+                ai_level: None,
             }),
             " (needs Neural Interfacing, Zone 3)",
             "both reasons, or clearing one leaves the row saying the same thing"
@@ -626,6 +753,7 @@ mod tests {
             state_tag(&ResearchState::Locked {
                 missing: vec!["Automation".to_string()],
                 min_zone: None,
+                ai_level: None,
             }),
             " (needs Automation)",
             "a bootstrap node is untouched by the gate existing"
@@ -652,7 +780,7 @@ mod tests {
             recommended: false,
         };
         let label = |node: ResearchStatus| {
-            research_menu_rows(&[node], 0, "Research Data", None, false)
+            research_menu_rows(&[node], 0, "Research Data", None, false, None)
                 .into_iter()
                 .find_map(|r| match r {
                     Row::Item { text, .. } if text.contains("Automation") => Some(text),
@@ -692,7 +820,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data", None, false);
+        let rows = research_menu_rows(&[node], 0, "Research Data", None, false, None);
         let at = |needle: &str| {
             rows.iter()
                 .position(|r| matches!(r, Row::Item { text, .. } if text.contains(needle)))
@@ -732,7 +860,7 @@ mod tests {
             recommended: false,
         };
 
-        let rows = research_menu_rows(&[node], 0, "Research Data", None, false);
+        let rows = research_menu_rows(&[node], 0, "Research Data", None, false, None);
 
         let conversion = rows
             .iter()
@@ -788,6 +916,7 @@ mod tests {
         let prereq = |missing: &str| ResearchState::Locked {
             missing: vec![missing.to_string()],
             min_zone: None,
+            ai_level: None,
         };
 
         assert_eq!(
@@ -805,6 +934,7 @@ mod tests {
                 ResearchState::Locked {
                     missing: Vec::new(),
                     min_zone: Some(3),
+                    ai_level: None,
                 },
                 false,
             )),
@@ -817,6 +947,7 @@ mod tests {
                 ResearchState::Locked {
                     missing: vec!["Automation".to_string()],
                     min_zone: Some(3),
+                    ai_level: None,
                 },
                 false,
             )),
@@ -1008,6 +1139,7 @@ mod tests {
                     game.item_name(&game.research_currency()),
                     None,
                     false,
+                    None,
                 ),
             ),
             (

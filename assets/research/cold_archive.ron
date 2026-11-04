@@ -2,11 +2,12 @@
     id: "cold_archive",
     name: "Cold Archive",
     description: "The largest Depot there is.",
-    cost: 540,
+    cost: 810,
     materials: [("cache_grain", 45), ("charge_coil", 40)],
     min_zone: 6,
     requires_subject: true,
     discoverable: true,
     requires: ["shard_mapping"],
+    requires_ai_level: Some(4),
     unlocks_structures: ["depot_mk6"],
 )

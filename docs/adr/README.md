@@ -109,6 +109,7 @@ Do not duplicate between them; point instead.
 | [0039](0039-species-carry-starting-skill-levels.md) | Species carry starting skill levels | Accepted | user, on Claude's proposal | — |
 | [0040](0040-combat-skills-and-the-figure-pipeline.md) | Combat skills, and a figure pipeline that programs' attributes can join later | Accepted | user, on Claude's proposal | Module per domain; Functional core, imperative shell |
 | [0041](0041-routine-parts-are-found-before-they-are-researched.md) | Routine parts are found before they are researched | Accepted | user, on Claude's proposal | — |
+| [0042](0042-storylines-are-plain-rust-arcs-owned-by-game.md) | Storylines are plain Rust arcs owned by Game | Agreed | user, on Claude's proposal | Plain structs owned in one place; Functional core, imperative shell |
 
 ## Pattern index
 

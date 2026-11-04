@@ -484,3 +484,70 @@ mod dev_unlock {
         assert_eq!(active_project(&app), None);
     }
 }
+
+/// The list offers "Train your AI" as the row after the last node, and only
+/// once the AI has stalled.
+#[test]
+fn the_research_menu_offers_train_your_ai_only_when_available() {
+    let mut app = app_in_base_with_a_research_node(520);
+    assert!(app.game.as_ref().unwrap().base_ai_view().is_none());
+    open_command(&mut app, "Research");
+    to_the_list(&mut app);
+    app.handle_key(GameKey::Char('T'));
+    assert!(
+        app.status_line.is_none() && app.mode == Mode::Research,
+        "nothing to train yet, so the key does nothing"
+    );
+
+    let mut app = app_with_a_stalled_base_ai(521);
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .base_ai_view()
+            .is_some_and(|v| v.training_available)
+    );
+    open_command(&mut app, "Research");
+    to_the_list(&mut app);
+    let nodes = app
+        .game
+        .as_ref()
+        .unwrap()
+        .research_nodes(ResearchTree::Base)
+        .len();
+    // Down from the top wraps onto the extra row.
+    app.menu_selected = 0;
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.menu_selected, nodes, "the train row follows the nodes");
+}
+
+#[test]
+fn entering_train_your_ai_opens_the_pin_subject_screen() {
+    let mut app = app_with_a_stalled_base_ai(522);
+    open_command(&mut app, "Research");
+    to_the_list(&mut app);
+    let nodes = app
+        .game
+        .as_ref()
+        .unwrap()
+        .research_nodes(ResearchTree::Base)
+        .len();
+    pick_row(&mut app, nodes);
+    assert_eq!(app.mode, Mode::PinSubject);
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .base_ai_view()
+            .is_some_and(|v| v.training_selected)
+    );
+}
+
+#[test]
+fn capital_t_trains_the_ai_from_the_graph_too() {
+    let mut app = app_with_a_stalled_base_ai(523);
+    open_command(&mut app, "Research");
+    assert!(app.research_graph_view);
+    app.handle_key(GameKey::Char('T'));
+    assert_eq!(app.mode, Mode::PinSubject);
+}

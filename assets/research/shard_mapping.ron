@@ -2,7 +2,7 @@
     id: "shard_mapping",
     name: "Shard Mapping",
     description: "A bigger Depot.",
-    cost: 360,
+    cost: 540,
     materials: [("cache_grain", 26), ("bytecode_block", 40)],
     min_zone: 5,
     requires_subject: true,

@@ -299,6 +299,9 @@ impl Game {
         // tick, not the next.
         self.grow_farms();
         self.schedule_base_labour();
+        // After the scheduler so a claim can release what it just posted,
+        // and before `settle_research` for that call's own ordering reason.
+        self.advance_storyline();
         // Immediately after the scheduler and before the schedule, for both
         // of that call's reasons: a digger posted this tick swings this
         // tick, and a cycle that ends in `strike_rock` or `floor_cell` is

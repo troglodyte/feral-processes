@@ -81,6 +81,7 @@ pub(crate) mod stack_market;
 pub(crate) mod stack_movement;
 pub(crate) mod stack_view;
 pub(crate) mod staff_report;
+pub(crate) mod storyline;
 pub(crate) mod talents;
 pub(crate) mod tamper;
 pub(crate) mod taunt;

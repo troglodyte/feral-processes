@@ -153,6 +153,9 @@ impl Game {
         if structure_id == HOME_STRUCTURE_ID && self.has_structure(HOME_STRUCTURE_ID) {
             return Err("A Home is already deployed. Remove it before building another.".into());
         }
+        if def.studies && self.base_ai_fused() {
+            return Err("The base AI is the only Research Station there will be.".into());
+        }
 
         // Where a deploy is made *from*: the field, measured from the party's
         // tile. The first Home goes on the tile the party stands on, and the
@@ -1665,6 +1668,9 @@ impl Game {
             .ok_or_else(|| "That structure is already gone.".to_string())?
             .kind
             .clone();
+        if self.base_ai_station() == Some(structure) {
+            return Err("It won't leave the Research Station.".into());
+        }
         let is_home = kind == HOME_STRUCTURE_ID;
         let removed_name = self
             .world
@@ -1675,11 +1681,15 @@ impl Game {
 
         let mut targets = vec![structure];
         if is_home {
+            // The AI's station outlives the Home: the program is fused to it.
+            let ai_station = self.base_ai_station();
             let mut query = self.world.query::<(Entity, &Structure)>();
             targets.extend(
                 query
                     .iter(&self.world)
-                    .filter(|(e, s)| *e != structure && s.kind != HOME_STRUCTURE_ID)
+                    .filter(|(e, s)| {
+                        *e != structure && s.kind != HOME_STRUCTURE_ID && Some(*e) != ai_station
+                    })
                     .map(|(e, _)| e),
             );
         }
@@ -1970,6 +1980,9 @@ impl Game {
         self.require_field()?;
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
+        }
+        if self.storyline_owns_research() && self.research_stations().contains(&structure) {
+            return Err("The AI has taken the research. It won't let your hands near it.".into());
         }
         let (hx, hy) = self
             .field_pos()

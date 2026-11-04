@@ -64,6 +64,7 @@ pub mod species;
 pub mod stack;
 pub mod statuses;
 pub mod story;
+pub mod storyline;
 pub mod structures;
 pub mod systems;
 pub mod tactical;
@@ -217,6 +218,12 @@ const WALL_STRUCTURE_ID: &str = "wall";
 pub struct Game {
     world: World,
     schedule: Schedule,
+    /// Plain Rust, not a `Resource`: a new resource shifts bevy's iteration
+    /// order (ADR 0042).
+    storyline: storyline::Storyline,
+    /// A bench's override of whether the storyline may leave `Dormant`
+    /// (`Game::dev_set_storyline`): `None` means on. Never saved.
+    dev_storyline: Option<bool>,
 }
 
 #[cfg(test)]

@@ -123,6 +123,8 @@ fn draw_subject(
     let mark = |col: usize| {
         if row.needs_you.is_some() {
             painter.ui_bold("!", x(col), base, m.font_size, hud::palette::ATTENTION);
+        } else if row.base_ai {
+            painter.ui_bold("◆", x(col), base, m.font_size, hud::palette::PANE_TITLE);
         }
     };
     if !rail.full {
@@ -217,6 +219,7 @@ mod tests {
             color: GlyphColor::White,
             level: 1,
             in_party,
+            base_ai: false,
             needs_you: None,
         }
     }

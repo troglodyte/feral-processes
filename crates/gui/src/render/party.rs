@@ -312,6 +312,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
         ProgramRole::UnderStudy => "Under study",
         ProgramRole::Jailed => "Held in a Holding Cell",
         ProgramRole::Siphoned => "Held in Power Siphon",
+        ProgramRole::BaseAi => "Base AI",
         ProgramRole::Staff => "Base staff",
     }
 }
@@ -815,6 +816,7 @@ mod tests {
             pet("aa", ProgramRole::Sortie),
             pet("bb", ProgramRole::UnderStudy),
             pet("cc", ProgramRole::Siphoned),
+            pet("cd", ProgramRole::BaseAi),
             pet("dd", ProgramRole::Staff),
         ];
         let rows = companion_page_rows(&pets, 0, ROW_WRAP_COLUMNS);
@@ -831,6 +833,7 @@ mod tests {
                 "Away on a sortie",
                 "Under study",
                 "Held in Power Siphon",
+                "Base AI",
                 "Base staff"
             ],
             "the pinned run needs its own heading between the other two"

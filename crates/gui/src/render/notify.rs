@@ -69,6 +69,7 @@ fn block_height(
     painter: &Painter,
     m: &Metrics,
     title: &str,
+    categorised: bool,
     body_lines: usize,
     detail_lines: usize,
     hint: &str,
@@ -82,8 +83,11 @@ fn block_height(
         m.gap + detail_lines as f32 * m.line_height
     };
     let hint_h = painter.measure_ui(hint, m.small()).height;
+    // The category label sits between the art and the title.
+    let category_h = if categorised { m.line_height } else { 0.0 };
     m.line_height * ART_CELLS
         + m.gap
+        + category_h
         + title_h
         + m.gap
         + body_lines as f32 * m.line_height
@@ -118,6 +122,7 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
         painter,
         m,
         &note.title,
+        note.category.is_some(),
         lines.len(),
         detail.len(),
         hint_text,
@@ -147,6 +152,12 @@ pub(super) fn draw_notification(note: &Notification, painter: &Painter, m: &Metr
     }
     y += art_size + m.gap;
 
+    if let Some(category) = note.category {
+        let label = category.label();
+        let width = painter.measure_ui(label, m.small()).width;
+        y += m.line_height;
+        painter.ui(label, centre_x(width), y, m.small(), super::TEXT_DIM);
+    }
     let title = painter.measure_ui(&note.title, title_size);
     painter.ui(
         &note.title,
@@ -265,6 +276,7 @@ mod tests {
             sprite: None,
             glyph: 'x',
             color: GlyphColor::Cyan,
+            category: None,
             detail: None,
             ftue_key: None,
         };
@@ -312,7 +324,15 @@ mod tests {
             let columns = body_columns(p, panel, m.font_size);
             for (kind, def) in shipped() {
                 let (lines, detail) = wrapped(def.body, Some(&detail), columns);
-                let block = block_height(p, &m, def.title, lines.len(), detail.len(), FTUE_HINT);
+                let block = block_height(
+                    p,
+                    &m,
+                    def.title,
+                    def.category.is_some(),
+                    lines.len(),
+                    detail.len(),
+                    FTUE_HINT,
+                );
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{} is {block}px of notification (with the widest shipped contract \
@@ -366,7 +386,7 @@ mod tests {
                     .replace("{objective}", &mission.objective_line)
                     .replace("{description}", &mission.description);
                 let (lines, _) = wrapped(&body, None, columns);
-                let block = block_height(p, &m, &mission.name, lines.len(), 0, FTUE_HINT);
+                let block = block_height(p, &m, &mission.name, false, lines.len(), 0, FTUE_HINT);
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{}'s briefing is {block}px in a {}px panel ({} lines) — this \
@@ -433,7 +453,15 @@ mod tests {
                     "{kind} has a hole this census does not fill: {body:?}"
                 );
                 let (lines, detail) = wrapped(&body, Some(&row.reward_line), columns);
-                let block = block_height(p, &m, def.title, lines.len(), detail.len(), FTUE_HINT);
+                let block = block_height(
+                    p,
+                    &m,
+                    def.title,
+                    def.category.is_some(),
+                    lines.len(),
+                    detail.len(),
+                    FTUE_HINT,
+                );
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{}'s completion screen is {block}px in a {}px panel ({} lines) — this \
@@ -485,7 +513,15 @@ mod tests {
                     "the research alert has a hole this census does not fill: {body:?}"
                 );
                 let (lines, detail) = wrapped(&body, node.unlocks.as_deref(), columns);
-                let block = block_height(p, &m, def.title, lines.len(), detail.len(), FTUE_HINT);
+                let block = block_height(
+                    p,
+                    &m,
+                    def.title,
+                    def.category.is_some(),
+                    lines.len(),
+                    detail.len(),
+                    FTUE_HINT,
+                );
                 assert!(
                     block + 2.0 * m.pad < panel.h,
                     "{}'s research alert is {block}px in a {}px panel ({} lines) — this \
@@ -536,6 +572,7 @@ mod tests {
             sprite: Some("notify_art".into()),
             glyph: '>',
             color: GlyphColor::Cyan,
+            category: None,
             detail: None,
             ftue_key: None,
         }

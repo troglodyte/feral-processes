@@ -90,6 +90,45 @@ fn a_tick_with_nothing_to_besiege_holds_the_clock() {
     );
 }
 
+/// The AI's claimed station is outside the besiegeable pool, so a base whose
+/// only damageable structure is that station holds its clock like an empty
+/// one, and the tick another structure stands is the tick the siege fires.
+#[test]
+fn a_base_whose_only_damageable_structure_is_the_ai_station_holds_the_clock() {
+    let mut game = Game::new(904, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    set_zone(&mut game, 2);
+    establish_base(&mut game, false);
+    let target: Vec<Entity> = {
+        let mut query = game.world.query_filtered::<Entity, With<Structure>>();
+        query.iter(&game.world).collect()
+    };
+    let (station, other) = (target[0], target[1]);
+    game.world.get_mut::<Structure>(station).unwrap().kind = "research_node".to_string();
+    *game.world.get_mut::<Position>(station).unwrap() = Position { x: 5, y: 5 };
+    game.world
+        .entity_mut(station)
+        .insert(Durability { hp: 30, max_hp: 30 });
+    game.storyline.base_ai = crate::storyline::BaseAi::Claiming {
+        host: ProgramId(1),
+        station: (5, 5),
+    };
+
+    for _ in 0..=latest_possible_tick(2) {
+        game.siege_check();
+    }
+    assert!(
+        game.siege_pressure() > SIEGE_PRESSURE_THRESHOLD,
+        "only the AI's station standing holds the clock, but it read {}",
+        game.siege_pressure()
+    );
+
+    game.world
+        .entity_mut(other)
+        .insert(Durability { hp: 30, max_hp: 30 });
+    game.siege_check();
+    assert_eq!(game.siege_pressure(), 0, "another structure lets it fire");
+}
+
 /// The third hold: another fight already running. A siege must not open —
 /// or, before Task 8, resolve — on top of one, and it fires the tick the
 /// other fight ends.

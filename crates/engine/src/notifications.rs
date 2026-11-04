@@ -126,6 +126,30 @@ pub enum NotificationKind {
     /// roster — `Game::settle_jail_attempt`. `Always`: every prisoner is
     /// news, and a run holds many. Templated off the program's label.
     ProgramDecompiled,
+    /// The base AI's claim on a program has begun — `Game::announce_awakening`.
+    /// Templated with the host's `{name}`.
+    BaseAiAwakening,
+    /// The claimed program has fused with its Research Station —
+    /// `Game::announce_fusion`.
+    BaseAiFused,
+    /// The base AI gained a level — `Game::base_ai_level_up`. Templated with
+    /// the new `{level}`.
+    BaseAiLevelUp,
+}
+
+/// A heading drawn above a notification's title, naming a thread of news
+/// that runs across several screens.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotificationCategory {
+    Storyline,
+}
+
+impl NotificationCategory {
+    pub fn label(self) -> &'static str {
+        match self {
+            NotificationCategory::Storyline => "Storyline",
+        }
+    }
 }
 
 /// One notification's authored copy.
@@ -150,6 +174,8 @@ pub struct NotificationDef {
     /// Resolved through `hud::palette::glyph`, the one table a content hue is
     /// drawn from. The renderer does not invent a colour for this screen.
     pub color: GlyphColor,
+    /// A thread label drawn above the title; `None` for ordinary news.
+    pub category: Option<NotificationCategory>,
 }
 
 impl NotificationKind {
@@ -157,7 +183,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 11] {
+    pub fn all() -> [NotificationKind; 14] {
         [
             NotificationKind::Breach,
             NotificationKind::SweepsBegin,
@@ -170,6 +196,9 @@ impl NotificationKind {
             NotificationKind::ResearchDiscovered,
             NotificationKind::PhaseKeyFound,
             NotificationKind::ProgramDecompiled,
+            NotificationKind::BaseAiAwakening,
+            NotificationKind::BaseAiFused,
+            NotificationKind::BaseAiLevelUp,
         ]
     }
 
@@ -185,6 +214,7 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '*',
                 color: GlyphColor::Magenta,
+                category: None,
             },
             NotificationKind::SweepsBegin => NotificationDef {
                 title: "Sweeps Begin",
@@ -204,6 +234,7 @@ impl NotificationKind {
                 // sweep itself keeps `FirstRaid`'s red `!`.
                 glyph: '^',
                 color: GlyphColor::Blue,
+                category: None,
             },
             NotificationKind::ContractClosed => NotificationDef {
                 title: "Contract Closed",
@@ -212,6 +243,7 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '$',
                 color: GlyphColor::Green,
+                category: None,
             },
             NotificationKind::OnboardingComplete => NotificationDef {
                 title: "Mission Complete",
@@ -219,6 +251,7 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '!',
                 color: GlyphColor::Green,
+                category: None,
             },
             NotificationKind::OnboardingMission => NotificationDef {
                 title: "{name}",
@@ -227,6 +260,7 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '!',
                 color: GlyphColor::Green,
+                category: None,
             },
             NotificationKind::SettlementGrown => NotificationDef {
                 title: "It Grew",
@@ -241,6 +275,7 @@ impl NotificationKind {
                 // paints every town in, and its comment there is the reason.
                 glyph: crate::settlements::SettlementKind::Mainframe.glyph(),
                 color: GlyphColor::Orange,
+                category: None,
             },
             NotificationKind::LevelCapReached => NotificationDef {
                 title: "Ceiling Reached",
@@ -252,6 +287,7 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '^',
                 color: GlyphColor::Yellow,
+                category: None,
             },
             NotificationKind::ResearchComplete => NotificationDef {
                 title: "Research Complete",
@@ -262,6 +298,7 @@ impl NotificationKind {
                 // on what to look for.
                 glyph: 'R',
                 color: GlyphColor::Cyan,
+                category: None,
             },
             NotificationKind::ResearchDiscovered => NotificationDef {
                 title: "Research Discovered",
@@ -272,6 +309,7 @@ impl NotificationKind {
                 // not look like two different systems.
                 glyph: 'R',
                 color: GlyphColor::Cyan,
+                category: None,
             },
             NotificationKind::PhaseKeyFound => NotificationDef {
                 title: "Phase Key Recovered",
@@ -279,6 +317,7 @@ impl NotificationKind {
                 sprite: None,
                 glyph: '*',
                 color: GlyphColor::Yellow,
+                category: None,
             },
             NotificationKind::ProgramDecompiled => NotificationDef {
                 title: "Program Decompiled",
@@ -289,6 +328,36 @@ impl NotificationKind {
                 // reason: the screen and the machine that did the work agree.
                 glyph: 'J',
                 color: GlyphColor::Red,
+                category: None,
+            },
+            NotificationKind::BaseAiAwakening => NotificationDef {
+                title: "Something Is Wrong",
+                body: "Something is going wrong with {name}. It has stopped answering the \
+                       base and is heading for the Research Station.\n\nNobody is being \
+                       posted to research until it settles.",
+                sprite: None,
+                glyph: 'R',
+                color: GlyphColor::Magenta,
+                category: Some(NotificationCategory::Storyline),
+            },
+            NotificationKind::BaseAiFused => NotificationDef {
+                title: "It Has Fused",
+                body: "The program seems to have fused with the Research Station. It no \
+                       longer moves, and it does not answer to the roster.\n\nThe station \
+                       is still working, though. It only needs to be trained.",
+                sprite: None,
+                glyph: 'R',
+                color: GlyphColor::Magenta,
+                category: Some(NotificationCategory::Storyline),
+            },
+            NotificationKind::BaseAiLevelUp => NotificationDef {
+                title: "The AI Grows",
+                body: "The base AI is now level {level}. It can see further into the \
+                       research tree.",
+                sprite: None,
+                glyph: 'R',
+                color: GlyphColor::Magenta,
+                category: Some(NotificationCategory::Storyline),
             },
         }
     }
@@ -307,6 +376,9 @@ impl NotificationKind {
             NotificationKind::ResearchDiscovered => "milestone_research_discovered",
             NotificationKind::PhaseKeyFound => "milestone_phase_key_found",
             NotificationKind::ProgramDecompiled => "milestone_program_decompiled",
+            NotificationKind::BaseAiAwakening => "storyline_base_ai_awakening",
+            NotificationKind::BaseAiFused => "storyline_base_ai_fused",
+            NotificationKind::BaseAiLevelUp => "storyline_base_ai_level_up",
         }
     }
 }
@@ -331,6 +403,7 @@ pub struct Notification {
     pub sprite: Option<String>,
     pub glyph: char,
     pub color: GlyphColor,
+    pub category: Option<NotificationCategory>,
     /// A figure the firing site knows and the authored copy cannot: a
     /// contract's payout, worded through the same `Game::reward_line` the
     /// log line uses — on both completion screens, since a mission of the
@@ -354,6 +427,7 @@ impl From<NotificationDef> for Notification {
             sprite: def.sprite.map(str::to_string),
             glyph: def.glyph,
             color: def.color,
+            category: def.category,
             detail: None,
             ftue_key: None,
         }
@@ -408,6 +482,21 @@ mod tests {
     /// A def with nothing to say is a screen that opens blank. Free when the
     /// copy is a literal, and the thing a `.ron` loader needed a runtime
     /// check for.
+    #[test]
+    fn storyline_kinds_carry_the_storyline_category_and_others_carry_none() {
+        for kind in NotificationKind::all() {
+            let storyline = matches!(
+                kind,
+                NotificationKind::BaseAiAwakening
+                    | NotificationKind::BaseAiFused
+                    | NotificationKind::BaseAiLevelUp
+            );
+            let want = storyline.then_some(NotificationCategory::Storyline);
+            assert_eq!(kind.def().category, want, "{kind}");
+        }
+        assert_eq!(NotificationCategory::Storyline.label(), "Storyline");
+    }
+
     #[test]
     fn every_kind_has_a_title_and_a_body() {
         for kind in NotificationKind::all() {

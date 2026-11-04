@@ -163,6 +163,7 @@ impl FtueEntry {
             sprite: self.sprite,
             glyph: self.glyph,
             color: self.color,
+            category: None,
         }
     }
 }

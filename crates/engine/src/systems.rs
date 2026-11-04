@@ -577,7 +577,7 @@ pub(crate) struct CycleModifiers {
 /// rebuilt from the def on load anyway (`Game::load`). A node whose kind
 /// isn't in the db — a hand-spawned test fixture — takes the ordinary
 /// scaling curve.
-fn node_cycle_shape(
+pub(crate) fn node_cycle_shape(
     node_entity: Option<&Structure>,
     recipe: Option<&MachineRecipe>,
     structure_db: &StructureDb,
@@ -618,18 +618,41 @@ pub(crate) fn resolve_gather_cycle(
     item_db: &ItemDb,
     rng: &mut GameRng,
 ) -> Option<(crate::items::ItemId, u32)> {
-    if let Some(level) = node.level
-        && !rng.0.random_bool(mining_success_chance(
+    // Drawn only for a node with a level, exactly as before the chance was
+    // extracted, so the RNG stream does not move.
+    if let Some(chance) = gather_success_chance(node, worker)
+        && !rng.0.random_bool(chance)
+    {
+        return None;
+    }
+    let payout = gather_payout(node, tier, zone, flat_payout, worker, item_db);
+    Some((node.resource.clone(), payout))
+}
+
+/// The chance a cycle against `node` lands, or `None` for a node with no
+/// level, which never fizzles.
+fn gather_success_chance(node: &ResourceNode, worker: CycleModifiers) -> Option<f64> {
+    node.level.map(|level| {
+        mining_success_chance(
             level,
             worker.keen_scavenger_level,
             worker.analysis_over_base,
             worker.morale,
             worker.need_strain,
             worker.extraction,
-        ))
-    {
-        return None;
-    }
+        )
+    })
+}
+
+/// What a landed cycle against `node` pays.
+fn gather_payout(
+    node: &ResourceNode,
+    tier: Option<&StructureTier>,
+    zone: ZoneLevel,
+    flat_payout: bool,
+    worker: CycleModifiers,
+    item_db: &ItemDb,
+) -> u32 {
     let def = item_db.get(node.resource.as_str());
     // Read per cycle rather than baked in at deploy, so a base that travels
     // to a deeper zone immediately earns at the new rate.
@@ -638,7 +661,7 @@ pub(crate) fn resolve_gather_cycle(
     // 1 is what keeps a banked resource honest (see `LEECH_YIELD_BONUS`), so
     // the class that draws more out of a tap draws nothing extra out of a
     // bank.
-    let payout = if flat_payout || def.is_some_and(|d| d.banked) {
+    if flat_payout || def.is_some_and(|d| d.banked) {
         1
     } else {
         node_payout(tier.map(|t| t.0).unwrap_or(1), zone)
@@ -646,8 +669,84 @@ pub(crate) fn resolve_gather_cycle(
                 Some(AffinityClass::Leech) => LEECH_YIELD_BONUS,
                 _ => 0,
             }
-    };
-    Some((node.resource.clone(), payout))
+    }
+}
+
+/// How fast a worker turns a cycle: its length in ticks and the steps of
+/// progress each tick is worth (`skill_scale::work_tick`'s pace).
+pub(crate) struct CyclePace {
+    pub ticks: u32,
+    pub steps_per_tick: f64,
+}
+
+/// Expected units per tick of a worker running `node`: the chance a cycle
+/// lands times what it pays, over the ticks it takes. The base AI freezes
+/// this at fusion, so it must be a call into the cycle's own pieces rather
+/// than a second formula for them.
+pub(crate) fn expected_gather_per_tick(
+    node: &ResourceNode,
+    tier: Option<&StructureTier>,
+    zone: ZoneLevel,
+    flat_payout: bool,
+    worker: CycleModifiers,
+    item_db: &ItemDb,
+    pace: CyclePace,
+) -> f64 {
+    let chance = gather_success_chance(node, worker).unwrap_or(1.0);
+    let payout = f64::from(gather_payout(
+        node,
+        tier,
+        zone,
+        flat_payout,
+        worker,
+        item_db,
+    ));
+    chance * payout * pace.steps_per_tick / f64::from(pace.ticks.max(1))
+}
+
+/// Where a research credit went, and whether there was anywhere for it to go.
+pub(crate) struct ResearchCredit {
+    /// Units that landed on the running project; `0` for a study bank.
+    pub landed: u32,
+    /// Whether the project or the study bank could still take a unit, ahead
+    /// of this credit. A zero-unit credit can still have room.
+    pub room: bool,
+}
+
+/// Credits `payout` units of the research currency: to the running project
+/// up to its cost, or with none selected to the study bank.
+///
+/// **`id.is_none()`, not `landed == 0`.** They are different states: a
+/// project sitting *at* its cost also lands nothing and will settle next
+/// tick, and feeding the study from it would make "study or advance" a lie
+/// for one tick an attentive player could farm. Shared by `deliver_payout`
+/// and the base AI's own research (`Game::tick_fused_ai`), which have the
+/// same caps.
+pub(crate) fn credit_research(
+    payout: u32,
+    research: &mut crate::resources::ActiveResearch,
+    research_defs: &crate::research::ResearchDb,
+) -> ResearchCredit {
+    if research.id.is_none() {
+        let room = research.study < crate::tuning::STUDY_ATTEMPT_DATA;
+        research.credit_study(payout, crate::tuning::STUDY_ATTEMPT_DATA);
+        return ResearchCredit { landed: 0, room };
+    }
+    let cap = research
+        .id
+        .as_ref()
+        .and_then(|id| research_defs.get(id))
+        .map_or(0, |def| def.cost);
+    let held = research
+        .id
+        .as_ref()
+        .and_then(|id| research.progress.get(id))
+        .copied()
+        .unwrap_or(0);
+    ResearchCredit {
+        landed: research.credit(payout, cap),
+        room: held < cap,
+    }
 }
 
 /// Where a resolved payout lands, and the whole of the difference between a
@@ -695,25 +794,16 @@ pub(crate) fn deliver_payout(
     research_defs: &crate::research::ResearchDb,
 ) -> u32 {
     if items.research_currency() == Some(resource) {
-        // **`id.is_none()`, not `landed == 0`.** They are different states: a
-        // project sitting *at* its cost also lands nothing and will settle
-        // next tick, and feeding the study from it would make "study or
-        // advance" a lie for one tick an attentive player could farm.
-        //
-        // Returning `0` is what keeps `cycle_line` silent, exactly as it is
-        // today — the study speaks for itself through `Game::settle_study`
-        // rather than through a cycle line reading "extracted 0 Research
-        // Data".
-        if research.id.is_none() {
-            research.credit_study(payout, crate::tuning::STUDY_ATTEMPT_DATA);
-            return 0;
-        }
-        let cap = research
-            .id
-            .as_ref()
-            .and_then(|id| research_defs.get(id))
-            .map_or(0, |def| def.cost);
-        return research.credit(payout, cap);
+        // Returning `0` for a study is what keeps `cycle_line` silent, exactly
+        // as it is today — the study speaks for itself through
+        // `Game::settle_study` rather than through a cycle line reading
+        // "extracted 0 Research Data".
+        let credit = credit_research(payout, research, research_defs);
+        return if research.id.is_none() {
+            0
+        } else {
+            credit.landed
+        };
     }
     if items.get(resource.as_str()).is_some_and(|d| d.banked) {
         return match bank {

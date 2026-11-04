@@ -639,13 +639,26 @@ impl Game {
         here: Position,
         site: Position,
     ) -> Result<(), NoPost> {
+        self.walk_idle_toward_sized(worker, here, site, 1)
+    }
+
+    /// `walk_idle_toward` for a destination `side` cells wide, so a body bound
+    /// for a 2x2 stops at a face of the whole footprint and never on one of
+    /// its own cells.
+    pub(crate) fn walk_idle_toward_sized(
+        &mut self,
+        worker: Entity,
+        here: Position,
+        site: Position,
+        side: u8,
+    ) -> Result<(), NoPost> {
         let blocked = self.blocked_tiles().rigid();
         let pocket_radius = self.world.resource::<BaseGrid>().radius();
         let Some(Step { to: tile, .. }) = step_to_post(
             self.world.resource::<BaseGrid>(),
             here,
             site,
-            1,
+            side,
             &blocked,
             pocket_radius,
             Touch::Sides,

@@ -1995,3 +1995,16 @@ fn the_build_menu_offers_the_machines_and_the_workbench_and_none_of_the_removed(
         assert!(!ids.iter().any(|i| i == gone), "{gone} still in {ids:?}");
     }
 }
+
+/// `[c]` beside a Holding Cell opens its Hold page, and Enter there jails
+/// the highlighted record. Without the page the cell was Info-only, so the
+/// hub skipped it and `[c]` fell through to the pack's transfer screen,
+/// whose `+` has nowhere to put anything.
+#[test]
+fn c_beside_a_holding_cell_opens_its_hold_page() {
+    let mut app = app_beside_a_holding_cell(891, vec![a_downed_record()], 1);
+    open_structure_page(&mut app);
+    assert_eq!(app.mode, Mode::PinPrisoner);
+    pick_row(&mut app, 0);
+    assert!(app.game.as_mut().unwrap().downed_program_rows().is_empty());
+}

@@ -91,7 +91,8 @@ pub(crate) fn draw_pin_prisoner(
     );
 }
 
-pub(super) fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
+/// Shared by the popup and the structure hub's Hold page.
+pub(crate) fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
     let records = game.downed_program_rows();
     if records.is_empty() {
         return vec![text_row("(no downed programs to hold)")];

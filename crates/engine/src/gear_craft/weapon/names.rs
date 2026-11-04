@@ -14,7 +14,7 @@ impl Proc {
         }
     }
 
-    fn label(self) -> &'static str {
+    pub(super) fn label(self) -> &'static str {
         match self {
             Proc::ClockSkew => "Clock Skew",
             Proc::CoreDump => "Core Dump",

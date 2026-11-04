@@ -139,10 +139,14 @@ impl App {
     }
 
     /// Opens `hub` where the player left it, or on its first page the first
-    /// time, with the cursor on the rail.
+    /// time, with the cursor on the rail. A remembered screen whose page has
+    /// since left the rail (the base report's Breed, its bay gone) is
+    /// forgotten rather than drawn outside the hub.
     pub(crate) fn open_hub(&mut self, hub: Hub) {
         let kind = hub.kind();
-        let last = self.hub_last[hub.slot()].filter(|_| kind.remembers());
+        let last = self.hub_last[hub.slot()]
+            .filter(|_| kind.remembers())
+            .filter(|&mode| find_in(hub, kind.pages(self).into_iter(), mode).is_some());
         match last {
             Some(mode) => self.mode = mode,
             None => kind.turn(self, 0),

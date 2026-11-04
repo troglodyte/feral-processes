@@ -95,9 +95,12 @@ fn esc_backs_out_one_page_at_a_time_and_spends_nothing() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Breed);
     assert_eq!(app.pending_breed_first, None);
+    // The sheet's B lands on the base report's Breed page, so Esc is that
+    // hub's: the rail, then out.
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
-    assert_eq!(app.pending_breed_bay, None);
     assert_eq!(seeds(&mut app), 1, "backing out is free");
 }
 
@@ -110,11 +113,71 @@ fn confirming_breeds_and_consumes_the_seed() {
     pick_row(&mut app, 0);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.status_line, None);
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        app.mode,
+        Mode::Breed,
+        "back on the base report's Breed page"
+    );
     assert_eq!(seeds(&mut app), 0);
     let slots = app.game.as_mut().unwrap().incubations(bay);
     assert!(slots[0].child.is_some(), "the child is incubating");
     assert_eq!(app.pending_breed_first, None);
+}
+
+fn breed_on_base_rail(app: &App) -> bool {
+    Hub::Base
+        .kind()
+        .pages(app)
+        .iter()
+        .any(|p| p.screens == [Mode::Breed])
+}
+
+#[test]
+fn the_base_report_offers_breeding_only_once_a_bay_stands() {
+    let app = app_inside_a_small_base_with_programs(8113, false, 2);
+    assert!(!breed_on_base_rail(&app));
+    let app = app_with_a_breeding_bay(8113, 1, false);
+    assert!(breed_on_base_rail(&app));
+}
+
+/// `b`, then `[` from the first page wraps to the last, the Breed page,
+/// and Right moves the cursor into it.
+fn open_breeding_in_the_base_report(app: &mut App) {
+    app.handle_key(GameKey::Char('b'));
+    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::Right);
+}
+
+#[test]
+fn breeding_from_the_base_report_stays_on_its_page() {
+    let mut app = app_with_a_breeding_bay(8114, 1, false);
+    let bay = open_the_bay_sheet(&mut app);
+    app.pending_structure_manifest = None;
+    app.mode = Mode::Playing;
+    open_breeding_in_the_base_report(&mut app);
+    assert_eq!(app.mode, Mode::Breed);
+    assert!(matches!(app.hub_at(), Some((Hub::Base, ..))));
+    assert_eq!(app.breeding_bay(), Some(bay));
+    pick_row(&mut app, 0);
+    assert_eq!(app.mode, Mode::BreedSecond);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Breed, "Esc steps back to the page");
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.status_line, None);
+    assert_eq!(app.mode, Mode::Breed);
+    assert!(matches!(app.hub_at(), Some((Hub::Base, ..))));
+    assert_eq!(seeds(&mut app), 0);
+    let slots = app.game.as_mut().unwrap().incubations(bay);
+    assert!(slots[0].child.is_some());
+}
+
+#[test]
+fn the_c_hub_keeps_its_own_breed_page_with_a_bay_standing() {
+    let mut app = app_with_a_breeding_bay(8115, 1, false);
+    open_the_bay_in_the_hub(&mut app);
+    assert!(matches!(app.hub_at(), Some((Hub::Structure, ..))));
 }
 
 #[test]

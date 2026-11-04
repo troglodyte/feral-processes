@@ -66,6 +66,14 @@ pub const BASE_REPORT_PAGES: &[HubPage] = &[
     },
 ];
 
+/// The Breed page, on the rail after the fixed table once a bay stands.
+/// Last, so every fixed page keeps the index `base_page_flag` and the marks
+/// read it by.
+const BREED_PAGE: HubPage = HubPage {
+    title: "Breed",
+    screens: &[Mode::Breed],
+};
+
 /// The base report as a hub: a fixed table, the attention marks off
 /// `Game::base_report_flags`.
 pub(crate) struct BaseReport;
@@ -77,6 +85,21 @@ impl HubKind for BaseReport {
 
     fn table(&self) -> &'static [HubPage] {
         BASE_REPORT_PAGES
+    }
+
+    /// The table, then Breed once a bay stands — but not while the `[c]`
+    /// hub is open, whose own Breed page is the same mode: a mode names
+    /// one hub, so only one may offer it at a time.
+    fn pages(&self, app: &App) -> Vec<&'static HubPage> {
+        let mut pages: Vec<&'static HubPage> = BASE_REPORT_PAGES.iter().collect();
+        let bay_stands = app
+            .game
+            .as_ref()
+            .is_some_and(|g| g.base_breeding_bay().is_some());
+        if bay_stands && app.structure_hub.is_none() {
+            pages.push(&BREED_PAGE);
+        }
+        pages
     }
 
     fn marks(&self, app: &App) -> Vec<bool> {

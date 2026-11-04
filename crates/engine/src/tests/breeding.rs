@@ -271,6 +271,29 @@ fn a_bay_offers_a_breed_page_before_its_info() {
     );
 }
 
+#[test]
+fn the_base_breeds_into_the_first_bay_with_room_else_the_first() {
+    let mut game = Game::new(5151, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    stand_in_base(&mut game);
+    assert_eq!(game.base_breeding_bay(), None, "no bay built");
+    let (game_b, a, b, first) = bay_game("worm", "worm", 2);
+    let mut game = game_b;
+    let second = spawn_machine_at(&mut game, "breeding_bay", 5, 3);
+    assert_eq!(game.base_breeding_bay(), Some(first));
+    game.breed(a, b, first).unwrap();
+    assert_eq!(
+        game.base_breeding_bay(),
+        Some(second),
+        "the full one is passed"
+    );
+    let (c, d) = (
+        game.adopt_program("worm", 0, 0, 1.0).unwrap(),
+        game.adopt_program("worm", 0, 0, 1.0).unwrap(),
+    );
+    game.breed(c, d, second).unwrap();
+    assert_eq!(game.base_breeding_bay(), Some(first), "all full: the first");
+}
+
 fn seeds_in_pack(game: &Game) -> u32 {
     game.world
         .get::<Inventory>(game.player_entity())

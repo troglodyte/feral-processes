@@ -1,11 +1,22 @@
-//! The three-page breeding flow, opened from a Breeding Bay's structure
-//! sheet or its Breed page in the `[c]` hub: first parent, second parent,
-//! then the confirm that spends a seed.
+//! The three-page breeding flow: first parent, second parent, then the
+//! confirm that spends a seed. Its first page is a hub page in two places —
+//! a bay's Breed page in the `[c]` hub, and the base report's Breed page
+//! once a bay stands — and a bay's sheet (`x`) opens the latter with `B`.
 
 use crate::*;
 use feral_processes_engine::breeding::BreedRefusal;
 
 impl App {
+    /// The bay this breeding is for: the one a sheet or the `[c]` hub named,
+    /// else, on the base report, the bay the engine picks for it.
+    pub fn breeding_bay(&self) -> Option<Entity> {
+        self.pending_breed_bay.or_else(|| {
+            self.hub_for(Mode::Breed)
+                .and(self.game.as_ref())
+                .and_then(|g| g.base_breeding_bay())
+        })
+    }
+
     /// Picks the first parent from the whole roster, as fusion does: nothing
     /// in `Game::breed` asks the parents to be near the bay. A program still
     /// resting is a row like any other and refuses with the engine's reason,
@@ -15,11 +26,10 @@ impl App {
             self.leave_breeding();
             return;
         }
-        // The hub's Breed page stays offered while the bay is full, so it
-        // says so on the first pick rather than after both parents and the
-        // confirm.
+        // A Breed page stays offered while its bay is full, so it says so on
+        // the first pick rather than after both parents and the confirm.
         if key == GameKey::Enter
-            && let Some(bay) = self.pending_breed_bay
+            && let Some(bay) = self.breeding_bay()
             && !self.game.as_ref().is_some_and(|g| bay_has_room(g, bay))
         {
             self.refuse(BreedRefusal::NoFreeSlot.reason());
@@ -52,7 +62,7 @@ impl App {
     /// Enter runs the breeding. Esc steps back to re-pick the second parent.
     pub(crate) fn handle_breed_confirm_key(&mut self, key: GameKey) {
         let (Some(bay), Some(first), Some(second)) = (
-            self.pending_breed_bay,
+            self.breeding_bay(),
             self.pending_breed_first,
             self.pending_breed_second,
         ) else {
@@ -103,8 +113,9 @@ impl App {
         }
     }
 
-    /// Out of the hub, back to wherever the bay's sheet was opened from.
-    /// In it, on to the bay's Info page, which shows the child hatching.
+    /// In the `[c]` hub, on to the bay's Info page, which shows the child
+    /// hatching. On the base report, back to its Breed page, which shows the
+    /// same. Outside both (no bay left standing), back to the map.
     fn leave_breeding(&mut self) {
         self.pending_breed_bay = None;
         self.pending_breed_first = None;
@@ -115,9 +126,12 @@ impl App {
                 .iter()
                 .position(|p| *p == StructurePage::Info)
         });
-        match info {
-            Some(page) => self.enter_structure_page(page),
-            None => self.close_screen(),
+        if let Some(page) = info {
+            self.enter_structure_page(page);
+        } else if self.hub_for(Mode::Breed).is_some() {
+            self.mode = Mode::Breed;
+        } else {
+            self.close_screen();
         }
     }
 }

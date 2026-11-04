@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.37
+
+**On a battle map, every routine makes a sound when it is run, by your side or the enemy's.** Before, a routine was heard only through the hits and misses it landed, so a debuff, a heal, a summon, a tamper, or an area blast that caught nobody went off in silence. Now each one plays a short rising warble as it goes off, and a routine that does hit still plays its hit or miss after it.
+
 ## 0.21.36
 
 **Research now says what it unlocks: a weapon or routine part's entry says what the part does, with its numbers, and gear named in an "Unlocks:" line shows its stats.** Before, every Weapons and Routines entry just read "Learn to craft the X part", and a base-tree entry such as Overclock Cores named the weapon without saying what it hits for. Now Rider: Bleed reads "30% chance a hit leaves bleeding for 2 rounds. Accuracy -1, damage -15%.", and Overclock Cores reads "Unlocks: Overclock Core (5–10 Thermal DMG +3 ATK +4 ACC)". The figures come from the same numbers the Workbench builds with, so they stay right when the game is retuned.

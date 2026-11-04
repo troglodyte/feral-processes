@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.36
+
+**Research now says what it unlocks: a weapon or routine part's entry says what the part does, with its numbers, and gear named in an "Unlocks:" line shows its stats.** Before, every Weapons and Routines entry just read "Learn to craft the X part", and a base-tree entry such as Overclock Cores named the weapon without saying what it hits for. Now Rider: Bleed reads "30% chance a hit leaves bleeding for 2 rounds. Accuracy -1, damage -15%.", and Overclock Cores reads "Unlocks: Overclock Core (5–10 Thermal DMG +3 ATK +4 ACC)". The figures come from the same numbers the Workbench builds with, so they stay right when the game is retuned.
+
 ## 0.21.35
 
 **On a battle map, slow programs now move three cells a turn instead of two, and the fastest move five instead of six.** A Construct, Crawler or Sentinel in your party used to take three turns to reach a fight you reach in two, so it often arrived after the fight was mostly over. Every program now reaches the enemy in two turns. The player and average-speed programs still move four. Wild programs move the same way.

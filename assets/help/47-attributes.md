@@ -38,5 +38,5 @@ Your own six start from the class you picked at creation. A program's come from 
 Above the six, the dossier carries a build revision, a checksum and one line of where this thing
 came from. None of it is stored anywhere; it is read off the sheet itself.
 
-Read on: [your companions](companions), [your character](your-character), and
-[getting stronger](getting-stronger).
+Read on: [your companions](companions), [your character](your-character),
+[getting stronger](getting-stronger), and [the base AI](the-base-ai).

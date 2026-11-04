@@ -41,6 +41,7 @@ mod skills;
 mod sorties;
 mod stack;
 mod staff;
+mod storyline;
 mod tactical;
 
 pub use base::*;
@@ -60,6 +61,7 @@ pub use skills::*;
 pub use sorties::*;
 pub use stack::*;
 pub use staff::*;
+pub use storyline::*;
 pub use tactical::*;
 
 #[cfg(test)]

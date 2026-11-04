@@ -64,6 +64,7 @@ pub mod species;
 pub mod stack;
 pub mod statuses;
 pub mod story;
+pub mod storyline;
 pub mod structures;
 pub mod systems;
 pub mod tactical;

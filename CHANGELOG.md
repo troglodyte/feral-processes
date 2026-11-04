@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.34
+
+**The base tab's yellow `!` now marks only a machine that has nothing to supply it.** That means a machine whose recipe needs something no other machine makes, no farm plot grows and no Depot holds. A machine with no program posted is no longer listed; the idle count under PROGRAMS AVAILABLE still counts it.
+
 ## 0.21.33
 
 **Power Cells last three times as long, and a Recharger Node or Line Driver holds five of them.** Each cell used to burn out in under a minute and a burner held only two, so your staff spent much of their time carrying cells and a late delivery blacked out the base. A stocked burner now runs for about twelve minutes before anyone needs to bring more, and each delivery fills it.

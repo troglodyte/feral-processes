@@ -33,6 +33,13 @@ impl App {
         }
         let Some(game) = &mut self.game else { return };
         let routines = game.field_routines();
+        // Uppercase for the reason `toggle_party_member` is: a stray
+        // lowercase letter must not flip a flag. Acts on the highlight and
+        // leaves it where it is.
+        if key == GameKey::Char('A') {
+            self.toggle_auto_recast();
+            return;
+        }
         let Some(idx) = self.selected_index(key, routines.len()) else {
             return;
         };
@@ -66,6 +73,24 @@ impl App {
         let outcome = game.run_field_routine(idx, FieldRoutineTarget::None);
         self.report(outcome);
         self.mode = Mode::Playing;
+    }
+
+    /// Flips auto-recast on the highlighted routine row; the list stays put.
+    fn toggle_auto_recast(&mut self) {
+        let Some(game) = &mut self.game else { return };
+        let routines = game.field_routines();
+        let Some(last) = routines.len().checked_sub(1) else {
+            return;
+        };
+        let idx = self.menu_selected.min(last);
+        let name = &routines[idx].name;
+        match game.toggle_field_auto_recast(idx) {
+            Ok(on) => {
+                let state = if on { "on" } else { "off" };
+                self.status_line = Some(format!("Auto-recast {state} for {name}."));
+            }
+            Err(line) => self.refuse(line),
+        }
     }
 
     /// Moves the cell cursor and commits the jump it is aimed at.

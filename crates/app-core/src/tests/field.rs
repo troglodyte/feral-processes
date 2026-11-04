@@ -290,3 +290,65 @@ fn the_movement_routines_are_greyed_on_the_surface() {
         Some("Can't run jump — only in the Stack.")
     );
 }
+
+#[test]
+fn capital_a_toggles_auto_recast_on_the_highlighted_row_and_stays() {
+    let mut app = app_with_player_routines(75, &["built:field_regen+group"], 100.0);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(app.mode, Mode::FieldRoutine);
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Auto-recast on for field_regen+group.")
+    );
+    let rows = app.game.as_mut().unwrap().field_routines();
+    assert_eq!(rows[0].auto_recast, Some(true));
+
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(app.mode, Mode::FieldRoutine);
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Auto-recast off for field_regen+group.")
+    );
+    let rows = app.game.as_mut().unwrap().field_routines();
+    assert_eq!(rows[0].auto_recast, Some(false));
+}
+
+#[test]
+fn auto_recast_on_an_ineligible_row_refuses() {
+    let mut app = app_with_player_routines(76, &["built:field_mitigation"], 100.0);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(app.mode, Mode::FieldRoutine);
+    assert!(
+        app.status_line
+            .as_deref()
+            .is_some_and(|s| s.contains("doesn't run out")),
+        "{:?}",
+        app.status_line
+    );
+}
+
+#[test]
+fn toggling_auto_recast_does_not_move_the_highlight() {
+    let mut app = app_with_player_routines(
+        77,
+        &["built:field_regen+group", "built:field_mitigation"],
+        100.0,
+    );
+    app.handle_key(GameKey::Char('a'));
+    highlight_row(&mut app, 1);
+    let before = app.menu_selected;
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(app.menu_selected, before);
+    assert_eq!(app.mode, Mode::FieldRoutine);
+}
+
+#[test]
+fn auto_recast_on_an_empty_list_does_nothing() {
+    let mut app = app_with_player_routines(78, &[], 100.0);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(app.mode, Mode::FieldRoutine);
+    assert_eq!(app.status_line, None);
+}

@@ -10,6 +10,7 @@ mod affix_mods;
 mod affix_tree;
 mod affixes;
 mod alerts;
+mod amenity_access;
 mod amenity_capacity;
 mod assets;
 mod attention;

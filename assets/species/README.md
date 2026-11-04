@@ -116,9 +116,9 @@ is skipped with a warning logged in-game rather than crashing startup.
     // battle model has no cells to spend it on and the Stack ignores it
     // entirely.
     //
-    // The derived figure is 4 at the roster average of 10, one more per two
-    // points of `base_speed` above that and one less per two below, which puts
-    // the shipped roster between 2 (Construct) and 6 (Sprite). Setting this
+    // The derived figure is 4 at the roster average of 10, one more per four
+    // points of `base_speed` above that and one less per four below, which
+    // puts the shipped roster between 3 (Construct) and 5 (Sprite). Setting this
     // field is an escape hatch for a species whose footwork isn't what its
     // initiative says — something that acts late but covers ground, or the
     // reverse — and no shipped species uses it. Whatever you author is held to

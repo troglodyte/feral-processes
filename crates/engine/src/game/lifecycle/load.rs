@@ -527,6 +527,7 @@ fn restore_resources(data: &mut save::SaveData, dbs: AssetDbs) -> ResourceRestor
         let mut board = crate::alerts::AlertBoard {
             alerts: std::mem::take(&mut data.alerts).into_iter().collect(),
             depots_full: false,
+            amenity_blocked: Default::default(),
         };
         crate::alerts::cap(&mut board);
         board

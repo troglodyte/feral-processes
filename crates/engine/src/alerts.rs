@@ -55,6 +55,10 @@ pub enum AlertKind {
     GearWorn,
     /// The base AI has no progress to make until it is trained.
     BaseAiWaiting,
+    /// Staff went to an amenity and waited for a place or could not reach
+    /// one. The subject is the need id. Latched by
+    /// `AlertBoard::amenity_blocked`.
+    AmenityBlocked,
 }
 
 /// One row on the board. `subject` is the collapse key the poster mints —
@@ -69,7 +73,7 @@ pub struct Alert {
     pub unread: bool,
 }
 
-/// Newest first. `depots_full` is a latch, not a second resource — a new
+/// Newest first. `depots_full` and `amenity_blocked` are latches, not a second resource — a new
 /// `Resource` shifts bevy's query iteration order, and this repo has
 /// recorded that as a cause of seeded tests moving (see the memory
 /// `rng-stream-shift-exposes-seed-luck-tests`). Only `alerts` is saved: the
@@ -81,6 +85,10 @@ pub struct AlertBoard {
     /// (`game::base::hauling::haul_step_system`) and cleared by the next
     /// successful deposit into any depot.
     pub(crate) depots_full: bool,
+    /// Needs with a blocked amenity visit already announced, cleared when a
+    /// visit ends with no blocked one left in the access window
+    /// (`Game::note_amenity_visit`). Unsaved, `depots_full`'s precedent.
+    pub(crate) amenity_blocked: std::collections::BTreeSet<crate::needs::NeedId>,
 }
 
 /// The one door onto the board. Three steps: collapse (same `kind` and

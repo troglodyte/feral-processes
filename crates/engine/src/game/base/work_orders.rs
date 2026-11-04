@@ -2794,7 +2794,7 @@ impl Game {
                         self.wander_one(worker, index, &mut beat, staff, Some(leash));
                     }
                     Ok(_) => {}
-                    Err(_) => self.strand_off_shift(worker),
+                    Err(_) => self.strand_off_shift(worker, amenities),
                 }
                 if let Some(p) = self.world.get::<Position>(worker) {
                     beat.held.insert((p.x, p.y));

@@ -81,10 +81,7 @@ pub fn synthesise_part_nodes() -> Vec<ResearchDef> {
             let node = part_node(
                 part_node_id(&part),
                 part.label(),
-                format!(
-                    "Learn to craft the {} part for routines built at the Workbench.",
-                    part.label()
-                ),
+                crate::routine_craft::part_effect(&part),
                 scope,
                 version,
                 version,

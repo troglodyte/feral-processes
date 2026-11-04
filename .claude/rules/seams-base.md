@@ -377,6 +377,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   is why.** In below the def's `critical`, out at its `content`, and the gap
   between them is the feature — read off the current value alone a body
   flickers on and off its post every tick at the boundary.
+- **Amenity access is a visit tally through `base_ledger::emit`, and Coverage's `!` reads it; `needed` no longer exists.**
 - **One gate decides whether a need may pull a body off a post, and failing
   it *is* acting out.** Below `critical`, something services it, not
   latched.

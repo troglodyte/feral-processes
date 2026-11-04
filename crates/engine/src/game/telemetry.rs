@@ -75,6 +75,27 @@ impl Game {
         );
     }
 
+    /// One amenity visit for `need`, through `report_base`'s one door.
+    pub(super) fn note_visit(
+        &mut self,
+        need: &crate::needs::NeedId,
+        outcome: crate::base_ledger::VisitOutcome,
+    ) {
+        let id = need.as_str().to_string();
+        self.report_base(
+            crate::base_ledger::Event::AmenityVisit {
+                need: need.clone(),
+                outcome,
+            },
+            move |tick, zone, _| Record::AmenityVisit {
+                tick,
+                zone,
+                need: id,
+                outcome: outcome.as_str().to_string(),
+            },
+        );
+    }
+
     /// One `Record::BaseSnapshot`, at the top of every ledger window.
     ///
     /// **Called from `tick_inner` and gated on nothing but the clock.** Once

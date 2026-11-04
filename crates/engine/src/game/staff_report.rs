@@ -106,9 +106,10 @@ impl Game {
     }
 
     /// One row per need in the catalogue: what the base has built to service
-    /// it against what its staff would need, and how many are short now.
+    /// it, how recent visits to it went, and how many are short now.
     ///
-    /// **Approximate**: `off_shift_share` ignores walking time.
+    /// **Approximate**: the lost share (`off_shift_share`) ignores walking
+    /// time.
     pub fn need_coverage(&self) -> Vec<CoverageRow> {
         let staff = self.base_staff();
         let working = self.working_share(&staff);
@@ -125,6 +126,14 @@ impl Game {
                 let def = structures.get(&e.get::<Structure>()?.kind)?;
                 Some((*e.get::<Position>()?, def))
             })
+            .collect();
+        let now = self.current_tick();
+        let ledger = self.world.resource::<crate::base_ledger::BaseLedger>();
+        let recent: std::collections::BTreeMap<_, _> = self
+            .world
+            .resource::<NeedDb>()
+            .iter()
+            .map(|def| (def.id.clone(), ledger.recent_visits(&def.id, now)))
             .collect();
         self.world
             .resource::<NeedDb>()
@@ -160,7 +169,7 @@ impl Game {
                         .any(|svc| svc.need == def.id && svc.rate().is_some())
                 };
                 // With nothing built the best structure the catalogue offers
-                // stands in, so "needed" still means something.
+                // stands in, so the lost share still means something.
                 let service = if served.is_empty() {
                     structures
                         .all()
@@ -172,9 +181,7 @@ impl Game {
                     served.iter().sum::<f32>() / served.len() as f32
                 };
                 let share = off_shift_share(def, service, working);
-                let needed = ((staff.len() as f32 * share / crate::tuning::AMENITY_CAPACITY as f32)
-                    .ceil() as usize)
-                    .max(1);
+                let recent = recent.get(&def.id).copied().unwrap_or_default();
                 let level_of = |staffer: &Vec<crate::views::NeedLevel>| {
                     staffer.iter().find(|n| n.id == def.id.as_str()).cloned()
                 };
@@ -190,7 +197,9 @@ impl Game {
                     built: count,
                     places,
                     capacity: count * crate::tuning::AMENITY_CAPACITY,
-                    needed,
+                    visits: recent.total() as usize,
+                    waited: recent.waited as usize,
+                    stranded: recent.stranded as usize,
                     below_critical: below(|n| n.critical),
                     below_content: below(|n| n.content),
                     lost_share: share,

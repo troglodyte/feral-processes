@@ -1077,6 +1077,12 @@ pub enum SoundEvent {
     /// other blow. `Mine`'s arrangement: it comes off the engine's tactical
     /// fx queue (`TacticalFxKind::Reaction`), never pushed by `App`.
     Reaction,
+    /// A routine was run on a battle map, by either side. Heard *beside*
+    /// any hit or miss it lands, because most routines land none — a
+    /// debuff, a summon, a blast over empty cells — and were silent.
+    /// `Reaction`'s arrangement: it comes off the engine's `RoutineCue`
+    /// queue, the one every effect queues, never pushed by `App`.
+    Routine,
     /// A battle map's round wrapped. Never pushed by `App` either: gui hears
     /// it off `Fx::observe_round`, the same sighting that raises the banner.
     RoundEnd,

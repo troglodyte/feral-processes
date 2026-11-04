@@ -182,6 +182,7 @@ fn structure_report(status: MachineStatus) -> StructureReport {
         battery: None,
         prison: None,
         line: None,
+        unsupplied: false,
     }
 }
 

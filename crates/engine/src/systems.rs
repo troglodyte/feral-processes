@@ -120,7 +120,7 @@ type Needful<'w> = (
     &'w Tamed,
     &'w Position,
     Option<&'w crate::disposition::Disposition>,
-    Option<&'w crate::components::OffShift>,
+    Option<&'w mut crate::components::OffShift>,
 );
 
 /// What `rooms::of_parts` needs beyond the structure db, each optional
@@ -238,6 +238,36 @@ pub fn needs_drain_system(
             .collect();
         for (who, tile) in allocate(&places, &contenders) {
             granted.entry(who).or_default().insert(def.id.clone(), tile);
+        }
+        // An errand in reach of this need's amenity that was not granted a
+        // place is waiting for one: the one fact a visit's outcome needs.
+        // Only when every site is full, though: with a free place left
+        // anywhere, `Amenities::route` is walking it there and it is only
+        // passing through a full site's reach.
+        let a_place_is_free = places.iter().any(|(site, count, _)| {
+            let used = granted
+                .values()
+                .filter_map(|m| m.get(&def.id))
+                .filter(|tile| **tile == (site.x, site.y))
+                .count();
+            used < *count
+        });
+        if a_place_is_free {
+            continue;
+        }
+        for c in contenders.iter().filter(|c| c.wants) {
+            let granted_here = granted.get(&c.who).is_some_and(|m| m.contains_key(&def.id));
+            let in_reach_of_one = places.iter().any(|(site, _, radius)| {
+                crate::game::base::offshift::in_reach(c.at, *site, *radius)
+            });
+            if granted_here || !in_reach_of_one {
+                continue;
+            }
+            if let Ok((.., Some(mut off))) = programs.get_mut(c.who)
+                && off.need == def.id
+            {
+                off.waited = true;
+            }
         }
     }
     for &(who, _) in &staff {

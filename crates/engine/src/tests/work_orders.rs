@@ -3367,6 +3367,7 @@ fn a_hurt_program_goes_to_the_bay_before_its_amenity() {
     game.world.get_mut::<Stats>(hurt).unwrap().hp = 1;
     game.world.entity_mut(hurt).insert(components::OffShift {
         need: crate::needs::NeedId::from("coherence"),
+        waited: false,
     });
 
     for _ in 0..40 {
@@ -3507,6 +3508,7 @@ fn a_program_that_is_both_downed_and_off_shift_walks_to_the_bay() {
         .entity_mut(staff[0])
         .insert(crate::components::OffShift {
             need: crate::needs::NeedId::from("coherence"),
+            waited: false,
         });
 
     for _ in 0..40 {

@@ -184,3 +184,16 @@ fn the_weapon_tree_hint_says_how_to_reach_the_opener() {
     unlock_research_chain(&mut game, opener);
     assert_eq!(game.weapon_tree_hint(), None);
 }
+
+/// A part's row says what the part does, not just that it can be crafted.
+#[test]
+fn a_weapon_part_node_describes_the_parts_effect() {
+    let mut game = game_in_base(72_101);
+    unlock_research_chain(&mut game, "weapon_bench");
+    let node = game
+        .research_nodes(ResearchTree::Weapons)
+        .into_iter()
+        .find(|n| n.id == edge_v1().node_id())
+        .expect("the first frames list once the tree opens");
+    assert_eq!(node.description, edge_v1().effect());
+}

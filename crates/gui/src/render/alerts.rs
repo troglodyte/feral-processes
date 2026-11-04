@@ -26,6 +26,7 @@ fn alert_color(kind: &AlertKind) -> Color {
         | AlertKind::OutpostDark
         | AlertKind::GearWorn
         | AlertKind::BaseAiWaiting => TEXT,
+        AlertKind::AmenityBlocked => TEXT,
     }
 }
 

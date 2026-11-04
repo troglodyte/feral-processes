@@ -89,10 +89,7 @@ pub fn synthesise_nodes() -> Vec<ResearchDef> {
                 // part is found by a study, a salvage or a shelf.
                 !matches!(part, WeaponPart::Frame(_, Version::V1)),
                 part.label(),
-                format!(
-                    "Learn to craft the {} part for weapons designed at the Workbench.",
-                    part.label()
-                ),
+                part.effect(),
                 crate::tuning::weapon_research_cost(scope_rank(part), version, version),
                 version,
                 requires(part),

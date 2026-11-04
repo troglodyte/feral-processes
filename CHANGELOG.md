@@ -53,6 +53,26 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.38
+
+**The staff report's Coverage page now says whether your programs actually got to their amenities, not just whether you built enough of them.** Each need's row counts the recent visits that were served, the ones that waited because every place was full, and the ones stranded because the amenity couldn't be reached. A `!` and a cause line ("build a Sandbox", "full: build another…", "unreachable: lay floor to it") appear only when visits were really blocked. The first blocked visit for a need posts one alert naming the amenity, and the alert clears once visits run clean again. Saves load unchanged.
+
+## 0.21.37
+
+**On a battle map, every routine makes a sound when it is run, by your side or the enemy's.** Before, a routine was heard only through the hits and misses it landed, so a debuff, a heal, a summon, a tamper, or an area blast that caught nobody went off in silence. Now each one plays a short rising warble as it goes off, and a routine that does hit still plays its hit or miss after it.
+
+## 0.21.36
+
+**Research now says what it unlocks: a weapon or routine part's entry says what the part does, with its numbers, and gear named in an "Unlocks:" line shows its stats.** Before, every Weapons and Routines entry just read "Learn to craft the X part", and a base-tree entry such as Overclock Cores named the weapon without saying what it hits for. Now Rider: Bleed reads "30% chance a hit leaves bleeding for 2 rounds. Accuracy -1, damage -15%.", and Overclock Cores reads "Unlocks: Overclock Core (5–10 Thermal DMG +3 ATK +4 ACC)". The figures come from the same numbers the Workbench builds with, so they stay right when the game is retuned.
+
+## 0.21.35
+
+**On a battle map, slow programs now move three cells a turn instead of two, and the fastest move five instead of six.** A Construct, Crawler or Sentinel in your party used to take three turns to reach a fight you reach in two, so it often arrived after the fight was mostly over. Every program now reaches the enemy in two turns. The player and average-speed programs still move four. Wild programs move the same way.
+
+## 0.21.34
+
+**The base tab's yellow `!` now marks only a machine that has nothing to supply it.** That means a machine whose recipe needs something no other machine makes, no farm plot grows and no Depot holds. A machine with no program posted is no longer listed; the idle count under PROGRAMS AVAILABLE still counts it.
+
 ## 0.21.33
 
 **Power Cells last three times as long, and a Recharger Node or Line Driver holds five of them.** Each cell used to burn out in under a minute and a burner held only two, so your staff spent much of their time carrying cells and a late delivery blacked out the base. A stocked burner now runs for about twelve minutes before anyone needs to bring more, and each delivery fills it.

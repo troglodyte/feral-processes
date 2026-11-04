@@ -77,7 +77,10 @@ fn an_off_shift_program_in_reach_of_a_full_bay_is_waiting() {
     for &who in &staff {
         game.world
             .entity_mut(who)
-            .insert(crate::components::OffShift { need: coherence() });
+            .insert(crate::components::OffShift {
+                need: coherence(),
+                waited: false,
+            });
     }
 
     let waiting = game
@@ -100,7 +103,7 @@ fn coverage_gap_case_no_amenity_built_is_short() {
 
     let row = rows.iter().find(|r| r.name == "Coherence").unwrap();
     assert_eq!((row.built, row.places), (0, 0));
-    assert!(row.needed >= 1 && row.is_short());
+    assert!(row.is_short(), "nothing built is short");
     assert_eq!(row.built_by, vec!["Log Analyzer Bay".to_string()]);
     assert!(game.base_report_flags().staff.is_some());
 }
@@ -113,7 +116,7 @@ fn coverage_counts_a_built_bay_and_the_share_comes_from_the_pure_formula() {
 
     let row = rows.iter().find(|r| r.name == "Coherence").unwrap();
     assert_eq!((row.built, row.places, row.capacity), (1, 2, 2));
-    assert_eq!(row.needed, 1, "{} staff need one bay", staff.len());
+    assert!(!row.is_short(), "{} staff, no blocked visits", staff.len());
     let def = game
         .world
         .resource::<crate::needs::NeedDb>()
@@ -123,6 +126,32 @@ fn coverage_counts_a_built_bay_and_the_share_comes_from_the_pure_formula() {
     let expected = crate::needs::off_shift_share(&def, 0.6, 0.5);
     assert!((row.lost_share - expected).abs() < 1e-6);
     assert_eq!(row.below_critical, 0);
+}
+
+#[test]
+fn a_waited_or_stranded_visit_makes_a_built_need_short_and_clean_visits_do_not() {
+    use crate::base_ledger::VisitOutcome;
+    let (mut game, _) = game_with_staff(98, 3);
+    let coherence_row = |game: &Game| {
+        game.need_coverage()
+            .into_iter()
+            .find(|r| r.name == "Coherence")
+            .unwrap()
+    };
+
+    game.note_amenity_visit(&coherence(), VisitOutcome::Served, None);
+    let row = coherence_row(&game);
+    assert_eq!((row.visits, row.waited, row.stranded), (1, 0, 0));
+    assert!(!row.is_short(), "enough amenities and nobody blocked");
+
+    game.note_amenity_visit(&coherence(), VisitOutcome::Waited, None);
+    let row = coherence_row(&game);
+    assert_eq!((row.visits, row.waited), (2, 1));
+    assert!(row.is_short());
+
+    let (mut game, _) = game_with_staff(99, 3);
+    game.note_amenity_visit(&coherence(), VisitOutcome::Stranded, None);
+    assert!(coherence_row(&game).is_short());
 }
 
 #[test]

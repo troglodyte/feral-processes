@@ -11,6 +11,7 @@ use crate::game::base::hauling::Touch;
 use std::collections::{BTreeMap, HashSet};
 
 use crate::base_grid::BaseGrid;
+use crate::base_ledger::VisitOutcome;
 use crate::components::{Needs, OffShift, Position, Structure};
 use crate::game::base::hauling::{NoPost, Step, at_station, step_to_post};
 use crate::needs::{NeedDb, NeedId};
@@ -536,11 +537,33 @@ impl Game {
                 self.note_idling(worker, &need, amenities, staff);
             }
             match (current, verdict) {
-                (Some(_), None) => {
+                (Some(need), None) => {
+                    // A visit is emitted only at content. `has(need)` fails
+                    // only when every amenity for the need is gone, and then
+                    // `built == 0` flags the need on the coverage screen anyway.
+                    if finished {
+                        let waited = self.world.get::<OffShift>(worker).is_some_and(|o| o.waited);
+                        let outcome = if waited {
+                            VisitOutcome::Waited
+                        } else {
+                            VisitOutcome::Served
+                        };
+                        let site = self
+                            .world
+                            .get::<Position>(worker)
+                            .and_then(|here| amenities.nearest(&need, *here))
+                            .map(|(site, _, _)| site);
+                        self.note_amenity_visit(&need, outcome, site);
+                    }
                     self.world.entity_mut(worker).remove::<OffShift>();
                 }
+                // The same errand carrying on. Inserting would reset `waited`.
+                (Some(cur), Some(need)) if cur == need => {}
                 (_, Some(need)) => {
-                    self.world.entity_mut(worker).insert(OffShift { need });
+                    self.world.entity_mut(worker).insert(OffShift {
+                        need,
+                        waited: false,
+                    });
                 }
                 (None, None) => {}
             }
@@ -796,11 +819,17 @@ impl Game {
     /// Gives the errand up and latches the need: the amenity exists but this
     /// body cannot reach it, which is a different complaint from there being
     /// no amenity at all and leaves the player a different errand.
-    pub(crate) fn strand_off_shift(&mut self, worker: Entity) {
+    pub(crate) fn strand_off_shift(&mut self, worker: Entity, amenities: &Amenities) {
         let Some(need) = self.world.get::<OffShift>(worker).map(|o| o.need.clone()) else {
             return;
         };
         self.fray(worker, &need, true);
+        let site = self
+            .world
+            .get::<Position>(worker)
+            .and_then(|here| amenities.nearest(&need, *here))
+            .map(|(site, _, _)| site);
+        self.note_amenity_visit(&need, VisitOutcome::Stranded, site);
         self.world.entity_mut(worker).remove::<OffShift>();
     }
 }

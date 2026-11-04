@@ -17,8 +17,10 @@ use bevy_ecs::system::SystemParam;
 use serde::{Deserialize, Serialize};
 
 use crate::items::ItemId;
+use crate::needs::NeedId;
 use crate::resources::BattleTelemetry;
 use crate::telemetry::Record;
+use crate::tuning::AMENITY_ACCESS_WINDOW_BUCKETS;
 
 /// Ticks in one bucket. An Extractor cycle is 10 ticks and a Fabricator or
 /// Assembler cycle 30, so a bucket is ~100 of the former and ~33 of the latter
@@ -74,6 +76,57 @@ pub struct Bucket {
     pub zone: u32,
     pub produced: BTreeMap<ItemId, u32>,
     pub consumed: BTreeMap<ItemId, u32>,
+    /// Amenity visits that ended in this window, per need. Absent in a save
+    /// written before amenity access was counted.
+    #[serde(default)]
+    pub visits: BTreeMap<NeedId, VisitTally>,
+}
+
+/// How one `OffShift` episode went, the visit's one tag.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisitOutcome {
+    /// Got a place without waiting.
+    Served,
+    /// Was in reach of an amenity for its need and not granted a place for at
+    /// least one tick.
+    Waited,
+    /// No route to an amenity for its need.
+    Stranded,
+}
+
+impl VisitOutcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VisitOutcome::Served => "served",
+            VisitOutcome::Waited => "waited",
+            VisitOutcome::Stranded => "stranded",
+        }
+    }
+}
+
+/// Visit outcomes for one need over some span.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VisitTally {
+    pub served: u32,
+    pub waited: u32,
+    pub stranded: u32,
+}
+
+impl VisitTally {
+    pub fn total(&self) -> u32 {
+        self.served + self.waited + self.stranded
+    }
+
+    /// Visits that did not get in.
+    pub fn blocked(&self) -> u32 {
+        self.waited + self.stranded
+    }
+
+    fn add(&mut self, other: &VisitTally) {
+        self.served += other.served;
+        self.waited += other.waited;
+        self.stranded += other.stranded;
+    }
 }
 
 /// What one production seam did, in the cheapest form that still answers the
@@ -104,6 +157,8 @@ pub enum Event {
     /// side is a stream with no sink, which is what makes an assembler's
     /// inputs look like the only thing the base ever spends.
     Consume { item: ItemId, qty: u32 },
+    /// A program's `OffShift` errand for `need` ended, or was stranded.
+    AmenityVisit { need: NeedId, outcome: VisitOutcome },
 }
 
 /// Where something that reached the player's pack came from.
@@ -291,7 +346,31 @@ impl BaseLedger {
                     *bucket.consumed.entry(item.clone()).or_default() += qty;
                 }
             }
+            Event::AmenityVisit { need, outcome } => {
+                if let Some(bucket) = self.buckets.back_mut() {
+                    let tally = bucket.visits.entry(need.clone()).or_default();
+                    match outcome {
+                        VisitOutcome::Served => tally.served += 1,
+                        VisitOutcome::Waited => tally.waited += 1,
+                        VisitOutcome::Stranded => tally.stranded += 1,
+                    }
+                }
+            }
         }
+    }
+
+    /// Visits for `need` over the last [`AMENITY_ACCESS_WINDOW_BUCKETS`]
+    /// windows, counting the one `now_tick` falls in.
+    pub fn recent_visits(&self, need: &NeedId, now_tick: u64) -> VisitTally {
+        let now_start = now_tick - now_tick % BUCKET_TICKS;
+        let oldest = now_start.saturating_sub((AMENITY_ACCESS_WINDOW_BUCKETS - 1) * BUCKET_TICKS);
+        let mut total = VisitTally::default();
+        for bucket in self.buckets.iter().filter(|b| b.start_tick >= oldest) {
+            if let Some(tally) = bucket.visits.get(need) {
+                total.add(tally);
+            }
+        }
+        total
     }
 
     /// The one write path for something that landed: the lifetime total, the
@@ -563,6 +642,53 @@ mod tests {
         assert_eq!(ledger.produced_in_zone(1, &item("hardened_shell")), 1);
         assert_eq!(ledger.produced_in_zone(2, &item("hardened_shell")), 2);
         assert_eq!(ledger.produced_in_zone(3, &item("hardened_shell")), 0);
+    }
+
+    fn need(id: &str) -> NeedId {
+        NeedId::from(id)
+    }
+
+    fn visit(outcome: VisitOutcome) -> Event {
+        Event::AmenityVisit {
+            need: need("slack"),
+            outcome,
+        }
+    }
+
+    #[test]
+    fn a_visit_folds_into_its_need_and_outcome_in_the_current_bucket() {
+        let mut ledger = BaseLedger::default();
+        ledger.fold(5, 1, &visit(VisitOutcome::Served));
+        ledger.fold(6, 1, &visit(VisitOutcome::Served));
+        ledger.fold(7, 1, &visit(VisitOutcome::Waited));
+        ledger.fold(8, 1, &visit(VisitOutcome::Stranded));
+
+        let tally = ledger.buckets[0].visits[&need("slack")];
+        assert_eq!((tally.served, tally.waited, tally.stranded), (2, 1, 1));
+        assert_eq!(tally.blocked(), 2);
+        assert!(!ledger.buckets[0].visits.contains_key(&need("coherence")));
+    }
+
+    #[test]
+    fn the_window_excludes_a_bucket_three_back() {
+        let mut ledger = BaseLedger::default();
+        ledger.fold(0, 1, &visit(VisitOutcome::Waited));
+        ledger.fold(BUCKET_TICKS, 1, &visit(VisitOutcome::Served));
+        ledger.fold(BUCKET_TICKS * 2, 1, &visit(VisitOutcome::Served));
+
+        let now = BUCKET_TICKS * 2 + 5;
+        assert_eq!(ledger.recent_visits(&need("slack"), now).waited, 1);
+        let later = BUCKET_TICKS * 3;
+        let tally = ledger.recent_visits(&need("slack"), later);
+        assert_eq!(tally.waited, 0, "bucket 0 is three back and aged out");
+        assert_eq!(tally.served, 2);
+    }
+
+    #[test]
+    fn a_ledger_saved_before_visits_existed_loads() {
+        let old = "(start_tick: 0, zone: 1, produced: {}, consumed: {})";
+        let bucket: Bucket = ron::from_str(old).unwrap();
+        assert!(bucket.visits.is_empty());
     }
 
     fn extract() -> Event {

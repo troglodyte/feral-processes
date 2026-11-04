@@ -49,11 +49,30 @@ impl Game {
         matches!(self.storyline.base_ai, BaseAi::Fused(_))
     }
 
+    /// Lets the storyline arcs leave `Dormant` or holds them there, for this
+    /// run only: a bench switch, so a template that already has the research
+    /// and a station is measured without the awakening. Not saved.
+    #[doc(hidden)]
+    pub fn dev_set_storyline(&mut self, on: bool) {
+        self.world
+            .insert_resource(crate::resources::DevStoryline(on));
+    }
+
+    fn storyline_enabled(&self) -> bool {
+        self.world
+            .get_resource::<crate::resources::DevStoryline>()
+            .is_none_or(|dev| dev.0)
+    }
+
     /// One tick of every storyline arc. After `schedule_base_labour` so a
     /// claim can release what the scheduler just posted, and before
     /// `settle_research`.
     pub(crate) fn advance_storyline(&mut self) {
         if self.is_game_over().is_some() || self.has_active_battle() {
+            return;
+        }
+        // Only the opening is held: an arc a save already carries keeps going.
+        if !self.storyline_enabled() && matches!(self.storyline.base_ai, BaseAi::Dormant { .. }) {
             return;
         }
         let input = self.gather_base_ai();

@@ -41,6 +41,7 @@ mod tests {
                 seed,
                 orders: vec![],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap()
@@ -110,6 +111,7 @@ mod tests {
                 seed: 1,
                 orders: vec![("patch_routine".into(), 9999)],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap();
@@ -161,6 +163,7 @@ mod tests {
                 seed: 1,
                 orders: vec![],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap();
@@ -195,6 +198,7 @@ mod tests {
                 seed: 1,
                 orders: vec![],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap();
@@ -236,6 +240,7 @@ mod tests {
                     .map(|item| (item.to_string(), 9999))
                     .to_vec(),
                 sieges: false,
+                storyline: false,
             },
         )
         .unwrap();

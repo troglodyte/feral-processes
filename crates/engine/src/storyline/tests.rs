@@ -326,6 +326,21 @@ mod in_a_game {
     }
 
     #[test]
+    fn a_held_storyline_stays_dormant_past_the_trigger() {
+        let mut f = fixture();
+        f.game.dev_set_storyline(false);
+        set_researched(&mut f.game, 25);
+        f.game.tick();
+        assert!(matches!(f.game.storyline().base_ai, BaseAi::Dormant { .. }));
+        f.game.dev_set_storyline(true);
+        f.game.tick();
+        assert!(matches!(
+            f.game.storyline().base_ai,
+            BaseAi::Claiming { .. }
+        ));
+    }
+
+    #[test]
     fn a_save_already_past_ten_claims_on_the_first_tick() {
         let mut f = fixture();
         set_researched(&mut f.game, 25);

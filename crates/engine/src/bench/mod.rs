@@ -37,6 +37,10 @@ pub struct RunOptions {
     /// Whether the siege clock runs. Off keeps a long run from stopping at
     /// the first siege (`stopped_at`), for measuring what a siege hides.
     pub sieges: bool,
+    /// Whether the base AI arc may leave Dormant. Off by default in the
+    /// harnesses: a template with all research and a Research Station would
+    /// otherwise claim a staff program and change what is being measured.
+    pub storyline: bool,
 }
 
 /// Per-line tick tallies, accumulated as the run goes.
@@ -72,6 +76,7 @@ fn play_with(
             .map_err(|e| format!("order {item} x{qty} refused: {e}"))?;
     }
     game.dev_set_sieges(opts.sieges);
+    game.dev_set_storyline(opts.storyline);
     game.enable_telemetry();
 
     let start = game.structure_report();
@@ -297,6 +302,7 @@ mod tests {
                 seed,
                 orders: vec![],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap()
@@ -334,6 +340,7 @@ mod tests {
                 seed: 1,
                 orders: vec![],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap();
@@ -358,6 +365,7 @@ mod tests {
                 seed: 1,
                 orders: vec![],
                 sieges: true,
+                storyline: false,
             },
             |game, n| {
                 if n == 20 {
@@ -399,6 +407,7 @@ mod tests {
                 seed: 0,
                 orders: vec![("no_such_item".into(), 5)],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap_err();
@@ -417,6 +426,7 @@ mod tests {
                 seed: 0,
                 orders: vec![],
                 sieges: true,
+                storyline: false,
             },
         )
         .unwrap_err();

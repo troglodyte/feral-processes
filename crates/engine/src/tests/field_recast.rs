@@ -235,3 +235,256 @@ fn an_ineligible_row_and_a_bad_index_refuse() {
         Err("No such routine.".to_string())
     );
 }
+
+// ---------------------------------------------------------------------------
+// The recast itself
+// ---------------------------------------------------------------------------
+
+use crate::components::{FieldBuff, POWER_MAX, PowerReserve};
+use crate::game::field_recast::{Caster, Expiry, Plan, plan_recasts};
+use crate::resources::{MessageLog, Party};
+use crate::routine_craft::{AreaKind, Subroutine};
+
+fn reserve(game: &Game, e: Entity) -> f32 {
+    game.world.get::<PowerReserve>(e).unwrap().get()
+}
+
+fn fill(game: &mut Game, e: Entity, amount: f32) {
+    *game.world.get_mut::<PowerReserve>(e).unwrap() = PowerReserve::new(amount, POWER_MAX);
+}
+
+fn log_has(game: &Game, needle: &str) -> bool {
+    game.world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .any(|l| l.text.contains(needle))
+}
+
+fn buffs(game: &Game, e: Entity) -> Vec<crate::components::ActiveFieldBuff> {
+    game.world
+        .get::<FieldBuff>(e)
+        .map(|f| f.active.clone())
+        .unwrap_or_default()
+}
+
+/// Runs `id` (a row on `holder`) with `pick`, then leaves every routine buff
+/// on the party one tick from expiring.
+fn run_and_age(game: &mut Game, holder: Entity, id: &str, pick: FieldRoutineTarget) {
+    let index = game
+        .field_routines()
+        .iter()
+        .position(|r| r.holder == holder && r.ability == id)
+        .unwrap();
+    game.run_field_routine(index, pick).unwrap();
+    let mut bodies = vec![game.player_entity()];
+    bodies.extend(game.world.resource::<Party>().0.clone());
+    for e in bodies {
+        if let Some(mut f) = game.world.get_mut::<FieldBuff>(e) {
+            for b in &mut f.active {
+                b.remaining = 1;
+            }
+        }
+    }
+}
+
+fn cost_of(game: &Game, holder: Entity, id: &str) -> f32 {
+    let def = game.world.resource::<AbilityDb>().get(id).unwrap().clone();
+    game.routine_cost(holder, &def)
+}
+
+#[test]
+fn a_flagged_one_ally_routine_reruns_on_expiry_and_pays_once() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    let player = game.player_entity();
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    game.set_auto_recast(player, &id, true);
+    fill(&mut game, player, 100.0);
+    run_and_age(&mut game, player, &id, FieldRoutineTarget::Ally(player));
+    let before = reserve(&game, player);
+
+    game.tick_field_buffs();
+
+    let after = buffs(&game, player);
+    assert_eq!(after.len(), 1, "the buff was replaced, not lost");
+    assert!(after[0].remaining > 1);
+    assert_eq!(after[0].ability.as_deref(), Some(id.as_str()));
+    assert_eq!(before - reserve(&game, player), cost_of(&game, player, &id));
+    assert!(log_has(&game, "reruns"));
+    assert!(!log_has(&game, "fades"));
+}
+
+#[test]
+fn a_whole_party_routine_reruns_once_and_pays_once() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    let player = game.player_entity();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.resource_mut::<Party>().0.push(pet);
+    let id = mint_parts(
+        &mut game,
+        &[
+            Subroutine::Core(Core::FieldRegen, crate::routine_craft::Version::V1),
+            Subroutine::Area(AreaKind::Group),
+        ],
+    );
+    make_room_for_routine(&mut game, player);
+    let mut kit = game.world.get::<Routines>(player).unwrap().0.clone();
+    kit.push(id.clone());
+    game.world.entity_mut(player).insert(Routines(kit));
+    game.set_auto_recast(player, &id, true);
+    fill(&mut game, player, 100.0);
+    run_and_age(&mut game, player, &id, FieldRoutineTarget::None);
+    let before = reserve(&game, player);
+
+    game.tick_field_buffs();
+
+    assert_eq!(buffs(&game, player).len(), 1);
+    assert_eq!(buffs(&game, pet).len(), 1);
+    assert_eq!(
+        before - reserve(&game, player),
+        cost_of(&game, player, &id),
+        "one payment for the whole party"
+    );
+    let reruns = game
+        .world
+        .resource::<MessageLog>()
+        .lines
+        .iter()
+        .filter(|l| l.text.contains("reruns"))
+        .count();
+    assert_eq!(reruns, 1);
+}
+
+#[test]
+fn short_of_power_it_fades_and_turns_the_flag_off() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    let player = game.player_entity();
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    game.set_auto_recast(player, &id, true);
+    fill(&mut game, player, 100.0);
+    run_and_age(&mut game, player, &id, FieldRoutineTarget::Ally(player));
+    fill(&mut game, player, 0.0);
+
+    game.tick_field_buffs();
+
+    assert!(buffs(&game, player).is_empty());
+    assert!(log_has(&game, "couldn't rerun it: Can't run"));
+    assert!(log_has(&game, "Auto-recast is off."));
+    assert!(game.auto_recast_of(player).is_empty());
+}
+
+#[test]
+fn a_downed_ally_fades_and_the_flag_stays_on() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    let player = game.player_entity();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    game.world.resource_mut::<Party>().0.push(pet);
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    game.set_auto_recast(player, &id, true);
+    fill(&mut game, player, 100.0);
+    run_and_age(&mut game, player, &id, FieldRoutineTarget::Ally(pet));
+    game.world.get_mut::<Stats>(pet).unwrap().hp = 0;
+
+    game.tick_field_buffs();
+
+    assert!(buffs(&game, pet).is_empty());
+    assert!(log_has(&game, "couldn't rerun it"));
+    assert!(!log_has(&game, "Auto-recast is off."));
+    assert_eq!(game.auto_recast_of(player), vec![id]);
+}
+
+#[test]
+fn an_unflagged_routine_fades_as_before() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    let player = game.player_entity();
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    fill(&mut game, player, 100.0);
+    run_and_age(&mut game, player, &id, FieldRoutineTarget::Ally(player));
+    let before = reserve(&game, player);
+
+    game.tick_field_buffs();
+
+    assert!(buffs(&game, player).is_empty());
+    assert_eq!(reserve(&game, player), before);
+    assert!(log_has(&game, "fades."));
+    assert!(!log_has(&game, "reruns"));
+}
+
+// The decide step on its own.
+
+fn bodies() -> (Entity, Entity, Entity) {
+    let mut world = World::new();
+    (
+        world.spawn_empty().id(),
+        world.spawn_empty().id(),
+        world.spawn_empty().id(),
+    )
+}
+
+fn caster(holder: Entity, target: AbilityTarget) -> Option<Caster> {
+    Some(Caster {
+        holder,
+        ability: "r".to_string(),
+        target,
+    })
+}
+
+fn expiry(recipient: Entity, caster: Option<Caster>) -> Expiry {
+    Expiry {
+        recipient,
+        name: "R".to_string(),
+        caster,
+    }
+}
+
+#[test]
+fn plan_groups_a_whole_party_expiry_into_one_recast_with_no_pick() {
+    let (holder, a, b) = bodies();
+    let plans = plan_recasts(&[
+        expiry(a, caster(holder, AbilityTarget::WholeParty)),
+        expiry(b, caster(holder, AbilityTarget::WholeParty)),
+    ]);
+    assert_eq!(
+        plans,
+        vec![Plan::Recast {
+            holder,
+            ability: "r".to_string(),
+            name: "R".to_string(),
+            pick: FieldRoutineTarget::None,
+        }]
+    );
+}
+
+#[test]
+fn plan_recasts_each_one_ally_recipient_on_that_ally() {
+    let (holder, a, b) = bodies();
+    let plans = plan_recasts(&[
+        expiry(a, caster(holder, AbilityTarget::OneAlly)),
+        expiry(b, caster(holder, AbilityTarget::OneAlly)),
+    ]);
+    let picks: Vec<_> = plans
+        .iter()
+        .map(|p| match p {
+            Plan::Recast { pick, .. } => *pick,
+            Plan::Fade(_) => panic!("both have a caster"),
+        })
+        .collect();
+    assert_eq!(
+        picks,
+        vec![FieldRoutineTarget::Ally(a), FieldRoutineTarget::Ally(b)]
+    );
+}
+
+#[test]
+fn plan_fades_an_expiry_with_no_caster() {
+    let (_, a, _) = bodies();
+    assert_eq!(
+        plan_recasts(&[expiry(a, None)]),
+        vec![Plan::Fade("R".to_string())]
+    );
+}

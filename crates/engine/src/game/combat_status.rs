@@ -461,7 +461,7 @@ impl Game {
             }
         }
 
-        let mut expired: Vec<String> = Vec::new();
+        let mut expired: Vec<(Entity, String, Option<crate::abilities::AbilityId>)> = Vec::new();
         for entity in subjects {
             let Some(mut field_buff) = self.world.get_mut::<FieldBuff>(entity) else {
                 continue;
@@ -478,16 +478,14 @@ impl Game {
                 }
                 buff.remaining = buff.remaining.saturating_sub(1);
                 if buff.remaining == 0 {
-                    expired.push(buff.name.clone());
+                    expired.push((entity, buff.name.clone(), buff.ability.clone()));
                     false
                 } else {
                     true
                 }
             });
         }
-        for name in expired {
-            self.log(format!("{name} fades."));
-        }
+        self.resolve_expired_buffs(expired);
     }
 
     /// One tick of a single running field buff's effect on `entity`. The

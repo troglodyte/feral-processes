@@ -8,6 +8,11 @@ pub struct EntityView {
     /// recipe item or a fixed extractor's `work` output — for the base
     /// map's Alt labels. `None` for an unset machine and every non-producer.
     pub making: Option<String>,
+    /// The structure's own name, for the base map's Alt labels. `None` for
+    /// every non-structure and for a wall or door (`barrier`/`door`): those
+    /// make up a room rather than stand in it, and a named run of them
+    /// would bury the labels that matter.
+    pub structure_name: Option<String>,
     pub entity: Entity,
     pub pos: (i32, i32),
     pub glyph: char,

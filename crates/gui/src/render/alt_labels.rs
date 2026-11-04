@@ -65,7 +65,8 @@ pub(crate) struct LabelRequest<'a> {
 }
 
 pub(crate) struct LayoutInput<'a> {
-    /// Rooms first, then machines by (y, x); earlier labels win contested spots.
+    /// Rooms first, then machine labels (those naming a product before
+    /// those only naming the structure); earlier labels win contested spots.
     pub labels: &'a [LabelRequest<'a>],
     /// Tiles a label should avoid covering: glyphs and structure footprints.
     pub soft: &'a HashSet<(i32, i32)>,

@@ -607,6 +607,10 @@ fn the_map_names_what_a_machine_makes_only_while_reveal_is_held() {
         revealed.iter().any(|t| t == "Bytecode Block"),
         "a set Factory must be labelled while reveal is held: {revealed:?}"
     );
+    assert!(
+        revealed.iter().any(|t| t == "Factory"),
+        "the Factory's own name rides under its product: {revealed:?}"
+    );
     let (_, hidden) =
         drawn_map_centered_on_revealed(&mut game, SpriteTable::default(), (3, 0), false);
     assert!(!hidden.iter().any(|t| t == "Bytecode Block"), "{hidden:?}");

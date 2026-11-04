@@ -386,17 +386,24 @@ fn a_research_node_reports_everything_it_hands_over() {
 
     let weapon_bench = research_node(&game, "weapon_bench").unlocks.unwrap();
     assert!(
-        weapon_bench.starts_with("Unlocks: Assembler: Trace Sniffer, "),
+        weapon_bench.starts_with("Unlocks: Assembler: Trace Sniffer ("),
         "a structure is named by its own display name, then the machine recipes it gates: {weapon_bench}"
     );
     assert!(
         weapon_bench.contains(", Logic Probe"),
         "and the hand-compiled items it gates: {weapon_bench}"
     );
+    let plating = game
+        .equipment_of(&ItemId::from("ablative_plating"))
+        .unwrap()
+        .1;
     assert_eq!(
-        research_node(&game, "ablative").unlocks.as_deref(),
-        Some("Unlocks: Ablative Plating"),
-        "a recipe is named by what it produces"
+        research_node(&game, "ablative").unlocks,
+        Some(format!(
+            "Unlocks: Ablative Plating ({})",
+            game.stat_summary(plating)
+        )),
+        "a recipe is named by what it produces, gear with what it is worth"
     );
 
     let deep = research_node(&game, "deep_analysis");
@@ -404,6 +411,30 @@ fn a_research_node_reports_everything_it_hands_over() {
     assert_eq!(
         line, "Unlocks: Core Tap, Gear Puller",
         "deep_analysis grants only tools now — its routines moved to the routine tree (todo #101)"
+    );
+}
+
+/// A node that unlocks gear says what the gear does: the stats are
+/// `stat_summary` over the item's own def, the formatter every gear screen
+/// prints, so the research menu cannot quote a figure the inventory won't.
+#[test]
+fn a_gear_unlock_quotes_the_gears_stats() {
+    let mut game = Game::new(719, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    discover_all_research(&mut game);
+    let core = game
+        .equipment_of(&ItemId::from("overclock_core"))
+        .unwrap()
+        .1;
+    let line = research_node(&game, "overclock").unlocks.unwrap();
+    assert_eq!(
+        line,
+        format!("Unlocks: Overclock Core ({})", game.stat_summary(core))
+    );
+    let bench = research_node(&game, "weapon_bench").unlocks.unwrap();
+    let probe = game.equipment_of(&ItemId::from("logic_probe")).unwrap().1;
+    assert!(
+        bench.contains(&format!("Logic Probe ({})", game.stat_summary(probe))),
+        "a hand-compiled item gated by the node carries its stats too: {bench}"
     );
 }
 

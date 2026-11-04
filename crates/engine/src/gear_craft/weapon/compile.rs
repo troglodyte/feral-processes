@@ -19,12 +19,85 @@ struct Folded {
     range: u32,
     accuracy: i32,
     band_factor: f32,
+    decompiler: i32,
     reach: Option<AreaKind>,
     damage_type: Option<DamageType>,
     rider: Option<StatusKind>,
     exploit: Option<StatusKind>,
-    capture: bool,
     proc: Option<Proc>,
+}
+
+/// What one modifier changes about a design — the single mapping from a
+/// part to the constants it reads. `fold` sums these, and
+/// `WeaponPart::effect` puts one into words, so the research menu and the
+/// weapon it builds cannot quote different numbers. A frame is the base
+/// the deltas apply to, so its delta changes nothing.
+pub(super) struct PartDelta {
+    pub range: u32,
+    pub accuracy: i32,
+    pub band_factor: f32,
+    pub decompiler: i32,
+    pub reach: Option<AreaKind>,
+    pub damage_type: Option<DamageType>,
+    pub rider: Option<StatusKind>,
+    pub exploit: Option<StatusKind>,
+    pub proc: Option<Proc>,
+}
+
+pub(super) fn part_delta(part: WeaponPart) -> PartDelta {
+    let mut d = PartDelta {
+        range: 0,
+        accuracy: 0,
+        band_factor: 1.0,
+        decompiler: 0,
+        reach: None,
+        damage_type: None,
+        rider: None,
+        exploit: None,
+        proc: None,
+    };
+    match part {
+        WeaponPart::Frame(..) => {}
+        WeaponPart::Extend => {
+            d.range = 1;
+            d.accuracy = t::GEAR_EXTEND_ACCURACY;
+        }
+        WeaponPart::Reach(kind) => {
+            d.reach = Some(kind);
+            d.band_factor = t::GEAR_REACH_BAND[reach_index(kind)];
+        }
+        WeaponPart::DamageType(ty) => {
+            d.damage_type = Some(ty);
+            d.band_factor = t::GEAR_TYPE_BAND;
+        }
+        WeaponPart::Rider(status) => {
+            d.rider = Some(status);
+            d.accuracy = t::GEAR_RIDER_ACCURACY[status.index()];
+            d.band_factor = t::GEAR_RIDER_BAND[status.index()];
+        }
+        WeaponPart::Exploit(status) => {
+            d.exploit = Some(status);
+            d.accuracy = t::GEAR_EXPLOIT_ACCURACY[status.index()];
+        }
+        WeaponPart::Tilt(Tilt::Precise) => {
+            d.accuracy = t::GEAR_TILT_PRECISE_ACCURACY;
+            d.band_factor = t::GEAR_TILT_PRECISE_BAND;
+        }
+        WeaponPart::Tilt(Tilt::Heavy) => {
+            d.accuracy = t::GEAR_TILT_HEAVY_ACCURACY;
+            d.band_factor = t::GEAR_TILT_HEAVY_BAND;
+        }
+        WeaponPart::Capture => {
+            d.decompiler = t::GEAR_CAPTURE_DECOMPILER;
+            d.band_factor = t::GEAR_CAPTURE_BAND;
+        }
+        WeaponPart::Proc(proc) => {
+            d.proc = Some(proc);
+            d.band_factor = t::GEAR_PROC_BAND;
+            d.accuracy = t::GEAR_PROC_ACCURACY;
+        }
+    }
+    d
 }
 
 fn fold(frame: Frame, parts: &[WeaponPart]) -> Folded {
@@ -33,60 +106,29 @@ fn fold(frame: Frame, parts: &[WeaponPart]) -> Folded {
         range: fig.range,
         accuracy: fig.accuracy,
         band_factor: 1.0,
+        decompiler: 0,
         reach: None,
         damage_type: None,
         rider: None,
         exploit: None,
-        capture: false,
         proc: None,
     };
     for part in parts {
-        match *part {
-            WeaponPart::Frame(..) => {}
-            WeaponPart::Extend => {
-                f.range += 1;
-                f.accuracy += t::GEAR_EXTEND_ACCURACY;
-            }
-            WeaponPart::Reach(kind) => {
-                f.reach = Some(kind);
-                f.band_factor *= t::GEAR_REACH_BAND[reach_index(kind)];
-            }
-            WeaponPart::DamageType(ty) => {
-                f.damage_type = Some(ty);
-                f.band_factor *= t::GEAR_TYPE_BAND;
-            }
-            WeaponPart::Rider(status) => {
-                f.rider = Some(status);
-                f.accuracy += t::GEAR_RIDER_ACCURACY[status.index()];
-                f.band_factor *= t::GEAR_RIDER_BAND[status.index()];
-            }
-            WeaponPart::Exploit(status) => {
-                f.exploit = Some(status);
-                f.accuracy += t::GEAR_EXPLOIT_ACCURACY[status.index()];
-            }
-            WeaponPart::Tilt(Tilt::Precise) => {
-                f.accuracy += t::GEAR_TILT_PRECISE_ACCURACY;
-                f.band_factor *= t::GEAR_TILT_PRECISE_BAND;
-            }
-            WeaponPart::Tilt(Tilt::Heavy) => {
-                f.accuracy += t::GEAR_TILT_HEAVY_ACCURACY;
-                f.band_factor *= t::GEAR_TILT_HEAVY_BAND;
-            }
-            WeaponPart::Capture => {
-                f.capture = true;
-                f.band_factor *= t::GEAR_CAPTURE_BAND;
-            }
-            WeaponPart::Proc(proc) => {
-                f.proc = Some(proc);
-                f.band_factor *= t::GEAR_PROC_BAND;
-                f.accuracy += t::GEAR_PROC_ACCURACY;
-            }
-        }
+        let d = part_delta(*part);
+        f.range += d.range;
+        f.accuracy += d.accuracy;
+        f.band_factor *= d.band_factor;
+        f.decompiler += d.decompiler;
+        f.reach = d.reach.or(f.reach);
+        f.damage_type = d.damage_type.or(f.damage_type);
+        f.rider = d.rider.or(f.rider);
+        f.exploit = d.exploit.or(f.exploit);
+        f.proc = d.proc.or(f.proc);
     }
     f
 }
 
-fn reach_index(kind: AreaKind) -> usize {
+pub(super) fn reach_index(kind: AreaKind) -> usize {
     match kind {
         AreaKind::Group => 0,
         AreaKind::Everyone => 1,
@@ -115,7 +157,14 @@ pub(crate) fn exact_band_of(parts: &[WeaponPart]) -> f32 {
     lo + hi
 }
 
-fn scaled(base: i32, factor: f32) -> i32 {
+/// Whole points, never below one, with the top never under the bottom.
+pub(super) fn rounded_band((exact_min, exact_max): (f32, f32)) -> crate::battle::DamageRange {
+    let min = (exact_min.round() as i32).max(1);
+    let max = (exact_max.round() as i32).max(min);
+    crate::battle::DamageRange { min, max }
+}
+
+pub(super) fn scaled(base: i32, factor: f32) -> i32 {
     (base as f32 * factor).round() as i32
 }
 
@@ -132,22 +181,13 @@ pub fn compile(design: &GearDesign, affixes: &AffixDb) -> Result<ItemDef, Compil
     let (frame, version) = fit::frame_of(&parts).map_err(CompileError::Fit)?;
     let f = fold(frame, &parts);
 
-    let (exact_min, exact_max) = exact_band(frame, version, f.band_factor);
-    let band_min = (exact_min.round() as i32).max(1);
-    let band_max = (exact_max.round() as i32).max(band_min);
+    let band = rounded_band(exact_band(frame, version, f.band_factor));
     let fig = t::GEAR_FRAME[frame.index()];
     let magnitude = t::GEAR_VERSION_MAGNITUDE[version.index()];
     let mut stats = EquipmentStats {
         atk: scaled(fig.atk, magnitude),
-        decompiler: if f.capture {
-            t::GEAR_CAPTURE_DECOMPILER
-        } else {
-            0
-        },
-        damage: crate::battle::DamageRange {
-            min: band_min,
-            max: band_max,
-        },
+        decompiler: f.decompiler,
+        damage: band,
         accuracy: f.accuracy,
         damage_type: f.damage_type,
         ..Default::default()

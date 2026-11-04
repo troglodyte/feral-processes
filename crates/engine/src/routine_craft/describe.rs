@@ -1,8 +1,9 @@
 //! A built routine's description, generated from the def its parts compile
 //! to so the sentence and the numbers cannot disagree.
 
+use super::catalogue::{AreaKind, RangeKind};
 use super::catalogue::{StatusKind, Subroutine};
-use super::compile::{Split, split};
+use super::compile::{Split, area_accuracy, area_magnitude, split};
 use crate::abilities::{AbilityDef, AbilityEffect, AbilityTarget, TamperKind, range_label};
 use crate::components::BuffKind;
 use crate::components::FieldBuffKind;
@@ -186,5 +187,110 @@ fn field_sentence(
         FieldBuffKind::XpBoost => format!("+{power}% XP gained until you rest"),
         FieldBuffKind::EncounterDamp => format!("-{power}% wild encounter chance until you rest"),
         FieldBuffKind::DropBoost => format!("+{power}% drop chance until you rest"),
+    }
+}
+
+/// What one part does on its own — the routine research menu's line. A Core
+/// is `describe` of the Core alone, so the row quotes the routine a bare
+/// build of it compiles to; a modifier says what it adds to any Core.
+pub fn part_effect(part: &Subroutine) -> String {
+    match *part {
+        Subroutine::Core(..) => describe(&[*part]),
+        Subroutine::Range(kind) => {
+            let cells = match kind {
+                RangeKind::Near => t::CRAFT_RANGE_NEAR,
+                RangeKind::Far => t::CRAFT_RANGE_FAR,
+            };
+            format!("Can be aimed from up to {cells} cells away on a battle map.")
+        }
+        Subroutine::Area(kind) => {
+            let whom = match kind {
+                AreaKind::Group => "a whole enemy group",
+                AreaKind::Everyone => "every enemy",
+            };
+            let pct = (area_magnitude(Some(kind)) * 100.0).round() as i32;
+            format!(
+                "Reaches {whom} (or the whole party, for a helpful routine) at {pct}% strength. \
+                 Accuracy {:+}, recharges {} slower.",
+                area_accuracy(Some(kind)),
+                rounds(t::CRAFT_AREA_COOLDOWN),
+            )
+        }
+        Subroutine::Trickle => format!(
+            "Makes a timed effect last {} longer, or spreads a heal over {}. Stacks; \
+             recharges {} slower each.",
+            rounds(t::CRAFT_TRICKLE_ROUNDS),
+            rounds(t::CRAFT_HOT_ROUNDS_PER_TRICKLE),
+            rounds(t::CRAFT_TRICKLE_COOLDOWN),
+        ),
+        Subroutine::DamageType(ty) => format!("The damage it deals is {}.", ty.name()),
+        Subroutine::Status(kind) => {
+            let (chance, duration, _) = t::CRAFT_RIDER[kind.index()];
+            format!(
+                "On Damage, a {:.0}% chance to leave {} for {}; on Debuff, inflicts it.",
+                chance * 100.0,
+                kind.name(),
+                rounds(duration),
+            )
+        }
+    }
+}
+
+fn rounds(n: u32) -> String {
+    format!("{n} round{}", if n == 1 { "" } else { "s" })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::routine_craft::{Core, Version};
+
+    #[test]
+    fn a_core_reads_as_the_routine_it_builds_alone() {
+        let core = Subroutine::Core(Core::Damage, Version::V2);
+        assert_eq!(part_effect(&core), describe(&[core]));
+    }
+
+    #[test]
+    fn every_part_says_something_of_its_own() {
+        let mut seen = std::collections::BTreeSet::new();
+        for part in Subroutine::all() {
+            let line = part_effect(&part);
+            assert!(!line.is_empty(), "{part:?} has no effect line");
+            // Two unversioned Cores can describe the same bare routine;
+            // modifiers must each be distinct.
+            if !matches!(part, Subroutine::Core(..)) {
+                assert!(seen.insert(line.clone()), "{part:?} repeats {line:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_modifier_quotes_its_figures() {
+        let far = part_effect(&Subroutine::Range(RangeKind::Far));
+        assert!(
+            far.contains(&format!("{} cells", t::CRAFT_RANGE_FAR)),
+            "{far}"
+        );
+        let group = part_effect(&Subroutine::Area(AreaKind::Group));
+        let pct = (t::CRAFT_AREA_GROUP_MAGNITUDE * 100.0).round() as i32;
+        assert!(group.contains(&format!("{pct}%")), "{group}");
+        let bleed = part_effect(&Subroutine::Status(StatusKind::Bleed));
+        let (chance, _, _) = t::CRAFT_RIDER[StatusKind::Bleed.index()];
+        assert!(
+            bleed.contains(&format!("{:.0}%", chance * 100.0)),
+            "{bleed}"
+        );
+    }
+
+    #[test]
+    fn a_part_node_carries_its_effect() {
+        for node in crate::routine_tree::synthesise_part_nodes() {
+            let Some(key) = node.id.strip_prefix("part/") else {
+                continue;
+            };
+            let part = Subroutine::from_key(key).unwrap();
+            assert_eq!(node.description, part_effect(&part), "{}", node.id);
+        }
     }
 }

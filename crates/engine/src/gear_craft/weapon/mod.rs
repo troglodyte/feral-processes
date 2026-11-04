@@ -5,6 +5,7 @@ mod bill;
 mod catalogue;
 mod compile;
 mod decompose;
+mod effect;
 mod fit;
 mod names;
 mod strike;

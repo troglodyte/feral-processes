@@ -19,7 +19,7 @@ pub use catalogue::{
 };
 pub use compile::compile;
 pub use decompose::decompose;
-pub use describe::describe;
+pub use describe::{describe, part_effect};
 pub use plan::{
     BUILD_SLOTS, BuildNeeds, BuildPlan, PlanError, build_needs, build_rows, check_name, craft_bill,
     part_options, parts_missing, parts_used, plan_build,

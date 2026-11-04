@@ -27,10 +27,15 @@ pub const RECIPE_PACE_SLOW_MAX: u32 = 20;
 ///
 /// **A cell is a long window, deliberately.** A Conduit at Mk1 in zone 1
 /// turns out a cell every 6 ticks — 166 per 1,000 — while a burning supplier
-/// eats one every 100, which is 10 per 1,000. One posted Conduit therefore
-/// covers sixteen suppliers, and the fuel loop is a thing the player sets up
-/// once and then stops thinking about rather than a rate the base has to
-/// keep pace with.
+/// eats one every 300, which is about 3 per 1,000. One posted Conduit
+/// therefore covers dozens of suppliers, and the fuel loop is a thing the
+/// player sets up once and then stops thinking about rather than a rate the
+/// base has to keep pace with.
+///
+/// 300, up from 100, because at 100 a Recharger holding two cells sent a
+/// body to it every 50 seconds: the staff spent most of their time
+/// refuelling and a late trip blacked the base out.
+/// `POWER_UPKEEP_HOPPER_CELLS` is the other half of that fix.
 ///
 /// That is a retune away from what this number first meant. At 20 a Conduit
 /// sustained three suppliers and grid capacity *was* the production rate —
@@ -43,7 +48,7 @@ pub const RECIPE_PACE_SLOW_MAX: u32 = 20;
 /// it. The base staff now fetch one instead (`Game::fuel_wants`), so what a
 /// bad placement costs is a body's round trip rather than the grid — and the
 /// window is what makes that trip comfortably long enough to make.
-pub const POWER_UPKEEP_TICKS: u32 = 100;
+pub const POWER_UPKEEP_TICKS: u32 = 300;
 
 /// How many Power Cells a `power_upkeep` supplier spends to buy one window
 /// of `POWER_UPKEEP_TICKS`.
@@ -55,6 +60,17 @@ pub const POWER_UPKEEP_TICKS: u32 = 100;
 /// is within reach. A supplier that burnt two and was fetched one would
 /// simply never stay lit.
 pub const POWER_UPKEEP_CELLS_PER_WINDOW: u32 = 1;
+
+/// How many Power Cells a `power_upkeep` supplier's input holds — see
+/// `StructureDef::supply_input_capacity`.
+///
+/// **One hauler's load**, because a fuel fetch is filed only once the hopper
+/// is empty (`Game::fuel_wants`) and carries `min(room, HAUL_CARRY_CAPACITY)`:
+/// any room past one load would never be filled. Five windows of
+/// `POWER_UPKEEP_TICKS` is about 12 minutes at the world's two ticks a
+/// second, so a body walks a burner its fuel a few times an hour rather than
+/// every window.
+pub const POWER_UPKEEP_HOPPER_CELLS: u32 = HAUL_CARRY_CAPACITY;
 
 /// Integrity one Patch Routine buys when the party rests in base. A rest
 /// spends `ceil(missing / REST_INTEGRITY_PER_PATCH)` patches, so the last one

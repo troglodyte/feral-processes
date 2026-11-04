@@ -34,6 +34,9 @@ pub enum StructurePage {
     /// was Info, which `adjacent_structures` leaves out of the cycle, so
     /// `[c]` beside a bay fell through to the pack's downed programs.
     Breed,
+    /// A Holding Cell's record picker. Info-only before it, so the hub
+    /// skipped the cell — `Breed`'s bug again.
+    Hold,
     Info,
 }
 
@@ -131,6 +134,7 @@ impl Game {
             self.world.get::<Incubator>(e).is_some(),
             StructurePage::Breed,
         );
+        page(self.prison_pen(e).is_some(), StructurePage::Hold);
         pages.push(StructurePage::Info);
         pages
     }

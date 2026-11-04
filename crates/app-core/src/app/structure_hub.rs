@@ -71,6 +71,10 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "Breed",
             screens: &[Mode::Breed],
         },
+        StructurePage::Hold => &HubPage {
+            title: "Hold",
+            screens: &[Mode::PinPrisoner],
+        },
         StructurePage::Info => &HubPage {
             title: "Info",
             screens: &[Mode::StructureManifest],
@@ -243,6 +247,7 @@ impl App {
                 self.pending_breed_bay = Some(entity);
                 self.mode = Mode::Breed;
             }
+            StructurePage::Hold => self.mode = Mode::PinPrisoner,
             StructurePage::Info => {
                 self.pending_structure_manifest = Some(entity);
                 self.mode = Mode::StructureManifest;

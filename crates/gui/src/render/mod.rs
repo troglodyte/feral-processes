@@ -1303,6 +1303,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             breeding::breed_page_rows(game, breeding_bay, selected),
             None,
         )),
+        Mode::PinPrisoner => Some((building::pin_prisoner_rows(game, selected), None)),
         _ => None,
     });
     if let (Some(frame), Some((rows, nothing_qualifies))) = (&hub_frame, page_rows) {

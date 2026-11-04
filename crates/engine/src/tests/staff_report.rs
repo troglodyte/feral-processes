@@ -77,7 +77,10 @@ fn an_off_shift_program_in_reach_of_a_full_bay_is_waiting() {
     for &who in &staff {
         game.world
             .entity_mut(who)
-            .insert(crate::components::OffShift { need: coherence() });
+            .insert(crate::components::OffShift {
+                need: coherence(),
+                waited: false,
+            });
     }
 
     let waiting = game

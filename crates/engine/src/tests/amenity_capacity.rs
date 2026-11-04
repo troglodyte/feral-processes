@@ -183,7 +183,10 @@ fn a_posted_worker_does_not_claim_a_place() {
     set_reserve(&mut game, posted, &coherence(), (critical + content) / 2.0);
     game.world
         .entity_mut(critical_one)
-        .insert(crate::components::OffShift { need: coherence() });
+        .insert(crate::components::OffShift {
+            need: coherence(),
+            waited: false,
+        });
     put(&mut game, critical_one, site.x - 1, site.y);
     let (posted_before, other_before) = (reserve(&game, posted), reserve(&game, critical_one));
 

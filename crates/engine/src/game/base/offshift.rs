@@ -11,6 +11,7 @@ use crate::game::base::hauling::Touch;
 use std::collections::{BTreeMap, HashSet};
 
 use crate::base_grid::BaseGrid;
+use crate::base_ledger::VisitOutcome;
 use crate::components::{Needs, OffShift, Position, Structure};
 use crate::game::base::hauling::{NoPost, Step, at_station, step_to_post};
 use crate::needs::{NeedDb, NeedId};
@@ -536,11 +537,25 @@ impl Game {
                 self.note_idling(worker, &need, amenities, staff);
             }
             match (current, verdict) {
-                (Some(_), None) => {
+                (Some(need), None) => {
+                    if finished {
+                        let waited = self.world.get::<OffShift>(worker).is_some_and(|o| o.waited);
+                        let outcome = if waited {
+                            VisitOutcome::Waited
+                        } else {
+                            VisitOutcome::Served
+                        };
+                        self.note_visit(&need, outcome);
+                    }
                     self.world.entity_mut(worker).remove::<OffShift>();
                 }
+                // The same errand carrying on. Inserting would reset `waited`.
+                (Some(cur), Some(need)) if cur == need => {}
                 (_, Some(need)) => {
-                    self.world.entity_mut(worker).insert(OffShift { need });
+                    self.world.entity_mut(worker).insert(OffShift {
+                        need,
+                        waited: false,
+                    });
                 }
                 (None, None) => {}
             }
@@ -788,6 +803,7 @@ impl Game {
             return;
         };
         self.fray(worker, &need, true);
+        self.note_visit(&need, VisitOutcome::Stranded);
         self.world.entity_mut(worker).remove::<OffShift>();
     }
 }

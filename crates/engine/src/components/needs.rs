@@ -103,6 +103,11 @@ impl Needs {
 #[derive(Component, Clone, Debug)]
 pub struct OffShift {
     pub need: NeedId,
+    /// Whether this errand has stood in reach of an amenity for its need
+    /// without being granted a place, for at least one tick. Not saved: a
+    /// reload mid-visit reads as `false`, and the visit is then counted as
+    /// served. Re-inserting `OffShift` for the same need must keep it.
+    pub waited: bool,
 }
 
 /// A program whose morale has run far enough below zero that it has stopped

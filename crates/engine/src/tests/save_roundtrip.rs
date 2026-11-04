@@ -200,7 +200,10 @@ fn seed_the_roster(game: &mut Game) -> Roster {
             item: ItemId::from(ids::CORE_FRAGMENT),
             qty: 4,
         },
-        OffShift { need },
+        OffShift {
+            need,
+            waited: false,
+        },
         Disgruntled {
             grievance: Grievance::Sulking,
             stranded: false,

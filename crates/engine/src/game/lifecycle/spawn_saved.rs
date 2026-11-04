@@ -587,7 +587,10 @@ impl Game {
                 needs.set(id, *value);
             }
             if let Some(need) = c.off_shift.clone() {
-                entity.insert(crate::components::OffShift { need });
+                entity.insert(crate::components::OffShift {
+                    need,
+                    waited: false,
+                });
             }
             if c.downed {
                 entity.insert(crate::components::Downed);

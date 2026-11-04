@@ -522,7 +522,12 @@ pub struct CoverageRow {
     pub places: usize,
     /// Places the whole capacity would give: `built` times the capacity.
     pub capacity: usize,
-    pub needed: usize,
+    /// Visits that ended in the access window, however they went.
+    pub visits: usize,
+    /// Of those, the ones that stood in reach without a place.
+    pub waited: usize,
+    /// Of those, the ones that found no route.
+    pub stranded: usize,
     pub below_critical: usize,
     pub below_content: usize,
     /// The share of staff time expected to be spent off shift for this
@@ -535,9 +540,10 @@ pub struct CoverageRow {
 }
 
 impl CoverageRow {
-    /// Short of amenities: none, or fewer than the staff need.
+    /// Short of access: nothing built, or staff who went to use one waited,
+    /// could not reach it, or have a boxed-in one to go to.
     pub fn is_short(&self) -> bool {
-        self.built == 0 || self.built < self.needed
+        self.built == 0 || self.waited > 0 || self.stranded > 0 || !self.boxed_in.is_empty()
     }
 }
 

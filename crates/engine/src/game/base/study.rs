@@ -60,6 +60,11 @@ impl Game {
     /// `World::iter_entities` rather than taking the `&mut self` a bevy
     /// query needs.
     pub fn study_station(&self) -> Option<Entity> {
+        // Once fused the AI's station is the only one in use, whichever
+        // anchor sorts first.
+        if self.base_ai_fused() {
+            return self.base_ai_station();
+        }
         let db = self.world.resource::<StructureDb>();
         let mut found: Vec<(i32, i32, Entity)> = self
             .world

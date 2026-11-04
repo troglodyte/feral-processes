@@ -62,3 +62,30 @@ fn selecting_a_gated_node_is_refused() {
     fuse_at_level(&mut game, 1);
     game.select_research(&id).unwrap();
 }
+
+#[test]
+fn the_study_station_is_the_ais_when_it_is_not_the_lowest_anchor() {
+    let mut game = Game::new(733, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let ai_node = base_with_a_research_node(&mut game);
+    let lower = spawn_machine_at(&mut game, "research_node", -6, -6);
+    let (x, y) = {
+        let p = game.world.get::<Position>(ai_node).unwrap();
+        (p.x, p.y)
+    };
+    assert_eq!(
+        game.study_station(),
+        Some(lower),
+        "the lowest before fusion"
+    );
+    game.storyline.base_ai = BaseAi::Fused(FusedAi {
+        host: crate::components::ProgramId(1),
+        station: (x, y),
+        level: 0,
+        analysis_at_fusion: 20,
+        pace_at_fusion: 1.0,
+        practice: 0,
+        carry: 0.0,
+        training: TrainingTarget::default(),
+    });
+    assert_eq!(game.study_station(), Some(ai_node));
+}

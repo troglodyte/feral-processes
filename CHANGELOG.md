@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.43
+
+**A timed field routine, such as Regen or Recharge, can now rerun itself when its buff runs out: press A on the routine list to turn auto-recast on, and the row shows `[auto]`.** The rerun costs the same Power as running it by hand, happens once for a whole-party routine, and also fires during a battle. If the target has left the party the buff fades and auto-recast stays on; if the holder is short of Power, the buff fades and auto-recast turns itself off. A program that is knocked out doesn't rerun anything.
+
+**Resting, or a reboot on Forgiving, now ends every routine buff, timed ones included.** Before, a timed routine buff carried on through a rest; now a rest clears it rather than leaving a buff that could rerun itself afterwards. Buffs from consumables still last through a rest. Saves load unchanged.
+
 ## 0.21.42
 
 **When you name a routine or a weapon design, Left and Right now move a blinking cursor through the name, so you can fix a letter in the middle without backspacing to it.** Typing inserts at the cursor and Backspace deletes the letter before it; the name popup lists the arrows in its key hints. With effects turned off the cursor stays lit instead of blinking. Saves load unchanged.

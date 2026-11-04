@@ -118,8 +118,8 @@ impl Game {
     }
 
     /// Who would rerun `ability` for a buff that just expired: the first
-    /// holder, in `routine_holders()` order, that has it installed and
-    /// flagged. The casting holder is not recorded on the buff, so two
+    /// living holder, in `routine_holders()` order, that has it installed
+    /// and flagged. The casting holder is not recorded on the buff, so two
     /// holders of one routine with only one flagged resolve to the flagged
     /// one.
     pub(crate) fn recast_caster(&self, holders: &[Entity], ability: &AbilityId) -> Option<Caster> {

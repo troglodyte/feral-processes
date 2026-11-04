@@ -203,6 +203,11 @@ pub const SQUEEZE_EXTRA_TICKS: u64 = 1;
 /// (`offshift::effective_places`).
 pub const AMENITY_CAPACITY: usize = 2;
 
+/// How many `base_ledger` buckets of amenity visits Coverage reads: the one
+/// in progress and the two before it, so a fix clears itself as the old
+/// blocked visits age out.
+pub const AMENITY_ACCESS_WINDOW_BUCKETS: u64 = 3;
+
 /// How long a carrier stands `Stranded` holding a load before it drops the
 /// load on the floor around it, one unit per tile.
 ///

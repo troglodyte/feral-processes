@@ -200,6 +200,7 @@ fn a_downed_or_off_shift_tidier_sets_its_item_down_first() {
         } else {
             g.world.entity_mut(worker).insert(OffShift {
                 need: crate::needs::NeedId::from("rest"),
+                waited: false,
             });
         }
         let amenities = g.amenities_for_test();

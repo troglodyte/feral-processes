@@ -332,6 +332,7 @@ fn the_scheduler_never_frees_a_body_carrying_a_program() {
         .entity_mut(worker)
         .insert(crate::components::OffShift {
             need: crate::needs::NeedId::from("coherence"),
+            waited: false,
         });
     let amenities = game.amenities_for_test();
     assert!(

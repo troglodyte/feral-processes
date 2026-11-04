@@ -483,4 +483,18 @@
   `research_block` — the same door twice. A block reason is only tested by a
   test that drives the *screen's* producer.
 
+- **Amenity access is a visit tally through `base_ledger::emit`, and Coverage's
+  `!` reads it; `needed` no longer exists.** `needed` was a head-count
+  guess (`staff x off-shift share / capacity`) that flagged a base short while
+  every visit was being served, and missed one whose single Sandbox sat behind
+  a wall. A visit is one `OffShift` episode tagged `Served`, `Waited` (in reach,
+  no place granted, for a tick) or `Stranded` (no route), folded per need into
+  `Bucket::visits` and summed over `AMENITY_ACCESS_WINDOW_BUCKETS`, so a fix
+  clears itself as visits age out. The trap is `waited: bool` on `OffShift`:
+  re-inserting `OffShift` for the *same* need resets it, so the beat only
+  inserts when the need changes. The flag is not saved, so a reload mid-visit
+  may count a waited visit as served. `Game::note_amenity_visit` is the one
+  door for the tally and the `AmenityBlocked` alert (latched per need on
+  `AlertBoard`, unsaved), so the two cannot drift.
+
 ## Instrumentation

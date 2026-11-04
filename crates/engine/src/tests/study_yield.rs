@@ -411,6 +411,7 @@ fn an_off_shift_carrier_racks_before_it_walks_to_its_amenity() {
         .entity_mut(carrier)
         .insert(crate::components::OffShift {
             need: crate::needs::NeedId::from("coherence"),
+            waited: false,
         });
     for _ in 0..12 {
         drift_beat(&mut game, &[carrier]);

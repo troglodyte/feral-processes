@@ -407,6 +407,7 @@ pub(super) fn app_in_base_with_an_extractor(seed: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         battery_charge: 0,
+        refit_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -503,6 +504,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         standing_tool: None,
         pod_charged: None,
         battery_charge: 0,
+        refit_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -527,6 +529,7 @@ pub(super) fn game_with_base_stock(seed: u32, standing: StandingIn) -> Game {
         standing_tool: None,
         pod_charged: None,
         battery_charge: 0,
+        refit_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -628,6 +631,7 @@ pub(super) fn game_with_a_workbench_and_designs(
         standing_tool: None,
         pod_charged: None,
         battery_charge: 0,
+        refit_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });

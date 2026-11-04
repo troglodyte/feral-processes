@@ -58,6 +58,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
         standing_tool: None,
         pod_charged: None,
         battery_charge: 0,
+        refit_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });

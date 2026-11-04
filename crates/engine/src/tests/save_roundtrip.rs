@@ -1341,10 +1341,11 @@ fn a_machines_build_quality_survives_a_save() {
     );
 }
 
-/// A bench's loaded cores are `Stock::input`, which the structure save must
-/// carry: a reload that dropped them would hand the player an empty bench.
+/// A bench's loaded cores are `Stock::input` and its poured repair points
+/// `RefitCharge`, which the structure save must carry: a reload that dropped
+/// either would hand the player an emptier bench.
 #[test]
-fn a_refit_benchs_annealed_cores_survive_a_save_and_load() {
+fn a_refit_benchs_cores_and_charge_survive_a_save_and_load() {
     use crate::items::ids;
     let mut game = Game::new(6310, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let bench = crate::tests::support::spawn_structure_at(&mut game, "refit_bench", 3, 3);
@@ -1354,6 +1355,9 @@ fn a_refit_benchs_annealed_cores_survive_a_save_and_load() {
             .collect(),
         ..Default::default()
     });
+    game.world
+        .entity_mut(bench)
+        .insert(crate::components::RefitCharge(23));
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_refit_bench_cores_{}.bin",
@@ -1372,6 +1376,14 @@ fn a_refit_benchs_annealed_cores_survive_a_save_and_load() {
         .get(&ItemId::from(ids::ANNEALED_CORE))
         .copied();
     assert_eq!(held, Some(7));
+    assert_eq!(
+        loaded
+            .world
+            .get::<crate::components::RefitCharge>(reloaded)
+            .map(|c| c.0),
+        Some(23),
+        "the repair points already poured from a core"
+    );
 }
 
 /// The structure half of the missing-key rule: a pre-feature save loads

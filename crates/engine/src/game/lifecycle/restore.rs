@@ -438,6 +438,11 @@ impl Game {
             if def.battery.is_some() {
                 entity.insert(crate::components::BatteryCharge(s.battery_charge));
             }
+            // Not gated on the def, `study_yield`'s reason: the charge is a
+            // core already paid for.
+            if s.refit_charge > 0 {
+                entity.insert(crate::components::RefitCharge(s.refit_charge));
+            }
             // Absent rather than defaulted when neither flag is set, so
             // "has a standing job" stays readable as the component's
             // presence — the same invariant `Equipment` keeps.

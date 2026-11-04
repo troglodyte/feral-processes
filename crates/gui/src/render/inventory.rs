@@ -521,7 +521,7 @@ pub(super) fn draw_equip_swap(
     ));
     let mut chips = vec!["Type to filter", "[I] inspect"];
     if target.is_none() && wearing {
-        chips.push("[R] refit what you wear");
+        chips.push("[R] refit status");
     }
     chips.extend(["Enter equip", "Esc back (clears the filter first)"]);
     rows.push(text_row(key_hints(&chips)));

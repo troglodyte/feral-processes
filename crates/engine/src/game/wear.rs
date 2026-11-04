@@ -117,8 +117,8 @@ impl Game {
 }
 
 /// Whether a copy with `(left, max)` fights remaining is under the line that
-/// raises the `GearWorn` alert (a broken copy is). The Refit Bench's own pass
-/// asks the same question, so what the HUD warns about is what it mends.
+/// raises the `GearWorn` alert (a broken copy is). The Refit Bench does not
+/// ask it: a point costs a point, so it mends any wear.
 pub(crate) fn is_nearly_worn((left, max): (u8, u8)) -> bool {
     u32::from(left) * 100 < u32::from(max) * crate::tuning::GEAR_WORN_ALERT_PERCENT
 }

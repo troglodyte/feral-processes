@@ -237,14 +237,14 @@ impl App {
         }
         let Some(game) = &self.game else { return };
         let wearer = target.unwrap_or_else(|| game.player_entity());
-        // Wear lands only on what is worn, so the bench has to be reachable
-        // from the slot itself: unequipping first would re-lock the copy at
-        // the current zone's level. A companion's gear has to come off
-        // first, as `refit_copy` documents. Uppercase for `I`'s reason.
+        // Wear lands only on what is worn, so its condition has to be
+        // readable from the slot itself. The view backs out to the player's
+        // inventory, so a companion's slot does not open it. Uppercase for
+        // `I`'s reason.
         if key == GameKey::Char('R') {
             let worn = game.worn(wearer, slot).map(|w| w.copy);
             match (target, worn) {
-                (Some(_), _) => self.refuse("Take it off first; only your own gear is refitted."),
+                (Some(_), _) => self.refuse("Only your own slots open the refit status."),
                 (None, None) => self.refuse("That slot is empty."),
                 (None, Some(copy)) => {
                     self.refit_copy = Some(copy);

@@ -166,9 +166,8 @@ impl Game {
 
     /// Whether the player wears `copy` in `slot`, and that they hold it at
     /// all. The worn copy wins a tie with an identical carried one,
-    /// `fuse_copy`'s rule. The slot is the caller's because what each bench
-    /// accepts differs: the Mod Bench refuses a Module, the Refit Bench does
-    /// not.
+    /// `fuse_copy`'s rule. The slot is the caller's, which refuses what its
+    /// bench does not accept (the Mod Bench refuses a Module).
     pub(crate) fn locate_in_slot(
         &self,
         copy: &GearCopy,

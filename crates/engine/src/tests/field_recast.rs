@@ -125,3 +125,37 @@ fn fusion_keeps_a_flag_only_for_a_routine_the_child_holds() {
     assert!(!flags.contains(&built));
     assert_eq!(flags.contains(&innate), kit.contains(&innate));
 }
+
+#[test]
+fn a_manual_run_records_the_routine_on_the_buff_and_keeps_it_across_a_save() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    let player = game.player_entity();
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    let index = game
+        .field_routines()
+        .iter()
+        .position(|r| r.ability == id)
+        .unwrap();
+
+    game.run_field_routine(index, FieldRoutineTarget::Ally(player))
+        .unwrap();
+
+    let armed = |game: &Game, who: Entity| {
+        game.world
+            .get::<crate::components::FieldBuff>(who)
+            .unwrap()
+            .active
+            .iter()
+            .map(|b| b.ability.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(armed(&game, player), vec![Some(id.clone())]);
+
+    let dir = scratch_assets_dir("auto_recast_buff_ability");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("s.ron");
+    game.save(&path).expect("save");
+    let loaded = Game::load(&path, &test_assets_dir()).expect("load");
+    assert_eq!(armed(&loaded, loaded.player_entity()), vec![Some(id)]);
+}

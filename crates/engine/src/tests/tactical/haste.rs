@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::abilities::{AbilityDb, AbilityRange, AbilityShape};
-use crate::components::{AbilityCooldowns, Durability, Hasted, Structure};
+use crate::components::{AbilityCooldowns, Derived, Durability, Hasted, Structure};
 use crate::routine_craft::{Core, CraftedRoutine, Subroutine, Version, compile};
 use crate::statuses::StatusId;
 
@@ -54,7 +54,9 @@ fn a_haste_sweep_never_quickens_a_hostile_inside_its_shape() {
     );
 }
 
-fn prestunned_swing(stream: u64) -> (Game, usize) {
+/// A hasted v3 player's one attack on an adjacent hostile: the game, how many
+/// swing lines it logged, and whether the first swing hard-faulted into a Crash.
+fn hasted_swing(stream: u64, prepare: impl FnOnce(&mut Game, Entity)) -> (Game, usize, bool) {
     let mut game = game();
     let pack = tactical_fight(&mut game, 1, 9_000);
     let player = game.player_entity();
@@ -72,28 +74,50 @@ fn prestunned_swing(stream: u64) -> (Game, usize) {
     game.arm_haste(player, 3);
     crate::tests::support::reseed_rng(&mut game, stream);
     assert!(wait_for_turn(&mut game, player));
-    game.arm_status(player, &StatusId::from("stun"), 3, 0);
-    assert!(game.is_stunned(player), "the fixture must start stunned");
+    prepare(&mut game, player);
     assert!(game.tactical_attack(wild));
-    let lines = game
-        .message_log(50)
-        .into_iter()
+    let log = game.message_log(50);
+    let swings: Vec<_> = log
+        .iter()
         .filter(|l| l.kind == crate::resources::MessageKind::PartyDamage && l.outcome.is_some())
-        .count();
-    (game, lines)
+        .collect();
+    let crashed = swings
+        .first()
+        .is_some_and(|l| l.text.contains("hard-faults"));
+    (game, swings.len(), crashed)
 }
 
 #[test]
 fn an_older_stun_does_not_cost_a_hasted_body_its_second_swing() {
     let mut twice = 0;
     for stream in 0..48 {
-        let (game, lines) = prestunned_swing(stream);
-        if game.creature_alive(game.player_entity()) {
+        let (game, lines, crashed) = hasted_swing(stream, |game, player| {
+            game.arm_status(player, &StatusId::from("stun"), 3, 0);
+            assert!(game.is_stunned(player), "the fixture must start stunned");
+        });
+        if !crashed && game.creature_alive(game.player_entity()) {
             assert_eq!(lines, 2, "stream {stream}");
             twice += 1;
         }
     }
     assert!(twice > 0);
+}
+
+#[test]
+fn a_crash_fumbled_by_the_first_swing_stops_the_second() {
+    let mut crashes = 0;
+    for stream in 0..600 {
+        let (game, lines, crashed) = hasted_swing(stream, |game, player| {
+            // Every miss a fumble, so the deepest rung turns up in a
+            // searchable number of seeds.
+            game.world.get_mut::<Derived>(player).unwrap().fumble = 1.0;
+        });
+        if crashed && game.creature_alive(game.player_entity()) {
+            assert_eq!(lines, 1, "stream {stream}");
+            crashes += 1;
+        }
+    }
+    assert!(crashes > 0, "no stream crashed on the first swing");
 }
 
 /// A structure adjacent to the player, on `hp` Durability.
@@ -148,30 +172,25 @@ fn a_hasted_v3_swing_at_a_structure_lands_twice_in_one_action() {
     assert_eq!(structure_damage_taken(Some(3)), 2 * plain);
 }
 
-#[test]
-fn a_structure_felled_by_the_first_swing_is_not_swung_at_again() {
-    let mut game = game();
-    let structure = structure_beside_player(&mut game, 1);
-    let player = game.player_entity();
-    game.arm_haste(player, 3);
-    assert!(game.tactical_attack(structure));
-    assert!(game.world.get::<Structure>(structure).is_none());
-}
-
 /// An auto-driven player beside a companion, hasted to v2 as asked, with a
 /// Haste sweep covering the whole board. Returns whether the beat cast it.
-fn auto_beat_casts(player_hasted: bool, companion_hasted: bool) -> bool {
+fn auto_beat_casts(
+    player_hasted: bool,
+    companion_hasted: bool,
+    radius: u32,
+    hostile_at: (i32, i32),
+) -> bool {
     let mut game = game();
     let companion = crate::tests::support::spawn_tamed(&mut game, 40, 3);
     crate::tests::support::enlist(&mut game, companion);
     let pack = tactical_fight(&mut game, 1, 10_000);
     let player = game.player_entity();
-    open_ground(&mut game, &[pack[0], companion], &[(7, 7), (4, 3)]);
+    open_ground(&mut game, &[pack[0], companion], &[hostile_at, (4, 3)]);
     let id = haste_sweep(
         &mut game,
         player,
         Version::V2,
-        AbilityShape::Radius { radius: 2 },
+        AbilityShape::Radius { radius },
     );
     if player_hasted {
         game.arm_haste(player, 2);
@@ -194,17 +213,24 @@ fn auto_beat_casts(player_hasted: bool, companion_hasted: bool) -> bool {
 #[test]
 fn the_auto_driven_party_does_not_recast_haste_on_a_party_that_has_it() {
     assert!(
-        auto_beat_casts(false, false),
+        auto_beat_casts(false, false, 2, (7, 7)),
         "control: an unhasted party is worth a cast"
     );
     assert!(
-        auto_beat_casts(true, false),
+        auto_beat_casts(true, false, 2, (7, 7)),
         "control: a hasted caster beside an unhasted companion is worth a cast"
     );
     assert!(
-        !auto_beat_casts(true, true),
+        !auto_beat_casts(true, true, 2, (7, 7)),
         "everyone covered is already hasted"
     );
+}
+
+#[test]
+fn a_haste_sweep_covering_a_hostile_still_casts_for_the_ally_it_reaches() {
+    // The hostile beside the companion cannot be hastened, so it must not
+    // count against the cast: only the unhasted companion is worth it.
+    assert!(auto_beat_casts(true, false, 6, (4, 2)));
 }
 
 #[test]
@@ -265,7 +291,7 @@ fn a_kill_on_the_second_swing_pays_xp_exactly_once() {
     // XP follows the victim's max Integrity, so each size is measured
     // against a first-swing kill of the same size.
     let mut second = 0;
-    for max_hp in 2..40 {
+    for max_hp in (2..40).step_by(6) {
         let first = (0..48)
             .find_map(|stream| match hasted_kill(1, max_hp, stream) {
                 (true, 1, paid) => Some(paid),

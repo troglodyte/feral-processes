@@ -1573,6 +1573,10 @@ impl Game {
                                 }
                                 _ => 1,
                             }
+                        } else if matches!(def.effect, AbilityEffect::Haste { .. }) {
+                            // Haste never lands on the other side, so
+                            // covering it costs nothing.
+                            0
                         } else {
                             -1
                         }

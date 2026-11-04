@@ -54,6 +54,15 @@ an honest "unknown".
 
 ## Entries
 
+- [2026-11-04 — The base AI: research pace, and a proposed balance table](2026-11-04-base-ai-research-pace.md)
+  — a typical host researches at 0.029 a tick (`fred`), so one station
+  finishes today's 3,274-point tree in 15.6 h. The placeholder AI figures
+  never get back to that pace (0.93x at best: practice of 50 + 2g² a point
+  puts +100 Analysis 92 h away). The proposed table (4 levels, offsets
+  20/45/70/100, 8 practice a tick, six AI-gated nodes, costs of 40 and up
+  raised by 1.5x) gives 29.3 h untrained, 18.7 h trained and 23.0 h at the old
+  pace on the same costs. A proposal; nothing applied.
+
 - [2026-10-15 — Pack tactics, phase 1: Together and Hold against Rush](2026-10-15-pack-tactics-phase-1.md)
   — on `dev-arenas/tactical-mixed-pack.ron` Hold matches Rush (98.0% wins,
   18.0% vs 17.6% Integrity lost); Together at slack 2 cost the party half as

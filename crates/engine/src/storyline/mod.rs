@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 mod base_ai;
 #[cfg(test)]
+mod measure;
+#[cfg(test)]
 mod tests;
 
 pub use base_ai::*;

@@ -89,3 +89,21 @@ fn the_study_station_is_the_ais_when_it_is_not_the_lowest_anchor() {
     });
     assert_eq!(game.study_station(), Some(ai_node));
 }
+
+#[test]
+fn the_player_cannot_work_a_research_station_once_the_ai_has_it() {
+    let mut game = Game::new(734, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let node = base_with_a_research_node(&mut game);
+    stand_player_at_post(&mut game, node);
+    game.storyline.base_ai = BaseAi::Claiming {
+        host: crate::components::ProgramId(1),
+        station: (2, 2),
+    };
+    let err = game.work_structure(node).unwrap_err();
+    assert!(err.contains("AI"), "{err}");
+    assert!(
+        game.world
+            .get::<crate::components::Task>(game.player_entity())
+            .is_none()
+    );
+}

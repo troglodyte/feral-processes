@@ -1981,6 +1981,9 @@ impl Game {
         if self.world.get::<ResourceNode>(structure).is_none() {
             return Err("That structure can't be worked.".into());
         }
+        if self.storyline_owns_research() && self.research_stations().contains(&structure) {
+            return Err("The AI has taken the research. It won't let your hands near it.".into());
+        }
         let (hx, hy) = self
             .field_pos()
             .expect("require_field passed, so the party is on the field");

@@ -8,6 +8,7 @@
 //! however it likes.
 
 mod app;
+mod text_field;
 
 /// The one separator between key chips on every hint line, here so the
 /// renderer's `key_hints` and the key lines this crate hands it are the same
@@ -66,6 +67,7 @@ pub use app::tactical::tactical_items_visible;
 pub use app::telemetry::append_records;
 pub use app::trade::{TradeVisible, trade_sellable, trade_visible};
 pub use feral_processes_engine::ProgramRole;
+pub use text_field::TextField;
 
 /// One row of the transfer picker: an item, or a whole downed program.
 ///

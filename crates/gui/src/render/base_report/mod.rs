@@ -294,7 +294,7 @@ pub(in crate::render) mod fit {
 
     pub(super) fn text_of(row: &Row) -> &str {
         match row {
-            Row::Text(t) | Row::TextColored(t, _) => t,
+            Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
             Row::Item { text, .. } => text,
         }
     }

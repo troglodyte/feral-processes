@@ -35,7 +35,7 @@ pub const BUILD_PAGE_ROWS: usize = 8;
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RoutineDraft {
     pub parts: Vec<Subroutine>,
-    pub name: String,
+    pub name: TextField,
     /// The slot whose list `Mode::RoutineBuildPick` is showing.
     pub picking: Option<&'static str>,
     /// The build row to put the highlight back on after a pick or a name.
@@ -73,7 +73,7 @@ impl App {
     fn compile_draft(&mut self) {
         let draft = std::mem::take(&mut self.routine_draft);
         let Some(game) = &mut self.game else { return };
-        match game.build_routine(&draft.name, &draft.parts) {
+        match game.build_routine(draft.name.as_str(), &draft.parts) {
             Ok(_) => {
                 self.routine_draft = RoutineDraft {
                     row: COMPILE_ROW,
@@ -103,7 +103,8 @@ impl App {
         let Some(idx) = self.selected_index(key, options.len() + 1) else {
             return;
         };
-        let defaulted = self.routine_draft.name == default_routine_name(&self.routine_draft.parts);
+        let defaulted =
+            self.routine_draft.name.as_str() == default_routine_name(&self.routine_draft.parts);
         let parts = &mut self.routine_draft.parts;
         if idx == options.len() {
             parts.retain(|p| p.slot() != slot);
@@ -127,7 +128,9 @@ impl App {
         }
         self.prune_draft();
         if defaulted {
-            self.routine_draft.name = default_routine_name(&self.routine_draft.parts);
+            self.routine_draft
+                .name
+                .set(default_routine_name(&self.routine_draft.parts));
         }
         self.leave_pick();
     }
@@ -168,16 +171,9 @@ impl App {
                 self.menu_selected = self.routine_draft.row;
                 self.mode = Mode::RoutineBuild;
             }
-            GameKey::Backspace => {
-                self.routine_draft.name.pop();
+            key => {
+                self.routine_draft.name.edit(key, ROUTINE_NAME_MAX);
             }
-            GameKey::Char(c)
-                if !c.is_control()
-                    && self.routine_draft.name.chars().count() < ROUTINE_NAME_MAX =>
-            {
-                self.routine_draft.name.push(c);
-            }
-            _ => {}
         }
     }
 

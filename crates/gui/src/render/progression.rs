@@ -1167,7 +1167,7 @@ mod tests {
                     // of the drawn line as the text is.
                     let drawn_text = match row {
                         Row::Text(text) => text.clone(),
-                        Row::TextColored(text, _) => text.clone(),
+                        Row::TextColored(text, _) | Row::TextEntry { text, .. } => text.clone(),
                         Row::Item { text, .. } => format!("  {text}"),
                     };
                     measured += 1;
@@ -1248,7 +1248,9 @@ mod tests {
         let texts: Vec<&str> = rows
             .iter()
             .map(|r| match r {
-                Row::Text(t) | Row::TextColored(t, _) => t.as_str(),
+                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
+                    t.as_str()
+                }
                 Row::Item { text, .. } => text.as_str(),
             })
             .collect();

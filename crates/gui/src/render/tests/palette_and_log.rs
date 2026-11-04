@@ -375,7 +375,7 @@ fn no_game_menu_row_overflows_the_hub_content_at_1280x720() {
             assert!(!rows.is_empty(), "{mode:?} drew no rows");
             for row in &rows {
                 let text = match row {
-                    Row::Text(t) | Row::TextColored(t, _) => t,
+                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, .. } => text,
                 };
                 let width = p.measure_ui_advance(text, m.font_size);

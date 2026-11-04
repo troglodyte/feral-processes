@@ -86,7 +86,9 @@ fn the_widest_base_staff_row_stays_inside_the_content_rect() {
     });
     for row in base_staff_menu_rows(&t, &[], 0, Some(0)) {
         let text = match &row {
-            Row::Text(text) | Row::TextColored(text, _) => text.clone(),
+            Row::Text(text) | Row::TextColored(text, _) | Row::TextEntry { text, .. } => {
+                text.clone()
+            }
             Row::Item { text, .. } => text.clone(),
         };
         assert!(
@@ -105,7 +107,9 @@ fn the_widest_base_staff_row_stays_inside_the_content_rect() {
             let room = content.w - m.pad * 2.0;
             for row in &rows {
                 let text = match row {
-                    Row::Text(text) | Row::TextColored(text, _) => text.clone(),
+                    Row::Text(text) | Row::TextColored(text, _) | Row::TextEntry { text, .. } => {
+                        text.clone()
+                    }
                     Row::Item { text, .. } => format!("     {text}"),
                 };
                 let drawn = p.measure_ui_advance(&text, m.font_size);

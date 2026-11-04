@@ -93,7 +93,8 @@ fn building_a_routine_through_the_screen_compiles_and_installs_it() {
     pick_row(&mut app, NAME_ROW);
     assert_eq!(app.mode, Mode::RoutineBuildName);
     assert_eq!(
-        app.routine_draft.name, "Heal",
+        app.routine_draft.name.as_str(),
+        "Heal",
         "the Core's name is the default"
     );
     for _ in 0.."Heal".len() {
@@ -102,7 +103,7 @@ fn building_a_routine_through_the_screen_compiles_and_installs_it() {
     type_text(&mut app, "Mend All");
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::RoutineBuild);
-    assert_eq!(app.routine_draft.name, "Mend All");
+    assert_eq!(app.routine_draft.name.as_str(), "Mend All");
 
     pick_row(&mut app, COMPILE_ROW);
     assert!(app.routine_draft.parts.is_empty(), "the draft resets");
@@ -138,11 +139,30 @@ fn the_name_field_stops_at_its_limit_and_backspace_deletes() {
     open_page(&mut app, Mode::RoutineBuild);
     pick_row(&mut app, NAME_ROW);
     type_text(&mut app, &"x".repeat(40));
-    assert_eq!(app.routine_draft.name.chars().count(), ROUTINE_NAME_MAX);
+    assert_eq!(
+        app.routine_draft.name.as_str().chars().count(),
+        ROUTINE_NAME_MAX
+    );
     app.handle_key(GameKey::Backspace);
-    assert_eq!(app.routine_draft.name.chars().count(), ROUTINE_NAME_MAX - 1);
+    assert_eq!(
+        app.routine_draft.name.as_str().chars().count(),
+        ROUTINE_NAME_MAX - 1
+    );
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::RoutineBuild);
+}
+
+#[test]
+fn the_name_field_edits_where_the_cursor_is() {
+    let mut app = app_at_a_workbench(80_005);
+    open_page(&mut app, Mode::RoutineBuild);
+    pick_row(&mut app, NAME_ROW);
+    type_text(&mut app, "Mnd");
+    app.handle_key(GameKey::Left);
+    app.handle_key(GameKey::Left);
+    type_text(&mut app, "e");
+    assert_eq!(app.routine_draft.name.as_str(), "Mend");
+    assert_eq!(app.mode, Mode::RoutineBuildName, "Left stays in the field");
 }
 
 #[test]
@@ -274,9 +294,13 @@ fn the_name_follows_the_core_until_the_player_types_one() {
     }
     open_page(&mut app, Mode::RoutineBuild);
     choose(&mut app, 0, heal());
-    assert_eq!(app.routine_draft.name, "Heal");
+    assert_eq!(app.routine_draft.name.as_str(), "Heal");
     choose(&mut app, 0, damage());
-    assert_eq!(app.routine_draft.name, "Damage", "a new Core renames it");
+    assert_eq!(
+        app.routine_draft.name.as_str(),
+        "Damage",
+        "a new Core renames it"
+    );
     pick_row(&mut app, 0);
     let clear = app
         .game
@@ -285,12 +309,20 @@ fn the_name_follows_the_core_until_the_player_types_one() {
         .build_part_options("Core", &app.routine_draft.parts)
         .len();
     pick_row(&mut app, clear);
-    assert_eq!(app.routine_draft.name, "", "clearing the Core clears it");
+    assert_eq!(
+        app.routine_draft.name.as_str(),
+        "",
+        "clearing the Core clears it"
+    );
 
     choose(&mut app, 0, heal());
     pick_row(&mut app, NAME_ROW);
     type_text(&mut app, "s");
     app.handle_key(GameKey::Enter);
     choose(&mut app, 0, damage());
-    assert_eq!(app.routine_draft.name, "Heals", "a typed name stays");
+    assert_eq!(
+        app.routine_draft.name.as_str(),
+        "Heals",
+        "a typed name stays"
+    );
 }

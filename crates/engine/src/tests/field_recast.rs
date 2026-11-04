@@ -512,3 +512,29 @@ fn a_rest_clears_a_flagged_timed_buff_and_nothing_reruns_it() {
     assert!(!log_has(&game, "reruns"));
     assert_eq!(game.auto_recast_of(player), vec![id], "the flag stays on");
 }
+
+#[test]
+fn a_knocked_out_holder_does_not_rerun() {
+    let mut game = game();
+    pin_player_combat(&mut game);
+    let player = game.player_entity();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    set_level(&mut game, pet, 10);
+    game.world.resource_mut::<Party>().0.push(pet);
+    let id = give_core(&mut game, pet, Core::FieldRegen);
+    game.set_auto_recast(pet, &id, true);
+    fill(&mut game, pet, 100.0);
+    run_and_age(&mut game, pet, &id, FieldRoutineTarget::Ally(player));
+    game.world
+        .get_mut::<crate::components::Stats>(pet)
+        .unwrap()
+        .hp = 0;
+    let before = reserve(&game, pet);
+
+    game.tick_field_buffs();
+
+    assert!(buffs(&game, player).is_empty());
+    assert_eq!(reserve(&game, pet), before, "nothing was spent");
+    assert!(!log_has(&game, "reruns"));
+    assert!(log_has(&game, "fades"));
+}

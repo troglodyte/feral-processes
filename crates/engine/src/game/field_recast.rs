@@ -130,8 +130,12 @@ impl Game {
         holders
             .iter()
             .copied()
+            // A manual run is refused in battle, so liveness never mattered
+            // there; a recast fires every combat round, when a holder can
+            // be down.
             .find(|&h| {
-                self.is_auto_recast(h, ability)
+                self.creature_alive(h)
+                    && self.is_auto_recast(h, ability)
                     && self
                         .world
                         .get::<Routines>(h)

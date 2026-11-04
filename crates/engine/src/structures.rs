@@ -1087,12 +1087,22 @@ impl StructureDef {
     }
 
     /// How much of its `spends_supply` item this structure's input holds at
-    /// most: the authored `supply_capacity`, else `INPUT_STOCK_BATCHES`
-    /// batches. The one answer the hauler's `input_room` and the roster's
-    /// `StructureReport::supply` both read.
+    /// most: the authored `supply_capacity`, else `POWER_UPKEEP_HOPPER_CELLS`
+    /// for a burner, else `INPUT_STOCK_BATCHES` batches. The one answer the
+    /// hauler's `input_room` and the roster's `StructureReport::supply` both
+    /// read.
+    ///
+    /// A burner's deep hopper is not an authored `supply_capacity` because
+    /// that field also files a top-up want whenever a whole load fits — on
+    /// a burner, nearly always — and holds a body on it ahead of every order.
     pub fn supply_input_capacity(&self) -> u32 {
-        self.supply_capacity
-            .unwrap_or_else(|| crate::game::base::hauling::input_capacity(self.supply_batch()))
+        self.supply_capacity.unwrap_or_else(|| {
+            if self.power_upkeep.is_some() {
+                crate::tuning::POWER_UPKEEP_HOPPER_CELLS
+            } else {
+                crate::game::base::hauling::input_capacity(self.supply_batch())
+            }
+        })
     }
 
     /// Whether raising or upgrading this structure costs a tamed program.

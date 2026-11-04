@@ -1774,9 +1774,7 @@ fn a_structure_manifest_names_the_supply_it_spends() {
         game.structure_manifest(recharger).unwrap().supply,
         Some((
             "Power Cell".to_string(),
-            crate::game::base::hauling::input_capacity(
-                crate::tuning::POWER_UPKEEP_CELLS_PER_WINDOW
-            )
+            crate::tuning::POWER_UPKEEP_HOPPER_CELLS
         ))
     );
     assert_eq!(game.structure_manifest(factory).unwrap().supply, None);

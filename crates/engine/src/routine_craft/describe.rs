@@ -104,7 +104,7 @@ pub(super) fn sentence(def: &AbilityDef, s: &Split) -> String {
             format!("Hide {to} from targeting for {duration} rounds")
         }
         AbilityEffect::Haste { version } => {
-            let bonus = t::HASTE_MOVE_BONUS[usize::from(*version).saturating_sub(1).min(2)];
+            let bonus = t::haste_move_bonus(*version);
             match *version >= t::HASTE_DOUBLE_SWING_VERSION {
                 true => format!(
                     "Haste {to}: +{bonus} movement on the battle map for the rest of the fight, and every swing strikes twice"

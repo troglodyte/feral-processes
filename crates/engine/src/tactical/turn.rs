@@ -665,14 +665,26 @@ impl Game {
             .is_some()
         {
             let round_before = self.world.resource::<TacticalBattle>().round;
-            let mut dmg = self.swing_damage(actor);
-            // Only the besiegers' blows are softened: the player breaking
-            // their own wall takes the full figure.
-            if self.world.get::<Hostile>(actor).is_some() {
-                dmg = self.shielded_structure_damage(target, dmg);
-            }
             let label = self.entity_label(target);
-            self.damage_structure(target, dmg, &label, "a siege");
+            // A v3 Haste strikes twice here too, the second blow only if the
+            // first left the structure standing.
+            let blows = if self.swings_twice(actor) { 2 } else { 1 };
+            for _ in 0..blows {
+                let mut dmg = self.swing_damage(actor);
+                // Only the besiegers' blows are softened: the player breaking
+                // their own wall takes the full figure.
+                if self.world.get::<Hostile>(actor).is_some() {
+                    dmg = self.shielded_structure_damage(target, dmg);
+                }
+                self.damage_structure(target, dmg, &label, "a siege");
+                if self
+                    .world
+                    .get::<crate::components::Structure>(target)
+                    .is_none()
+                {
+                    break;
+                }
+            }
             // **The entity is gone, not merely its `Durability`.** A
             // `Durability`-less structure (`raidable: false` — the Home)
             // makes `damage_structure` return before ever touching that
@@ -761,6 +773,10 @@ impl Game {
             .unwrap_or(crate::components::GlyphColor::White);
         let bolt_fx = self.weapon_fx(actor);
         let last = bodies.len() - 1;
+        // Whether a swing in this action fumbled into a Crash: the stun it
+        // arms is what costs the extra swing, and a stun the actor already
+        // carried is not (on a map it only stops walking).
+        let mut crashed = false;
         for (index, body) in bodies.into_iter().enumerate() {
             // `party_member_swing`'s guard, and its reason: a fumble's
             // Recoil or Opening rung damages the swinger, so it really can
@@ -769,7 +785,7 @@ impl Game {
             if index > 0 && !self.creature_alive(actor) {
                 break;
             }
-            if hasted_twice && index == last && !self.extra_swing_open(actor, body) {
+            if hasted_twice && index == last && !self.extra_swing_open(body, crashed) {
                 break;
             }
             // **Before the blow lands**, so a body that dies to it still gets
@@ -792,6 +808,8 @@ impl Game {
                     .with_type(damage_type)
                     .with_weapon(weapon),
             );
+            crashed |=
+                outcome == crate::battle::AttackOutcome::Fumble(crate::battle::FumbleRung::Crash);
             let line = self.party_swing_line(actor, &move_name, outcome);
             self.log_swing(
                 crate::resources::MessageKind::PartyDamage,
@@ -817,11 +835,11 @@ impl Game {
             .is_some_and(|h| h.version >= crate::tuning::HASTE_DOUBLE_SWING_VERSION)
     }
 
-    /// Haste's second swing needs a target still standing and an actor that
-    /// a fumbled Crash has not stunned, the guards the group model's swing
-    /// loop keeps.
-    fn extra_swing_open(&self, actor: Entity, target: Entity) -> bool {
-        self.creature_alive(target) && !self.is_stunned(actor)
+    /// Haste's second swing needs a target still standing and no Crash
+    /// fumbled by this action's own earlier swing, the guards the group
+    /// model's swing loop keeps.
+    fn extra_swing_open(&self, target: Entity, crashed: bool) -> bool {
+        self.creature_alive(target) && !crashed
     }
 
     /// The acting body braces: `DEFEND_MITIGATION_BONUS` percentage points

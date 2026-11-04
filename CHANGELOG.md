@@ -55,7 +55,7 @@ the same kind and list it here.
 
 ## Unreleased
 
-**Companions can now be hasted in battle.** A new Haste routine core, built at three versions in the routine crafter, lets a companion cover four cells more on the battle map at v1 and eight more at v2 and v3. At v3 it also swings twice with each ordinary attack, on top of any second swing the class already grants. Haste lasts until the fight ends, a recast keeps the stronger version, and a hasted program shows a double chevron on the map and a "Hasted vN" row in the buffs list.
+**Companions can now be hasted in battle.** A new Haste routine core, built at three versions in the routine crafter, lets a companion cover four cells more on the battle map at v1 and eight more at v2 and v3. At v3 it also swings twice with each ordinary attack, on top of any second swing the class already grants. Haste lands on your own side only, even when a group shape also covers hostiles, and a v3 body strikes a structure twice as well. It lasts until the fight ends, a recast keeps the stronger version, and a hasted program shows a double chevron on the map and a "Hasted vN" row in the buffs list.
 
 ## 0.21.25
 

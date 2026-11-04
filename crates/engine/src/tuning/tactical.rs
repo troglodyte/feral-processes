@@ -181,6 +181,13 @@ pub const TACTICAL_MOVE_MAX: u32 = 8;
 /// point: Haste exists so a companion can reach the fight.
 pub const HASTE_MOVE_BONUS: [u32; 3] = [4, 8, 8];
 
+/// The movement bonus of Haste `version`, clamped into the table so a
+/// version outside 1..=3 reads the nearest row rather than indexing off it.
+pub fn haste_move_bonus(version: u8) -> u32 {
+    let row = usize::from(version).saturating_sub(1);
+    HASTE_MOVE_BONUS[row.min(HASTE_MOVE_BONUS.len() - 1)]
+}
+
 /// The Haste version from which an ordinary swing strikes twice.
 pub const HASTE_DOUBLE_SWING_VERSION: u8 = 3;
 

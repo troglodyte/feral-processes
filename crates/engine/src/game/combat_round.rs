@@ -1928,6 +1928,11 @@ impl Game {
                     self.log(format!("{name} detaches {on} from the scheduler."));
                 }
                 AbilityEffect::Haste { version } => {
+                    // Allies only: a Group or Everyone shape on a map can
+                    // cover the other side, and quickening it helps no one.
+                    if self.is_hostile(recipient) != hostile {
+                        continue;
+                    }
                     self.arm_haste(recipient, *version);
                     self.log(format!("{name} quickens {on}."));
                 }

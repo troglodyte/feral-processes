@@ -19,8 +19,8 @@ use crate::species::SpeciesDb;
 use crate::tactical::map::Board;
 use crate::tactical::{TacticalBattle, deploy, footprint_cells_at, footprint_clear};
 use crate::tuning::{
-    DEFAULT_BASE_SPEED, HASTE_MOVE_BONUS, TACTICAL_MELEE_RANGE, TACTICAL_MOVE_BASE,
-    TACTICAL_MOVE_MAX, TACTICAL_MOVE_MIN, TACTICAL_MOVE_SPEED_STEP,
+    DEFAULT_BASE_SPEED, TACTICAL_MELEE_RANGE, TACTICAL_MOVE_BASE, TACTICAL_MOVE_MAX,
+    TACTICAL_MOVE_MIN, TACTICAL_MOVE_SPEED_STEP, haste_move_bonus,
 };
 use crate::world::NEIGHBOURS;
 
@@ -82,7 +82,7 @@ impl Game {
         let haste = self
             .world
             .get::<Hasted>(entity)
-            .map_or(0, |h| HASTE_MOVE_BONUS[usize::from(h.version) - 1]);
+            .map_or(0, |h| haste_move_bonus(h.version));
         base + haste
     }
 }

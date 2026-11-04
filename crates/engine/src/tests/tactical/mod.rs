@@ -21,6 +21,7 @@ mod bracing_and_range;
 mod cover;
 mod engagement_decompile;
 mod fixtures;
+mod haste;
 mod lifecycle;
 mod movement;
 mod routines;

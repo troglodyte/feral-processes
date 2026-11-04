@@ -227,6 +227,19 @@ pub(super) fn place_bodies(
     place_one(game, other, theirs);
 }
 
+/// Seats `body` on a free cell beside the player, for a test about what a
+/// body does once in reach rather than whether its movement gets it there.
+pub(super) fn seat_beside_player(game: &mut Game, body: Entity) {
+    let player = game.player_entity();
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(player)
+        .expect("the player is on the board");
+    let cell = beside(game, at).expect("a free cell beside the player");
+    place_one(game, body, cell);
+}
+
 pub(crate) fn place_one(game: &mut Game, body: Entity, cell: (i32, i32)) {
     assert!(
         game.world

@@ -18,9 +18,14 @@ pub const QUALITY_DEFAULT: u8 = 100;
 /// Refit Bench restores it.
 pub const GEAR_DURABILITY: u8 = 15;
 
-/// Annealed Cores one refit takes from the bench's stock, whatever the copy
-/// is: one material and one unit, so the bill never needs explaining.
-pub const REFIT_CORES: u32 = 1;
+/// Repair points one Annealed Core pours into a Refit Bench's charge. A point
+/// is one unit of a copy's `wear`, so a core is never spent on more than it
+/// restores.
+pub const REFIT_POINTS_PER_CORE: u32 = 50;
+
+/// Repair points a Refit Bench restores each tick it serves the player:
+/// mending is slow, so standing by the bench is the cost.
+pub const REFIT_POINTS_PER_TICK: u8 = 1;
 
 /// Ticks the player must have stood on one base cell before a Refit Bench
 /// starts mending: a walk past the bench spends nothing, so cores go to a

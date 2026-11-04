@@ -388,7 +388,10 @@ impl Game {
                 Option<&crate::components::DropPod>,
                 Option<&crate::components::BatteryCharge>,
             ),
-            Option<&crate::components::Incubator>,
+            (
+                Option<&crate::components::Incubator>,
+                Option<&crate::components::RefitCharge>,
+            ),
             Option<&crate::components::MachineRecipe>,
             Option<&crate::components::StudyYield>,
         )>();
@@ -408,7 +411,7 @@ impl Game {
             filter,
             racked,
             (pod, battery),
-            incubator,
+            (incubator, refit_charge),
             recipe,
             study_yield,
         ) in structure_query.iter(&self.world)
@@ -442,6 +445,7 @@ impl Game {
                 pod_charged: pod.map(|p| p.charged),
                 battery_charge: battery.map_or(0, |b| b.0),
                 incubating: incubator.map(|i| i.slots.clone()).unwrap_or_default(),
+                refit_charge: refit_charge.map_or(0, |c| c.0),
             });
         }
         structures

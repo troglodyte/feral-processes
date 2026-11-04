@@ -748,3 +748,9 @@ mod machine_status_tests {
 /// Saved, like `PowerFuel`: it is the state, not something a tick recomputes.
 #[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BatteryCharge(pub u32);
+
+/// Repair points a Refit Bench has already poured from a spent Annealed Core
+/// and not yet restored to gear. Absent reads as zero, so only a bench that
+/// has served carries one. Saved: a reload must not void a paid core.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RefitCharge(pub u32);

@@ -1612,6 +1612,12 @@ pub struct StructureSave {
     /// no `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub battery_charge: u32,
+    /// A Refit Bench's poured repair points — see `components::RefitCharge`.
+    /// Zero on every other structure and on a save written before points
+    /// existed, which held no charge. Additive, so no `SAVE_FORMAT_VERSION`
+    /// bump.
+    #[serde(default)]
+    pub refit_charge: u32,
 }
 
 /// `serde`'s default for a machine's build quality — the neutral 1.0, which

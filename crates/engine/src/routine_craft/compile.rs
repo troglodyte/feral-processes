@@ -135,7 +135,7 @@ fn scaled(base: i32, factor: f32) -> i32 {
 }
 
 /// Per-target magnitude factor of the Area part, 1.0 for none.
-fn area_magnitude(area: Option<AreaKind>) -> f32 {
+pub(super) fn area_magnitude(area: Option<AreaKind>) -> f32 {
     match area {
         None => 1.0,
         Some(AreaKind::Group) => t::CRAFT_AREA_GROUP_MAGNITUDE,
@@ -329,12 +329,16 @@ fn accuracy(s: &Split) -> i32 {
     if fig.accuracy == 0 {
         return 0;
     }
-    let area = match s.area {
+    (fig.accuracy + area_accuracy(s.area)).max(0)
+}
+
+/// The accuracy an Area part costs a Core that rolls to hit, 0 for none.
+pub(super) fn area_accuracy(area: Option<AreaKind>) -> i32 {
+    match area {
         None => 0,
         Some(AreaKind::Group) => t::CRAFT_AREA_GROUP_ACCURACY,
         Some(AreaKind::Everyone) => t::CRAFT_AREA_EVERYONE_ACCURACY,
-    };
-    (fig.accuracy + area).max(0)
+    }
 }
 
 fn cooldown(s: &Split) -> u32 {

@@ -248,7 +248,11 @@ mod in_a_game {
     }
 
     fn fixture() -> Fixture {
-        let mut game = Game::new(5200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        fixture_in(&test_assets_dir())
+    }
+
+    fn fixture_in(assets: &std::path::Path) -> Fixture {
+        let mut game = Game::new(5200, DifficultyMode::Forgiving, assets).unwrap();
         place_home(&mut game);
         lay_floor_box(&mut game, (-12, -12), (12, 12));
         let station = base_with_a_research_node(&mut game);
@@ -947,6 +951,115 @@ mod in_a_game {
         let told = storyline_notifications(&mut f.game);
         let body = told.last().map(|n| n.body.clone()).unwrap_or_default();
         assert!(body.contains("level 1"), "{body}");
+    }
+
+    /// A project whose bill is a handful of one plain item and whose data
+    /// cost is small, so a test can watch the bill go in and the project end.
+    const BILLED_NODE: &str = r#"(
+    id: "errand_billed",
+    name: "Errand Billed Node",
+    description: "A node with a bill.",
+    cost: 4,
+    materials: [("core_fragment", 6)],
+)"#;
+    const BILL: u32 = 6;
+
+    /// A fused base with the billed project selected and `BILL` units on its
+    /// Depot's shelf and nowhere else; the two non-host staff are idle.
+    fn fused_with_a_bill(tag: &str, pace: f64) -> (Fixture, Entity, ScratchAssets) {
+        let assets = assets_dir_with_extra_research(tag, "errand_billed.ron", BILLED_NODE);
+        let mut f = fixture_in(&assets);
+        set_researched(&mut f.game, 25);
+        tick_until(&mut f.game, 400, is_fused);
+        let shelves: Vec<Entity> = f
+            .game
+            .world
+            .query_filtered::<Entity, With<Stock>>()
+            .iter(&f.game.world)
+            .collect();
+        let mut depot = None;
+        for shelf in shelves {
+            let is_depot = f
+                .game
+                .world
+                .get::<Structure>(shelf)
+                .is_some_and(|s| s.kind == "depot");
+            let mut stock = f.game.world.get_mut::<Stock>(shelf).unwrap();
+            stock.output.remove(&ItemId::from(ids::CORE_FRAGMENT));
+            if is_depot {
+                depot = Some(shelf);
+            }
+        }
+        let depot = depot.expect("the research fixture stands a Depot");
+        f.game
+            .world
+            .get_mut::<Stock>(depot)
+            .unwrap()
+            .output
+            .insert(ItemId::from(ids::CORE_FRAGMENT), BILL);
+        f.game.select_research("errand_billed").unwrap();
+        let BaseAi::Fused(fused) = &mut f.game.storyline.base_ai else {
+            unreachable!()
+        };
+        fused.pace_at_fusion = pace;
+        fused.practice = 0;
+        fused.carry = 0.0;
+        f.game
+            .world
+            .resource_mut::<ActiveResearch>()
+            .progress
+            .remove("errand_billed");
+        (f, depot, assets)
+    }
+
+    fn delivered(game: &Game) -> u32 {
+        game.world
+            .resource::<ActiveResearch>()
+            .delivered
+            .get("errand_billed")
+            .and_then(|d| d.get(&ItemId::from(ids::CORE_FRAGMENT)))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn idle_staff_carry_the_bill_to_the_ai_station_and_the_project_completes() {
+        let (mut f, depot, _assets) = fused_with_a_bill("errand_completes", 4.0);
+        tick_until(&mut f.game, 1500, |g| {
+            g.world.resource::<Research>().0.contains("errand_billed")
+        });
+        // Completion clears the delivered tally, so the shelf is the witness.
+        let left = f
+            .game
+            .world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(left, 0, "the bill left the shelf");
+    }
+
+    #[test]
+    fn the_errand_credits_no_research_itself() {
+        let (mut f, _depot, _assets) = fused_with_a_bill("errand_no_credit", 0.0);
+        tick_until(&mut f.game, 1500, |g| delivered(g) == BILL);
+        let progress = f
+            .game
+            .world
+            .resource::<ActiveResearch>()
+            .progress
+            .get("errand_billed")
+            .copied()
+            .unwrap_or(0);
+        assert_eq!(progress, 0, "carrying the bill earns no data");
+    }
+
+    #[test]
+    fn no_errand_runs_while_the_arc_is_dormant() {
+        let mut f = fixture();
+        assert!(f.game.provision_board().is_none());
     }
 
     #[test]

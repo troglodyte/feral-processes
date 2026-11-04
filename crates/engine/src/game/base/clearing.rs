@@ -323,7 +323,7 @@ impl Game {
     }
 
     /// Takes `moved` units off the body's load, ending the trip at zero.
-    fn lighten(&mut self, worker: Entity, load: &Carrying, moved: u32) {
+    pub(crate) fn lighten(&mut self, worker: Entity, load: &Carrying, moved: u32) {
         let mut body = self.world.entity_mut(worker);
         if moved >= load.qty {
             body.remove::<(Carrying, Clearing)>();

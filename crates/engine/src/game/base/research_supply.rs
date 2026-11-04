@@ -118,11 +118,14 @@ pub(crate) fn buffer_is_free(machine: Position, item: &ItemId, staffed: &[Consum
 }
 
 /// A unit of the bill a Station's program could pick up.
-struct Source {
-    pos: Position,
-    side: u8,
-    item: ItemId,
-    qty: u32,
+pub(crate) struct Source {
+    pub(crate) entity: Entity,
+    pub(crate) pos: Position,
+    pub(crate) side: u8,
+    pub(crate) item: ItemId,
+    pub(crate) qty: u32,
+    /// A unit lying on a stockpile cell rather than held in a structure.
+    pub(crate) on_floor: bool,
 }
 
 impl Game {
@@ -159,7 +162,7 @@ impl Game {
     /// Every unit of `items` a Station's program may take: a Depot's shelf, a
     /// free machine buffer (`buffer_is_free`), or a stockpiled unit. Never a
     /// Station's own hopper.
-    fn research_sources(&self, items: &[ItemId]) -> Vec<Source> {
+    pub(crate) fn research_sources(&self, items: &[ItemId]) -> Vec<Source> {
         let stations = self.research_stations();
         let staffed = self.staffed_consumers();
         let db = self.world.resource::<StructureDb>();
@@ -178,6 +181,8 @@ impl Game {
                 let qty = stock.output.get(item).copied().unwrap_or(0);
                 if qty > 0 && (def.stores || buffer_is_free(*pos, item, &staffed)) {
                     found.push(Source {
+                        entity: e.id(),
+                        on_floor: false,
                         pos: *pos,
                         side: def.footprint,
                         item: item.clone(),
@@ -190,7 +195,9 @@ impl Game {
             stock::stockpiled(self)
                 .into_iter()
                 .filter(|(_, _, held)| items.contains(held))
-                .map(|(pos, _, item)| Source {
+                .map(|(pos, entity, item)| Source {
+                    entity,
+                    on_floor: true,
                     pos,
                     side: 1,
                     item,

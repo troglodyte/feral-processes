@@ -35,6 +35,7 @@ pub(crate) mod morale;
 pub(crate) mod offshift;
 pub(crate) mod power;
 pub(crate) mod prison;
+pub(crate) mod provision;
 pub(crate) mod repair;
 pub(crate) mod research_supply;
 pub(crate) mod sabotage;

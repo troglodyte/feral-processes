@@ -56,20 +56,39 @@ fn label_of(pets: &[PetInfo], e: Option<Entity>) -> String {
         .map_or_else(|| "it".to_string(), |p| p.name.clone())
 }
 
+/// The first-parent rows, shared by the popup and the two hubs' Breed
+/// pages, whose keybar stands in for the footer. The bay's slots head them,
+/// so the base report's page shows the child hatching as the sheet does.
+pub(super) fn breed_page_rows(game: &mut Game, bay: Option<Entity>, selected: usize) -> Vec<Row> {
+    let pets = game.owned_pets();
+    let candidates: Vec<&PetInfo> = pets.iter().collect();
+    let mut rows = Vec::new();
+    if let Some(bay) = bay {
+        rows.push(text_row("Breeding Bay"));
+        rows.extend(
+            incubation_lines(&game.incubations(bay))
+                .into_iter()
+                .map(text_row),
+        );
+        rows.push(text_row(""));
+    }
+    rows.push(text_row("Breed which program? Pick the first of two."));
+    if candidates.is_empty() {
+        rows.push(text_row("(you have no compiled programs)"));
+    }
+    push_parent_rows(&mut rows, game, &candidates, selected);
+    rows
+}
+
 pub(super) fn draw_breed_menu(
     game: &mut Game,
+    bay: Option<Entity>,
     selected: usize,
     refusal: Option<&str>,
     painter: &Painter,
     m: &Metrics,
 ) {
-    let pets = game.owned_pets();
-    let candidates: Vec<&PetInfo> = pets.iter().collect();
-    let mut rows = vec![text_row("Breed which program? Pick the first of two.")];
-    if candidates.is_empty() {
-        rows.push(text_row("(you have no compiled programs)"));
-    }
-    push_parent_rows(&mut rows, game, &candidates, selected);
+    let mut rows = breed_page_rows(game, bay, selected);
     push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Breed", PopupSize::Large, &rows, refusal, painter, m);
 }

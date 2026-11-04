@@ -1216,6 +1216,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let popup_parent = base_popup_parent(app.mode).and_then(|p| base_report::HubFrame::of(app, p));
     let on_rail = app.hub_on_rail;
     let craft_at_bench = app.craft_at_bench();
+    let breeding_bay = app.breeding_bay();
     // Read ahead of `game` for the reason the rows above are. The two dev
     // pickers' rows are views off `&App`, taken only on their own modes.
     let dev_console = app.dev_console_enabled();
@@ -1296,6 +1297,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                         text_row("Esc back"),
                     ]
                 }),
+            None,
+        )),
+        Mode::Breed => Some((
+            breeding::breed_page_rows(game, breeding_bay, selected),
             None,
         )),
         _ => None,
@@ -1590,18 +1595,22 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             painter,
             m,
         ),
-        Mode::Breed => draw_breed_menu(game, selected, refusal, painter, m),
+        Mode::Breed => draw_breed_menu(game, breeding_bay, selected, refusal, painter, m),
         Mode::BreedSecond => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             draw_breed_second_menu(game, app.pending_breed_first, selected, refusal, painter, m)
         }
-        Mode::BreedConfirm => draw_breed_confirm_menu(
-            game,
-            app.pending_breed_first,
-            app.pending_breed_second,
-            refusal,
-            painter,
-            m,
-        ),
+        Mode::BreedConfirm => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            draw_breed_confirm_menu(
+                game,
+                app.pending_breed_first,
+                app.pending_breed_second,
+                refusal,
+                painter,
+                m,
+            )
+        }
         Mode::RenamePet => draw_rename_menu(
             game,
             app.pending_rename,

@@ -131,10 +131,13 @@ impl App {
             && self
                 .game
                 .as_ref()
-                .is_some_and(|g| g.incubations(bay).iter().any(|i| i.child.is_none()))
+                .is_some_and(|g| super::breeding::bay_has_room(g, bay))
         {
             self.pending_structure_manifest = None;
             self.pending_breed_bay = Some(bay);
+            // A standing bay puts this page on the base report's rail, so
+            // the cursor starts in the page, not on a rail it never saw.
+            self.hub_on_rail = false;
             self.mode = Mode::Breed;
             return;
         }

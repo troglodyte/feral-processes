@@ -26,6 +26,24 @@ impl Game {
         self.world.resource::<GameClock>().tick
     }
 
+    /// The bay the base report's Breed page breeds into: the first standing
+    /// bay by tile that has an empty slot, else the first, so a full bay's
+    /// page still shows the child it holds. `None` with no bay built.
+    pub fn base_breeding_bay(&self) -> Option<Entity> {
+        let mut query = self
+            .world
+            .try_query::<(Entity, &Position, &Incubator, &Structure)>()?;
+        let mut bays: Vec<((i32, i32), Entity, bool)> = query
+            .iter(&self.world)
+            .map(|(e, pos, inc, _)| ((pos.x, pos.y), e, inc.slots.iter().any(Option::is_none)))
+            .collect();
+        bays.sort_by_key(|(tile, e, _)| (*tile, *e));
+        bays.iter()
+            .find(|(_, _, room)| *room)
+            .or(bays.first())
+            .map(|(_, e, _)| *e)
+    }
+
     /// Why `program` cannot be a parent right now, or `None`. The one answer
     /// both `breed` and the parent picker's dimmed rows read.
     pub fn breed_refusal(&self, program: Entity) -> Option<BreedRefusal> {

@@ -1,7 +1,7 @@
 //! What `[c]` can do with the structures beside the party: one entry per
 //! structure, each with the pages the hub shows for it.
 
-use crate::components::{BuildSite, FarmPlot, FarmTile};
+use crate::components::{BuildSite, FarmPlot, FarmTile, Incubator};
 use crate::tactical::footprint_cells_at;
 use crate::*;
 
@@ -30,6 +30,10 @@ pub enum StructurePage {
     /// The Workbench's recipe list: the same Compile screen `[b]` opens,
     /// with the bench-only recipes in it.
     Compile,
+    /// A Breeding Bay's first-parent picker. Without it a bay's only page
+    /// was Info, which `adjacent_structures` leaves out of the cycle, so
+    /// `[c]` beside a bay fell through to the pack's downed programs.
+    Breed,
     Info,
 }
 
@@ -123,6 +127,10 @@ impl Game {
         page(forge, StructurePage::Weapon);
         page(forge, StructurePage::Salvage);
         page(bench, StructurePage::Compile);
+        page(
+            self.world.get::<Incubator>(e).is_some(),
+            StructurePage::Breed,
+        );
         pages.push(StructurePage::Info);
         pages
     }

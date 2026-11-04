@@ -1098,7 +1098,7 @@ impl Game {
             // branch used to misread that refusal as the structure having
             // just been destroyed.
             if self.world.get::<Structure>(body).is_some()
-                && self.world.get::<Durability>(body).is_none()
+                && (self.world.get::<Durability>(body).is_none() || self.is_base_ai_station(body))
             {
                 continue;
             }

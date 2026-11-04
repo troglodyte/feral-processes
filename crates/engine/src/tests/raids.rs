@@ -3223,3 +3223,77 @@ fn turret_raid_defense_stays_base_wide() {
     sweep_now(&mut game);
     assert_eq!(hp_lost(&game, target), RAID_DAMAGE - 1);
 }
+
+/// The AI's claimed Research Station is skipped by a sweep, and every other
+/// structure stays raidable — so the sweep lands on the extractor each time.
+#[test]
+fn a_sweep_skips_the_station_the_base_ai_has_claimed() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let station = game
+        .world
+        .spawn((
+            Structure {
+                kind: "research_node".to_string(),
+            },
+            Position { x: 5, y: 5 },
+            Durability { hp: 30, max_hp: 30 },
+        ))
+        .id();
+    game.world.spawn((
+        Structure {
+            kind: "extractor".to_string(),
+        },
+        Position { x: 8, y: 8 },
+        Durability { hp: 30, max_hp: 30 },
+    ));
+    game.storyline.base_ai = crate::storyline::BaseAi::Claiming {
+        host: ProgramId(1),
+        station: (5, 5),
+    };
+    for _ in 0..20 {
+        game.dev_force_raid();
+        for effect in game.take_effects() {
+            assert_eq!(effect.pos, (8, 8), "only the extractor is raidable");
+        }
+    }
+    assert_eq!(
+        game.world.get::<Durability>(station).map(|d| d.hp),
+        Some(30)
+    );
+}
+
+/// An off-screen siege breaks the other structures and leaves the claimed
+/// station alone, however much damage it has to spend.
+#[test]
+fn an_offscreen_siege_skips_the_station_the_base_ai_has_claimed() {
+    let mut game = Game::new(7, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut spawn = |kind: &str, x: i32| {
+        game.world
+            .spawn((
+                Structure {
+                    kind: kind.to_string(),
+                },
+                Position { x, y: 5 },
+                Durability { hp: 30, max_hp: 30 },
+            ))
+            .id()
+    };
+    let station = spawn("research_node", 5);
+    let other = spawn("extractor", 8);
+    game.storyline.base_ai = crate::storyline::BaseAi::Fused(crate::storyline::FusedAi {
+        host: ProgramId(1),
+        station: (5, 5),
+        level: 0,
+        analysis_at_fusion: 20,
+        pace_at_fusion: 1.0,
+        practice: 0,
+        carry: 0.0,
+        training: crate::storyline::TrainingTarget::default(),
+    });
+    game.siege_damage_structures(1000);
+    assert_eq!(
+        game.world.get::<Durability>(station).map(|d| d.hp),
+        Some(30)
+    );
+    assert!(game.world.get_entity(other).is_err(), "the extractor fell");
+}

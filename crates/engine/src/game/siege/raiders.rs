@@ -248,6 +248,7 @@ impl Game {
             .bodies()
             .filter(|&(e, _)| e != body)
             .filter(|&(e, _)| self.world.get::<Durability>(e).is_some())
+            .filter(|&(e, _)| !self.is_base_ai_station(e))
             .find(|&(e, _)| {
                 let scells = battle.cells_of(e);
                 reach::gap(&cells, &scells) <= TACTICAL_MELEE_RANGE

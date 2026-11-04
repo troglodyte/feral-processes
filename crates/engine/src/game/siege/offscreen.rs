@@ -148,11 +148,12 @@ impl Game {
     /// structure that cannot absorb the whole remaining pool is destroyed
     /// and the rest carries to the next one, which is the "spread" this
     /// pays out as.
-    fn siege_damage_structures(&mut self, want: u32) {
+    pub(crate) fn siege_damage_structures(&mut self, want: u32) {
         if want == 0 {
             return;
         }
         let mut remaining = want;
+        let ai_station = self.base_ai_station();
         let structures: Vec<Entity> = {
             let mut query = self
                 .world
@@ -162,7 +163,11 @@ impl Game {
                 .map(|(e, p)| (e, (p.x, p.y)))
                 .collect();
             ordered.sort_by_key(|&(e, pos)| (pos, e));
-            ordered.into_iter().map(|(e, _)| e).collect()
+            ordered
+                .into_iter()
+                .map(|(e, _)| e)
+                .filter(|&e| Some(e) != ai_station)
+                .collect()
         };
         for structure in structures {
             if remaining == 0 {

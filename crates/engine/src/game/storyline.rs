@@ -50,6 +50,13 @@ impl Game {
         self.station_entity_at(anchor)
     }
 
+    /// Whether `structure` is the one Research Station the AI has claimed or
+    /// fused with. A raid or siege leaves it alone; other stations stay
+    /// raidable.
+    pub(crate) fn is_base_ai_station(&self, structure: Entity) -> bool {
+        self.base_ai_station() == Some(structure)
+    }
+
     /// Whether the arc has left `Dormant`: from then on the labour scheduler
     /// posts nobody to a Research Station.
     pub(crate) fn storyline_owns_research(&self) -> bool {

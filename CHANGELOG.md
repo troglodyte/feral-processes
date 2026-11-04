@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.32
+
+**A Breeding Bay can now be used from the menus.** Standing beside a bay, c opens it with a Breed page, where before it skipped the bay and showed only your downed programs. Once a bay is built, the base report (b) also has a Breed page at the end of its list. Both pages show what the bay is growing above your programs. If you have more than one bay, the base report breeds into the first one with a free slot.
+
 ## 0.21.31
 
 **A honeypot left in the field no longer looks like a building waiting to be built.** It used to wear the same caret as a build site. It now draws as a pot, open while it waits and lidded with eyes showing once it has caught a program, and where no picture is drawn it shows `%` instead.

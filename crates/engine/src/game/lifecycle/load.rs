@@ -683,6 +683,7 @@ fn assemble_game(
         world,
         schedule,
         storyline,
+        dev_storyline: None,
     };
     // Derived values are not trusted from the file: gear, `BoughtStats`
     // and the attributes are, and the stats are rebuilt from them.

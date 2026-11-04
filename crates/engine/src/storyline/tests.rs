@@ -518,7 +518,11 @@ mod in_a_game {
     #[test]
     fn the_base_ai_cannot_be_fused() {
         let (mut f, host) = fused_fixture();
+        // The fixture studies at a temporary station of its own, which a
+        // fused arc would no longer treat as the study station.
+        let fused = std::mem::take(&mut f.game.storyline.base_ai);
         unlock_research_chain(&mut f.game, "program_refactoring");
+        f.game.storyline.base_ai = fused;
         let other = f.staff[0];
         let err = f
             .game

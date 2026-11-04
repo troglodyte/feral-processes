@@ -20,8 +20,8 @@ Until you train it, it will not improve, and a few projects stay shut to you.
 - Pick "Train your AI" at the end of the research list. It needs a program pinned at the Research
   Station, which is used up when the training is done. Choose that subject with care.
 - Each training takes the AI up one level and lets it learn further, until the next threshold.
-- Each level opens projects that cannot be started at a lower one. The research list shows which
-  level a locked project is waiting for.
+- Each level opens projects that cannot be started at a lower one. Such a project reads "Seems
+  feasible, but we don't know where to start" until the AI reaches its level.
 
 An untrained AI can still finish every project that asks nothing of its level, only slowly. An AI
 trained at each threshold ends up faster than your researchers were before it woke.

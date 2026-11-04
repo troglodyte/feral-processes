@@ -74,14 +74,11 @@ impl Game {
     /// and a station is measured without the awakening. Not saved.
     #[doc(hidden)]
     pub fn dev_set_storyline(&mut self, on: bool) {
-        self.world
-            .insert_resource(crate::resources::DevStoryline(on));
+        self.dev_storyline = Some(on);
     }
 
     fn storyline_enabled(&self) -> bool {
-        self.world
-            .get_resource::<crate::resources::DevStoryline>()
-            .is_none_or(|dev| dev.0)
+        self.dev_storyline.unwrap_or(true)
     }
 
     /// One tick of every storyline arc. After `schedule_base_labour` so a

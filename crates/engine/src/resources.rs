@@ -2127,12 +2127,6 @@ pub struct Ruins(pub Vec<Ruin>);
 #[derive(Resource, Clone, Copy, Debug)]
 pub struct DevSieges(pub bool);
 
-/// A dev override of whether the storyline arcs may leave `Dormant`, set by
-/// `Game::dev_set_storyline`. Never saved and never inserted by `Game::new`
-/// or `load`: absent means on, so only a harness that asked is affected.
-#[derive(Resource, Clone, Copy, Debug)]
-pub struct DevStoryline(pub bool);
-
 /// A dev toggle: while `true`, a build costs no materials and stands the
 /// moment it is placed (`Game::dev_set_free_build`). Never saved and never
 /// inserted by `Game::new` or `load` — a captured save must not carry it —

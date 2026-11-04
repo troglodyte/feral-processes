@@ -14,6 +14,12 @@ impl Game {
             .unwrap_or_default()
     }
 
+    pub(crate) fn is_auto_recast(&self, entity: Entity, ability: &str) -> bool {
+        self.world
+            .get::<AutoRecast>(entity)
+            .is_some_and(|a| a.0.iter().any(|id| id == ability))
+    }
+
     /// Flags or unflags `ability` on `entity`. The component is created on
     /// the first flag and kept when emptied: absent and empty read the same.
     pub(crate) fn set_auto_recast(&mut self, entity: Entity, ability: &str, on: bool) {

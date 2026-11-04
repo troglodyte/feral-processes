@@ -118,6 +118,9 @@ impl Game {
                         AbilityEffect::Jump => FieldRoutinePick::Cell,
                         _ => FieldRoutinePick::None,
                     },
+                    auto_recast: def
+                        .auto_recastable()
+                        .then(|| self.is_auto_recast(holder.entity, id)),
                 });
             }
         }
@@ -207,6 +210,21 @@ impl Game {
                 magnitude: b.kind.magnitude_label(b.power, b.interval),
                 remaining: b.duration_label(),
             })
+    }
+
+    /// Flips auto-recast on the routine `field_routines()[index]` stands for
+    /// and returns the new state. Same index space as `run_field_routine`.
+    pub fn toggle_field_auto_recast(&mut self, index: usize) -> Result<bool, String> {
+        let routines = self.field_routines();
+        let Some(view) = routines.get(index) else {
+            return Err("No such routine.".into());
+        };
+        if view.auto_recast.is_none() {
+            return Err(format!("{} doesn't run out on its own.", view.name));
+        }
+        let on = !self.is_auto_recast(view.holder, &view.ability);
+        self.set_auto_recast(view.holder, &view.ability, on);
+        Ok(on)
     }
 
     /// Whether `entity` is someone a `Creature`-scoped field buff can land

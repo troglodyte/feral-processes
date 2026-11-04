@@ -190,6 +190,10 @@ pub struct FieldRoutineView {
     pub unavailable: Option<String>,
     /// Which picker follows this row, if any.
     pub second_pick: FieldRoutinePick,
+    /// `None` when the routine can't rerun itself (see
+    /// `AbilityDef::auto_recastable`), otherwise whether its holder has
+    /// auto-recast on.
+    pub auto_recast: Option<bool>,
 }
 
 /// One row of the ally picker a `OneAlly` field routine opens — you, then

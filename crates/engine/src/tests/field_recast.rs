@@ -159,3 +159,79 @@ fn a_manual_run_records_the_routine_on_the_buff_and_keeps_it_across_a_save() {
     let loaded = Game::load(&path, &test_assets_dir()).expect("load");
     assert_eq!(armed(&loaded, loaded.player_entity()), vec![Some(id)]);
 }
+
+fn row_for<'a>(rows: &'a [FieldRoutineView], holder: Entity, id: &str) -> &'a FieldRoutineView {
+    rows.iter()
+        .find(|r| r.holder == holder && r.ability == id)
+        .expect("the row is listed")
+}
+
+#[test]
+fn the_toggle_flips_the_flag_and_the_view_follows() {
+    let mut game = game();
+    let player = game.player_entity();
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    let index = |game: &mut Game| {
+        game.field_routines()
+            .iter()
+            .position(|r| r.ability == id)
+            .unwrap()
+    };
+
+    let rows = game.field_routines();
+    assert_eq!(row_for(&rows, player, &id).auto_recast, Some(false));
+
+    let i = index(&mut game);
+    assert_eq!(game.toggle_field_auto_recast(i), Ok(true));
+    let rows = game.field_routines();
+    assert_eq!(row_for(&rows, player, &id).auto_recast, Some(true));
+
+    let i = index(&mut game);
+    assert_eq!(game.toggle_field_auto_recast(i), Ok(false));
+    let rows = game.field_routines();
+    assert_eq!(row_for(&rows, player, &id).auto_recast, Some(false));
+}
+
+#[test]
+fn two_holders_of_one_routine_toggle_independently() {
+    let mut game = game();
+    let player = game.player_entity();
+    let pet = spawn_tamed(&mut game, 10, 3);
+    set_level(&mut game, pet, 10);
+    let id = give_core(&mut game, player, Core::FieldRegen);
+    make_room_for_routine(&mut game, pet);
+    let mut kit = game.world.get::<Routines>(pet).unwrap().0.clone();
+    kit.push(id.clone());
+    game.world.entity_mut(pet).insert(Routines(kit));
+
+    let rows = game.field_routines();
+    let pets_row = rows
+        .iter()
+        .position(|r| r.holder == pet && r.ability == id)
+        .unwrap();
+    game.toggle_field_auto_recast(pets_row).unwrap();
+
+    let rows = game.field_routines();
+    assert_eq!(row_for(&rows, pet, &id).auto_recast, Some(true));
+    assert_eq!(row_for(&rows, player, &id).auto_recast, Some(false));
+}
+
+#[test]
+fn an_ineligible_row_and_a_bad_index_refuse() {
+    let mut game = game();
+    let player = game.player_entity();
+    let shell = give_core(&mut game, player, Core::FieldMitigation);
+    let rows = game.field_routines();
+    assert_eq!(row_for(&rows, player, &shell).auto_recast, None);
+    let i = rows.iter().position(|r| r.ability == shell).unwrap();
+    let name = rows[i].name.clone();
+
+    assert_eq!(
+        game.toggle_field_auto_recast(i),
+        Err(format!("{name} doesn't run out on its own."))
+    );
+    assert_eq!(
+        game.toggle_field_auto_recast(999),
+        Err("No such routine.".to_string())
+    );
+}

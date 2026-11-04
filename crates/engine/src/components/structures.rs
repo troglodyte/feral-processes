@@ -641,7 +641,9 @@ impl BuildSite {
 /// background wash are all claimed, so the distinction rides the centre
 /// glyph's own char. A capture site and a spawn site that disagreed about
 /// which char means which would read as the map lying.
-pub const TRAP_GLYPH_ARMED: char = '^';
+/// Not `'^'`: that is `BUILD_SITE_GLYPH`, and a honeypot wearing it read as
+/// a structure waiting to be built.
+pub const TRAP_GLYPH_ARMED: char = '%';
 
 /// See `TRAP_GLYPH_ARMED`. `'U'` is authored by no shipped structure or
 /// species and appears nowhere else in the engine as a glyph.

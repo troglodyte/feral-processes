@@ -39,6 +39,7 @@ use crate::text::Metrics;
 use feral_processes_app_core::{Mode, prop_readout, tactical_items_visible};
 use feral_processes_engine::EmulationOption;
 use feral_processes_engine::LogEntry;
+use feral_processes_engine::abilities::AbilityRange;
 use feral_processes_engine::battle::SpecialOption;
 
 mod bodies;

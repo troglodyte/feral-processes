@@ -203,7 +203,7 @@ pub(crate) fn draw_tactical_routines(
         rows.push(text_row("(nothing this body can run in a fight)"));
     }
     for (i, option) in options.iter().enumerate() {
-        let label = format!("{} — {}", option.name, option.detail);
+        let label = tactical_routine_label(option);
         rows.push(match &option.unavailable {
             None => item_row(label, i == selected),
             Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
@@ -218,6 +218,21 @@ pub(crate) fn draw_tactical_routines(
         painter,
         m,
     );
+}
+
+/// One routine's row: name, how far it may be aimed, then what it does.
+///
+/// The range sits beside the name rather than after the prose because it is
+/// what a player standing on a board chooses by, and a row too long for its
+/// box loses its tail first. A reach of nothing is the invoker's own cell.
+pub(crate) fn tactical_routine_label(option: &SpecialOption) -> String {
+    let range = match option.range {
+        None => String::new(),
+        Some(AbilityRange { max: 0, .. }) => "self — ".to_string(),
+        Some(AbilityRange { min: 0, max }) => format!("range {max} — "),
+        Some(AbilityRange { min, max }) => format!("range {min}–{max} — "),
+    };
+    format!("{} — {range}{}", option.name, option.detail)
 }
 
 /// Which learned image does Emulate invoke? `draw_tactical_routines`'s

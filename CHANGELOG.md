@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.31
+
+**A honeypot left in the field no longer looks like a building waiting to be built.** It used to wear the same caret as a build site. It now draws as a pot, open while it waits and lidded with eyes showing once it has caught a program, and where no picture is drawn it shows `%` instead.
+
 ## 0.21.30
 
 **Holding Alt now names each structure as well as what it makes.** A machine's label shows its product with the structure's name on the line below, and a structure that makes nothing, such as a Depot or the Home, shows just its name. Walls and doors stay unlabelled. When the map is too crowded to fit every label, the ones that say what something makes are placed first, so names never push a product off the map.

@@ -805,6 +805,17 @@ impl Game {
                         .map(|def| def.sprite_name().to_string())
                 })
             })
+            .or_else(|| {
+                // Keyed by the item's id, so a second trap item gets art by
+                // dropping a file in, and a sprung one under its own key
+                // because art drawn over the glyph would hide the state.
+                self.world
+                    .get::<crate::components::Trap>(entity)
+                    .map(|trap| match trap.caught {
+                        Some(_) => format!("{}_sprung", trap.item),
+                        None => trap.item.to_string(),
+                    })
+            })
     }
 
     /// The player's chosen look off `PlayerIdentity`; empty for an entity

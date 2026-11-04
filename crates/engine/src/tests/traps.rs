@@ -701,3 +701,25 @@ fn a_trap_survives_a_zone_breach() {
     );
     assert_eq!(game.trap_count(), 1, "the trap is still standing");
 }
+
+/// The map draws a trap's art under its item's id, and a sprung one under a
+/// second key, because the glyph's char is the only other channel left to
+/// say which state it is in and art drawn over it would hide that.
+#[test]
+fn a_trap_is_drawn_by_its_item_id_and_a_sprung_one_by_a_second_key() {
+    let mut game = Game::new(7001, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let pos = player_tile(&game);
+
+    let armed = stand_a_trap(&mut game, pos.x + 1, pos.y, None);
+    let sprung = stand_a_trap(&mut game, pos.x + 2, pos.y, Some(a_caught_program()));
+
+    assert_eq!(game.sprite_of(armed).as_deref(), Some("honeypot"));
+    assert_eq!(game.sprite_of(sprung).as_deref(), Some("honeypot_sprung"));
+}
+
+/// An armed trap must not wear the build site's char: a honeypot in the
+/// field read as a structure waiting to be built.
+#[test]
+fn an_armed_trap_does_not_share_the_build_sites_glyph() {
+    assert_ne!(TRAP_GLYPH_ARMED, crate::components::BUILD_SITE_GLYPH);
+}

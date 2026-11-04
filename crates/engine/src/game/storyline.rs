@@ -43,6 +43,12 @@ impl Game {
         !matches!(self.storyline.base_ai, BaseAi::Dormant { .. })
     }
 
+    /// Whether the base AI has fused: from then on its station is the only
+    /// Research Station the base may have or study at.
+    pub(crate) fn base_ai_fused(&self) -> bool {
+        matches!(self.storyline.base_ai, BaseAi::Fused(_))
+    }
+
     /// One tick of every storyline arc. After `schedule_base_labour` so a
     /// claim can release what the scheduler just posted, and before
     /// `settle_research`.
@@ -103,8 +109,10 @@ impl Game {
     /// study, not on a sortie: `ProgramRole::Staff` (or the host's own
     /// `BaseAi`, once marked) and standing.
     fn is_free_for_claim(&self, program: Entity) -> bool {
-        self.program_role(program) == Some(ProgramRole::Staff)
-            && self.world.get::<Downed>(program).is_none()
+        matches!(
+            self.program_role(program),
+            Some(ProgramRole::Staff | ProgramRole::BaseAi)
+        ) && self.world.get::<Downed>(program).is_none()
     }
 
     fn host_candidates(&mut self) -> Vec<HostCandidate> {
@@ -123,7 +131,7 @@ impl Game {
         candidates
     }
 
-    fn analysis_of_program(&self, program: Entity) -> i32 {
+    pub(crate) fn analysis_of_program(&self, program: Entity) -> i32 {
         let species = self
             .world
             .get::<Creature>(program)
@@ -262,8 +270,26 @@ impl Game {
             }
             StepOutcome::Fuse(fused) => {
                 self.storyline.base_ai = BaseAi::Fused(fused);
+                self.release_subjects_outside_ai_station();
                 self.announce_fusion();
             }
+        }
+    }
+
+    /// Frees every subject pinned at a Research Station other than the AI's,
+    /// in anchor order, so the research it was spending is dropped the same
+    /// way every run.
+    fn release_subjects_outside_ai_station(&mut self) {
+        let ai = self.base_ai_station();
+        let mut others: Vec<(Entity, (i32, i32))> = self
+            .research_stations()
+            .into_iter()
+            .filter(|&e| Some(e) != ai)
+            .filter_map(|e| Some((e, self.world.get::<Position>(e).map(|p| (p.x, p.y))?)))
+            .collect();
+        others.sort_by_key(|&(_, anchor)| anchor);
+        for (station, _) in others {
+            self.release_study_subject(station, "the base AI has taken the research");
         }
     }
 

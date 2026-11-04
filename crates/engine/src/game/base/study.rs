@@ -293,6 +293,9 @@ impl Game {
                     .into(),
             );
         }
+        if self.base_ai_fused() && self.base_ai_station() != Some(station) {
+            return Err("Only the base AI's Research Station is in use now.".into());
+        }
         let Some(pen) = self.study_pen(station) else {
             return Err("That structure has no pen to study anyone in.".into());
         };
@@ -471,6 +474,11 @@ impl Game {
     /// will — so calling it beside `clear_pending_build_at` costs every
     /// other destruction path nothing.
     pub(crate) fn release_study_station(&mut self, structure: Entity) {
+        self.release_study_subject(structure, "the Research Station is gone");
+    }
+
+    /// Unpins the subject at `structure`, saying `why` in the log line.
+    pub(crate) fn release_study_subject(&mut self, structure: Entity, why: &str) {
         let subject = self
             .world
             .query::<(Entity, &components::UnderStudy)>()
@@ -484,9 +492,7 @@ impl Game {
             .entity_mut(subject)
             .remove::<components::UnderStudy>();
         let name = self.creature_label(subject);
-        self.log(format!(
-            "{name} is released from the pen — the Research Station is gone."
-        ));
+        self.log(format!("{name} is released from the pen — {why}."));
         // Only a project that actually spends *this* subject has lost
         // anything. An ungated project running alongside an unrelated pin
         // must not be deselected just because some structure's subject was

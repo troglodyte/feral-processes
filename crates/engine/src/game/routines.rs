@@ -366,6 +366,16 @@ impl Game {
         }
         if self
             .world
+            .get::<crate::components::BaseAiHost>(creature)
+            .is_some()
+        {
+            return Err(format!(
+                "That program is {}",
+                crate::game::party::BOUND_TO_STATION
+            ));
+        }
+        if self
+            .world
             .get::<crate::components::Jailed>(creature)
             .is_some()
         {

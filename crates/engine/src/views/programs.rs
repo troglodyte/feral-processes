@@ -114,6 +114,8 @@ pub struct RosterRow {
     pub color: GlyphColor,
     pub level: u32,
     pub in_party: bool,
+    /// The program the base AI has claimed: the rail marks it.
+    pub base_ai: bool,
     pub needs_you: Option<CallToAct>,
 }
 

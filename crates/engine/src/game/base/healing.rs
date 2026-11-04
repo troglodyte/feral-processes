@@ -46,7 +46,8 @@ fn rests_with_player(role: Option<ProgramRole>) -> bool {
             | ProgramRole::Staff
             | ProgramRole::UnderStudy
             | ProgramRole::Jailed
-            | ProgramRole::Siphoned,
+            | ProgramRole::Siphoned
+            | ProgramRole::BaseAi,
         ) => false,
         None => false,
     }

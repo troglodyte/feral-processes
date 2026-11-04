@@ -86,6 +86,7 @@ impl Game {
         on_floor
             && w.get::<Task>().is_none()
             && w.get::<UnderStudy>().is_none()
+            && w.get::<crate::components::BaseAiHost>().is_none()
             && w.get::<CarryingProgram>().is_none()
             && self.is_on_shift(worker, amenities)
     }

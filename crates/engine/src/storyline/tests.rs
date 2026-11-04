@@ -458,6 +458,172 @@ mod in_a_game {
         assert!(!told[0].body.contains('{'), "an unfilled hole");
     }
 
+    /// A fixture driven to Fused: the host is `staff[1]`.
+    fn fused_fixture() -> (Fixture, Entity) {
+        let mut f = fixture();
+        set_researched(&mut f.game, 25);
+        tick_until(&mut f.game, 400, is_fused);
+        let host = f.staff[1];
+        (f, host)
+    }
+
+    fn home_entity(game: &mut Game) -> Entity {
+        game.world
+            .query::<(Entity, &Structure)>()
+            .iter(&game.world)
+            .find(|(_, s)| s.kind == "home")
+            .map(|(e, _)| e)
+            .expect("the fixture stands a Home")
+    }
+
+    #[test]
+    fn the_base_ai_is_never_base_staff() {
+        let (f, host) = fused_fixture();
+        assert_eq!(f.game.program_role(host), Some(ProgramRole::BaseAi));
+        assert!(!f.game.base_staff().contains(&host));
+    }
+
+    #[test]
+    fn the_base_ai_cannot_join_the_party() {
+        let (mut f, host) = fused_fixture();
+        let err = f.game.add_companion(host).expect_err("refused");
+        assert!(err.contains("Research Station"), "{err}");
+        assert!(!f.game.world.resource::<Party>().0.contains(&host));
+    }
+
+    #[test]
+    fn the_base_ai_cannot_be_wielded() {
+        let (mut f, host) = fused_fixture();
+        let err = f.game.wield_program(host).expect_err("refused");
+        assert!(err.contains("Research Station"), "{err}");
+    }
+
+    #[test]
+    fn the_base_ai_cannot_be_fused() {
+        let (mut f, host) = fused_fixture();
+        unlock_research_chain(&mut f.game, "program_refactoring");
+        let other = f.staff[0];
+        let err = f
+            .game
+            .fuse_companions(host, other, None)
+            .expect_err("refused");
+        assert!(err.contains("Research Station"), "{err}");
+        assert!(f.game.world.get::<Creature>(host).is_some());
+    }
+
+    #[test]
+    fn the_base_ai_cannot_be_sold() {
+        let (mut f, host) = fused_fixture();
+        let market = spawn_market(&mut f.game);
+        let err = f.game.sell_companion(market, host).expect_err("refused");
+        assert!(err.contains("Research Station"), "{err}");
+        assert!(f.game.world.get::<Creature>(host).is_some());
+    }
+
+    #[test]
+    fn the_base_ai_cannot_go_on_a_sortie() {
+        let (f, host) = fused_fixture();
+        // `dispatch_sortie` admits only `ProgramRole::Staff`.
+        assert_ne!(f.game.program_role(host), Some(ProgramRole::Staff));
+    }
+
+    #[test]
+    fn the_base_ai_cannot_be_spent_on_a_build() {
+        let (mut f, host) = fused_fixture();
+        assert!(
+            f.game
+                .programs_for_build(0)
+                .iter()
+                .all(|p| p.entity != host)
+        );
+        assert!(f.game.commit_program(host).is_none());
+        assert!(f.game.world.get::<Creature>(host).is_some());
+    }
+
+    #[test]
+    fn a_second_research_station_is_refused_after_fusion() {
+        let (mut f, _) = fused_fixture();
+        let err = f
+            .game
+            .place_structure("research_node", 5, 5, None)
+            .expect_err("refused");
+        assert!(err.contains("Research Station"), "{err}");
+    }
+
+    #[test]
+    fn the_ai_station_cannot_be_removed() {
+        let (mut f, _) = fused_fixture();
+        let err = f.game.remove_structure(f.station).expect_err("refused");
+        assert!(err.contains("Research Station"), "{err}");
+        assert!(f.game.world.get::<Structure>(f.station).is_some());
+    }
+
+    #[test]
+    fn removing_the_home_leaves_the_ai_station() {
+        let (mut f, _) = fused_fixture();
+        let home = home_entity(&mut f.game);
+        f.game.remove_structure(home).expect("the Home comes down");
+        assert!(f.game.world.get::<Structure>(f.station).is_some());
+        assert_eq!(f.game.base_ai_station(), Some(f.station));
+    }
+
+    #[test]
+    fn a_subject_pinned_elsewhere_is_released_at_fusion_and_cannot_be_re_pinned_there() {
+        let mut f = fixture();
+        let other = spawn_machine_at(&mut f.game, "research_node", -8, 4);
+        let subject = f.staff[0];
+        f.game
+            .pin_subject(subject, other)
+            .expect("pins before the arc");
+        assert!(
+            f.game
+                .world
+                .get::<components::UnderStudy>(subject)
+                .is_some()
+        );
+        set_researched(&mut f.game, 25);
+        tick_until(&mut f.game, 400, is_fused);
+        assert!(
+            f.game
+                .world
+                .get::<components::UnderStudy>(subject)
+                .is_none(),
+            "released at fusion"
+        );
+        let err = f.game.pin_subject(subject, other).expect_err("refused");
+        assert!(err.contains("base AI"), "{err}");
+    }
+
+    #[test]
+    fn the_manifest_marks_the_base_ai_and_shows_its_true_analysis() {
+        let (mut f, host) = fused_fixture();
+        f.game
+            .world
+            .get_mut::<components::Attributes>(host)
+            .unwrap()
+            .set(&crate::attributes::AttributeId::from("analysis"), 120);
+        let row = f
+            .game
+            .manifest_roster()
+            .into_iter()
+            .find(|r| r.entity == host)
+            .expect("the host stays on the manifest");
+        assert!(row.base_ai);
+        assert!(
+            f.game
+                .manifest_roster()
+                .iter()
+                .filter(|r| r.entity != host)
+                .all(|r| !r.base_ai)
+        );
+        let view = f.game.manifest(host).expect("a full stat sheet");
+        assert_eq!(f.game.analysis_of_program(host), 120);
+        let crate::views::ManifestSubject::Program(program) = view.subject else {
+            panic!("a program's sheet");
+        };
+        assert_eq!(program.analysis, 120);
+    }
+
     fn round_trip(game: &mut Game, tag: &str) -> Game {
         let path =
             std::env::temp_dir().join(format!("feral_storyline_{tag}_{}.sav", std::process::id()));

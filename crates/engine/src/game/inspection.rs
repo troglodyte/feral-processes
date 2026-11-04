@@ -299,7 +299,7 @@ impl Game {
         // A prisoner is the same case: spawned on its pen and never moved.
         if matches!(
             self.program_role(entity),
-            Some(ProgramRole::UnderStudy | ProgramRole::Jailed)
+            Some(ProgramRole::UnderStudy | ProgramRole::Jailed | ProgramRole::BaseAi)
         ) {
             return true;
         }

@@ -76,6 +76,11 @@ pub enum ProgramRole {
     /// never asked a role (`add_companion`, `wield_program`, a fusion, a
     /// sale, a spend) each carry an explicit "Release it first." refusal.
     Siphoned,
+    /// The program the base AI has claimed — `components::BaseAiHost`. Out of
+    /// the pool, off every roster door and fixed to its Research Station for
+    /// good, so it ranks with the held roles. Ahead of `Staff` in `role_of`
+    /// so nothing that reads `== Staff` can post it.
+    BaseAi,
     /// Everything else you own: the base's labour pool, posted and unposted
     /// by `game::base::work_orders`'s scheduler and by nothing else.
     Staff,
@@ -88,6 +93,9 @@ pub(crate) const HELD_IN_SIPHON: &str = "held in a Power Siphon. Release it firs
 /// `HELD_IN_SIPHON`'s counterpart for a Holding Cell. No "release it first":
 /// the only ways out are the cell's own decompile rolls or its breakdown.
 pub(crate) const HELD_IN_CELL: &str = "a prisoner in a Holding Cell.";
+
+/// `HELD_IN_CELL`'s counterpart for the base AI's host: it never leaves.
+pub(crate) const BOUND_TO_STATION: &str = "bound to the Research Station. It won't leave.";
 
 /// `name` with its zone appended (`"Scrapper 2"`) when there is one.
 fn zone_tagged(name: String, zone: Option<u32>) -> String {
@@ -135,7 +143,8 @@ impl ProgramRole {
             ProgramRole::UnderStudy => 4,
             ProgramRole::Jailed => 5,
             ProgramRole::Siphoned => 6,
-            ProgramRole::Staff => 7,
+            ProgramRole::BaseAi => 7,
+            ProgramRole::Staff => 8,
         }
     }
 }
@@ -149,6 +158,7 @@ pub(crate) struct RoleMarkers {
     pub under_study: bool,
     pub jailed: bool,
     pub siphoned: bool,
+    pub base_ai: bool,
 }
 
 /// The role rule itself, over values rather than a `Game`.
@@ -189,6 +199,9 @@ pub(crate) fn role_of(
     if markers.siphoned {
         return Some(ProgramRole::Siphoned);
     }
+    if markers.base_ai {
+        return Some(ProgramRole::BaseAi);
+    }
     Some(ProgramRole::Staff)
 }
 
@@ -219,8 +232,10 @@ pub(crate) fn role_of(
 /// is wanted rather than a side effect — a subject occupies ground the same
 /// as staff does, and the camera follows ground.
 pub(crate) fn walks_the_base(role: Option<ProgramRole>, task: Option<TaskKind>) -> bool {
-    matches!(role, Some(ProgramRole::UnderStudy | ProgramRole::Jailed))
-        || (role == Some(ProgramRole::Staff) && task != Some(TaskKind::Guard))
+    matches!(
+        role,
+        Some(ProgramRole::UnderStudy | ProgramRole::Jailed | ProgramRole::BaseAi)
+    ) || (role == Some(ProgramRole::Staff) && task != Some(TaskKind::Guard))
 }
 
 /// The four resources that decide a role, as one system parameter.
@@ -246,6 +261,7 @@ pub struct Roles<'w, 's> {
     under_study: Query<'w, 's, (), With<crate::components::UnderStudy>>,
     jailed: Query<'w, 's, (), With<crate::components::Jailed>>,
     siphoned: Query<'w, 's, (), With<crate::components::Siphoned>>,
+    base_ai: Query<'w, 's, (), With<crate::components::BaseAiHost>>,
 }
 
 impl Roles<'_, '_> {
@@ -262,6 +278,7 @@ impl Roles<'_, '_> {
                 under_study: self.under_study.contains(creature),
                 jailed: self.jailed.contains(creature),
                 siphoned: self.siphoned.contains(creature),
+                base_ai: self.base_ai.contains(creature),
             },
         )
     }
@@ -889,6 +906,11 @@ impl Game {
             })
             .filter(|p| {
                 self.world
+                    .get::<crate::components::BaseAiHost>(p.entity)
+                    .is_none()
+            })
+            .filter(|p| {
+                self.world
                     .get::<crate::components::PostedAt>(p.entity)
                     .is_none()
             })
@@ -1014,6 +1036,7 @@ impl Game {
                     color: glyph.color,
                     level: self.world.get::<Experience>(entity).map_or(1, |e| e.level),
                     in_party: party.contains(&entity),
+                    base_ai: self.program_role(entity) == Some(ProgramRole::BaseAi),
                     needs_you: self.call_to_act(entity),
                 })
             })
@@ -1134,6 +1157,13 @@ impl Game {
         {
             return Err(format!("That program is {HELD_IN_SIPHON}"));
         }
+        if self
+            .world
+            .get::<crate::components::BaseAiHost>(creature)
+            .is_some()
+        {
+            return Err(format!("That program is {BOUND_TO_STATION}"));
+        }
         // Same shape, one role over: `role_of` would answer `Staff` were
         // this check skipped, since `PostedAt` is checked *before* it in
         // `role_of`'s chain, and the party push would leave the marker on a
@@ -1210,6 +1240,10 @@ impl Game {
                     .world
                     .get::<crate::components::Siphoned>(creature)
                     .is_some(),
+                base_ai: self
+                    .world
+                    .get::<crate::components::BaseAiHost>(creature)
+                    .is_some(),
             },
         )
     }
@@ -1234,7 +1268,6 @@ impl Game {
             .filter(|e| e.contains::<Tamed>())
             .map(|e| e.id())
             .filter(|&e| self.program_role(e) == Some(ProgramRole::Staff))
-            .filter(|&e| self.world.get::<crate::components::BaseAiHost>(e).is_none())
             .collect();
         staff.sort_by_key(|&e| {
             let rank = self.world.get::<crate::components::StaffRank>(e);
@@ -1287,6 +1320,13 @@ impl Game {
             .is_some()
         {
             return Err(format!("That program is {HELD_IN_SIPHON}"));
+        }
+        if self
+            .world
+            .get::<crate::components::BaseAiHost>(creature)
+            .is_some()
+        {
+            return Err(format!("That program is {BOUND_TO_STATION}"));
         }
         // `role_of` never sees a `Task` here, so a posted crew member reads
         // as `Outpost` rather than `Staff` and nothing below would refuse it
@@ -1586,6 +1626,12 @@ impl Game {
             if self.world.get::<crate::components::Siphoned>(e).is_some() {
                 let name = self.creature_label(e);
                 return Err(format!("{name} is {HELD_IN_SIPHON}"));
+            }
+        }
+        for e in [a, b] {
+            if self.world.get::<crate::components::BaseAiHost>(e).is_some() {
+                let name = self.creature_label(e);
+                return Err(format!("{name} is {BOUND_TO_STATION}"));
             }
         }
         // Neither half may be posted at an outpost either, `UnderStudy`'s
@@ -1986,6 +2032,10 @@ impl Game {
         // Held in a Power Siphon — the same exclusion again: a spend would
         // despawn a body the siphon still counts as its supply.
         if self.world.get::<crate::components::Siphoned>(e).is_some() {
+            return None;
+        }
+        // The base AI's host: fixed to its station, never a spend.
+        if self.world.get::<crate::components::BaseAiHost>(e).is_some() {
             return None;
         }
         // Posted at an outpost — `programs_for_build`'s identical exclusion

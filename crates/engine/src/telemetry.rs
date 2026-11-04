@@ -60,6 +60,14 @@ pub enum Record {
         player_hp_frac: f32,
         companions_downed: u32,
     },
+    /// An `OffShift` errand ended or was stranded. `outcome` is
+    /// `base_ledger::VisitOutcome::as_str`.
+    AmenityVisit {
+        tick: u64,
+        zone: u32,
+        need: String,
+        outcome: String,
+    },
     /// An extractor finished a cycle. `ok: false` is the fizzle — the only
     /// empirical route to `systems::mining_success_chance` — and `rolled`
     /// against `landed` is what a clog cost.
@@ -251,6 +259,7 @@ impl Record {
             | Record::Acquire { .. }
             | Record::Consume { .. }
             | Record::BaseSnapshot { .. }
+            | Record::AmenityVisit { .. }
             | Record::Haul { .. } => return,
         };
         *slot = fight;

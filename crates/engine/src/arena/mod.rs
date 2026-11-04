@@ -1380,6 +1380,7 @@ mod tests {
                 | Record::HandCraft { .. }
                 | Record::Acquire { .. }
                 | Record::Consume { .. }
+                | Record::AmenityVisit { .. }
                 | Record::BaseSnapshot { .. }
                 | Record::Haul { .. } => None,
             }

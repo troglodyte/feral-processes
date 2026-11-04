@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.42
+
+**When you name a routine or a weapon design, Left and Right now move a blinking cursor through the name, so you can fix a letter in the middle without backspacing to it.** Typing inserts at the cursor and Backspace deletes the letter before it; the name popup lists the arrows in its key hints. With effects turned off the cursor stays lit instead of blinking. Saves load unchanged.
+
 ## 0.21.41
 
 **In a battle-map fight, the list of routines to run now shows how far each one reaches, beside its name.** It reads `range 4`, `range 2–5` when it can't be aimed close, or `self` when it only lands on the one running it, so you can pick a routine before the aim cursor tells you the target is out of reach. Each routine's description now sits on its own lines underneath, which stops Emulate's and Respawn's from running off the edge of the box. Saves load unchanged.

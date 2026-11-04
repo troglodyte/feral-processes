@@ -786,6 +786,11 @@ pub struct SpecialOption {
     /// out in columns, and a figure folded into prose is the substring that
     /// pushes a row off the end of its box.
     pub provokes: usize,
+    /// How far from the invoker this may be aimed — `Game::
+    /// routine_tactical_range`'s answer, research included, so the row and
+    /// the aim cursor can never disagree. `None` in the group model, which
+    /// has no cells to measure it in.
+    pub range: Option<crate::abilities::AbilityRange>,
 }
 
 /// One row of the ally picker — who a party-facing Special lands on. Same

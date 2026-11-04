@@ -490,6 +490,32 @@ fn the_routine_rows_say_what_invoking_here_provokes() {
     );
 }
 
+/// A row's range is `routine_tactical_range`'s answer, research included,
+/// so the picker never quotes a reach the aim cursor then disagrees with.
+#[test]
+fn the_routine_rows_say_how_far_each_reaches() {
+    let mut game = game();
+    let (player, _hostile) = face_off(&mut game);
+    game.world
+        .entity_mut(player)
+        .insert(crate::components::Routines(vec![
+            "mirror_restore".to_string(),
+            "decompile".to_string(),
+        ]));
+
+    let abilities = game.actor_abilities(player);
+    let rows = game.tactical_routine_options();
+    assert!(!rows.is_empty());
+    for row in rows {
+        assert_eq!(
+            row.range,
+            Some(game.routine_tactical_range(&abilities[row.index])),
+            "{}'s row quoted a range the aim does not use",
+            row.name
+        );
+    }
+}
+
 /// The movement telegraph is a call into the term the AI reads, so the
 /// cells the player is warned about are the cells a hostile would price.
 #[test]

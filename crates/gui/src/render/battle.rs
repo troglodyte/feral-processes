@@ -1546,6 +1546,7 @@ mod tests {
                 unavailable: unavailable.map(str::to_string),
                 cooldown,
                 provokes: 0,
+                range: None,
             }
         }
 

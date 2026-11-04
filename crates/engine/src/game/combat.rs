@@ -1829,6 +1829,9 @@ impl Game {
                     Some(crate::abilities::AbilityEffect::Decompile) => 0,
                     _ => reactors,
                 },
+                range: abilities
+                    .get(option.index)
+                    .map(|a| self.routine_tactical_range(a)),
                 ..option
             })
             .collect()
@@ -1870,6 +1873,8 @@ impl Game {
                 // Filled in by `tactical_routine_options`, the only caller
                 // with a board to ask. The group model leaves it at zero.
                 provokes: 0,
+                // Filled in by `tactical_routine_options` for `provokes`' reason.
+                range: None,
             })
             .collect()
     }

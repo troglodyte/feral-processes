@@ -11,6 +11,7 @@ mod camera;
 mod effects_strip;
 mod forecast_props;
 mod ground;
+mod routines;
 mod squads;
 mod support;
 mod washes;

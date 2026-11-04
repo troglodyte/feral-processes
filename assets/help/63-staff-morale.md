@@ -65,18 +65,19 @@ Press b for the base report, then down the rail to the Staff page and Right onto
 - Wellbeing lists every staff program, worst mood first: its mood, Integrity, a bar for each need
   with a ! under the critical line, and what it is doing, including waiting for a place.
 - Coverage lists each need with how many machines are built, the places they offer out of the
-  places they could, how many are needed, and how many programs are low. It is approximate, because
-  it ignores walking time. A machine boxed in is listed under its need.
+  places they could, how many recent visits had to wait or could not get there at all, and how many
+  programs are low. A need is marked ! when none is built or a visit was blocked, and the line under
+  it says what to build or lay. A machine boxed in is listed under its need.
 - Discontent lists the programs with a grievance, the worst first, and the memories behind it.
 
-The Staff entry on the rail shows a ! when someone is critical or downed, when a need has too few
-machines, or when a program has stopped working.
+The Staff entry on the rail shows a ! when someone is critical or downed, when a need has no
+machine or a visit to one was blocked, or when a program has stopped working.
 
 What you can do about it
 
 - Build a Log Analyzer Bay and a Sandbox early, near where the crew works, and keep them reachable.
   A base with neither offers a bad mood nowhere to go. Build more of each as the staff grows, and
-  leave open ground around them: the Coverage screen says how many you need.
+  leave open ground around them: the Coverage screen flags a need whose visits had to wait.
 - Lay a comfortable floor finish in rooms where programs idle.
 - Keep a program away from a machine it resents, or from a rival, by posting it elsewhere. The base
   staff table lets you uncheck jobs for a program.

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.38
+
+**The staff report's Coverage page now says whether your programs actually got to their amenities, not just whether you built enough of them.** Each need's row counts the recent visits that were served, the ones that waited because every place was full, and the ones stranded because the amenity couldn't be reached. A `!` and a cause line ("build a Sandbox", "full: build another…", "unreachable: lay floor to it") appear only when visits were really blocked. The first blocked visit for a need posts one alert naming the amenity, and the alert clears once visits run clean again. Saves load unchanged.
+
 ## 0.21.37
 
 **On a battle map, every routine makes a sound when it is run, by your side or the enemy's.** Before, a routine was heard only through the hits and misses it landed, so a debuff, a heal, a summon, a tamper, or an area blast that caught nobody went off in silence. Now each one plays a short rising warble as it goes off, and a routine that does hit still plays its hit or miss after it.

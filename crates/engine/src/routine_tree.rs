@@ -41,6 +41,7 @@ fn part_node(
         cost: crate::tuning::routine_research_cost(scope, (version, 0), zone),
         materials: Vec::new(),
         min_zone: zone,
+        requires_ai_level: None,
         requires,
         recommended: false,
         unlocks_structures: Vec::new(),

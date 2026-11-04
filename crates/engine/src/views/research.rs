@@ -146,6 +146,9 @@ pub enum ResearchState {
         /// `Some(n)` when the player's zone is below the node's `min_zone`;
         /// `None` when the zone is satisfied and only prereqs are in the way.
         min_zone: Option<u32>,
+        /// `Some(n)` when the base AI is below level `n`, which the renderer
+        /// says without naming the level.
+        ai_level: Option<u32>,
     },
 }
 

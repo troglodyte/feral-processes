@@ -60,6 +60,14 @@ Core Fragments.
     // the node is still listed, and says which zone it is waiting on.
     min_zone: 3,
 
+    // Optional; defaults to none. The level the base AI must have reached
+    // before this node can be researched (see the base AI help page). The
+    // level is 0 until the AI fuses with its Research Station, so a gate of
+    // 0 never holds. Below it the node is listed with the line "Seems
+    // feasible, but we don't know where to start", which does not name the
+    // level. No shipped node sets it yet.
+    requires_ai_level: Some(2),
+
     // Optional; defaults to none. Node ids that must already be unlocked
     // before this one can be taken.
     requires: ["automation"],

@@ -585,6 +585,19 @@ pub(super) fn draw_research_graph(
         painter,
         m,
     );
+    // A node held up by the base AI alone says so: the graph has no tag to
+    // carry it, and the list's `state_tag` is the same sentence.
+    if let feral_processes_engine::ResearchState::Locked {
+        missing,
+        min_zone: None,
+        ai_level: Some(_),
+    } = &node.state
+        && missing.is_empty()
+    {
+        for row in description_rows_at(super::progression::AI_GATED, panel_columns) {
+            cy = draw_row(&row, geo.panel.x, geo.panel.w, cy, max_y, painter, m);
+        }
+    }
     // Why this base cannot work the node yet, wrapped — the list's
     // `block_rows`, so the graph cannot flag a box without saying what it
     // waits on. Above the bill, because it is the reason the bill is

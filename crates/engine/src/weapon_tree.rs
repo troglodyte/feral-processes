@@ -34,6 +34,7 @@ fn node(
         cost,
         materials: Vec::new(),
         min_zone: zone,
+        requires_ai_level: None,
         requires,
         recommended: false,
         unlocks_structures: Vec::new(),

@@ -39,7 +39,7 @@ fn no_research_node_is_left_unlocking_nothing() {
 /// The cheapest node in a band, found by asking the db rather than named,
 /// so retuning which node sits in which band leaves the tests below still
 /// measuring what they mean to. `ResearchDb::all` is already cheapest-first.
-fn cheapest_gated_node(game: &Game, zone: u32) -> ResearchDef {
+pub(super) fn cheapest_gated_node(game: &Game, zone: u32) -> ResearchDef {
     game.world
         .resource::<ResearchDb>()
         .all()
@@ -83,7 +83,7 @@ pub(super) fn research_prereqs_of(game: &mut Game, id: &str) {
     }
 }
 
-fn research_state(game: &Game, id: &str) -> ResearchState {
+pub(super) fn research_state(game: &Game, id: &str) -> ResearchState {
     game.research_nodes(ResearchTree::Base)
         .into_iter()
         .find(|n| n.id == id)
@@ -177,7 +177,9 @@ fn a_node_can_report_both_a_missing_prereq_and_its_zone() {
     let deep = cheapest_gated_node(&game, 3);
     discover_all_research(&mut game);
     match research_state(&game, &deep.id) {
-        ResearchState::Locked { missing, min_zone } => {
+        ResearchState::Locked {
+            missing, min_zone, ..
+        } => {
             assert!(
                 !missing.is_empty(),
                 "{} sits on an unresearched chain, so it owes a prereq too",

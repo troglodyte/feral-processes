@@ -83,6 +83,12 @@ pub struct ResearchDef {
     /// second spelling for it is a second thing to get wrong.
     #[serde(default)]
     pub min_zone: u32,
+    /// The level the base AI must have reached before this node can be
+    /// taken; `None`, the default, is ungated. The level is 0 before the AI
+    /// fuses, so a gate of 0 never holds. Below it the node is still listed,
+    /// with a line that does not say why (`Game::research_ai_gate`).
+    #[serde(default)]
+    pub requires_ai_level: Option<u32>,
     #[serde(default)]
     pub requires: Vec<ResearchId>,
     /// Marks this node as somewhere a new run should be heading. The menu
@@ -551,6 +557,18 @@ mod tests {
         assert_eq!(def.min_zone, 0, "an absent min_zone means ungated");
         assert_eq!(def.unlocks_structures, vec!["workbench".to_string()]);
         assert!(warnings.is_empty(), "a valid node warns about nothing");
+    }
+
+    #[test]
+    fn a_research_ron_without_the_field_still_parses() {
+        let (db, warnings) = load("no_ai_gate", &[("automation", VALID)]);
+        let def = db.get("automation").expect("valid node should load");
+        assert_eq!(def.requires_ai_level, None, "absent means ungated");
+        assert!(warnings.is_empty());
+        let gated = VALID.replace("cost: 8,", "cost: 8, requires_ai_level: Some(2),");
+        let (db, warnings) = load("ai_gate", &[("automation", &gated)]);
+        assert_eq!(db.get("automation").unwrap().requires_ai_level, Some(2));
+        assert!(warnings.is_empty());
     }
 
     #[test]

@@ -163,6 +163,8 @@ pub(super) fn perks_rows(
 /// breaching. Both stay clear of the dim grey an already-researched row
 /// takes, so the three unpickable states never read as each other.
 pub(super) const LOCKED_BY_PREREQ: Color = Color::new(0.72, 0.50, 0.22, 1.0);
+/// What a node held up by the base AI's level alone says about itself.
+pub(super) const AI_GATED: &str = "Seems feasible, but we don't know where to start";
 const LOCKED_BY_ZONE: Color = Color::new(0.38, 0.52, 0.78, 1.0);
 
 /// What a research row says about itself after its name and price. This is
@@ -180,9 +182,18 @@ fn state_tag(state: &ResearchState) -> String {
         ResearchState::Unlocked => " (researched)".to_string(),
         ResearchState::Active => " (in progress)".to_string(),
         ResearchState::Available => String::new(),
-        ResearchState::Locked { missing, min_zone } => {
+        ResearchState::Locked {
+            missing,
+            min_zone,
+            ai_level,
+        } => {
             let mut reasons = missing.clone();
             reasons.extend(min_zone.map(|z| format!("Zone {z}")));
+            // Held by the AI alone, the line says only that it cannot be
+            // started; beside another wall, that wall is what to clear first.
+            if reasons.is_empty() && ai_level.is_some() {
+                return format!(" ({AI_GATED})");
+            }
             format!(" (needs {})", reasons.join(", "))
         }
     }
@@ -219,6 +230,12 @@ pub(super) fn row_color(node: &ResearchStatus) -> Color {
         ResearchState::Available if node.recommended => GREEN,
         ResearchState::Available => TEXT,
         ResearchState::Locked { min_zone, .. } if min_zone.is_some() => LOCKED_BY_ZONE,
+        // A wall cleared by training the AI, not by anything on this screen.
+        ResearchState::Locked {
+            missing,
+            ai_level: Some(_),
+            ..
+        } if missing.is_empty() => LOCKED_BY_ZONE,
         ResearchState::Locked { .. } => LOCKED_BY_PREREQ,
     }
 }
@@ -641,6 +658,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_node_held_by_the_ai_alone_says_it_cannot_be_started() {
+        let tag = state_tag(&ResearchState::Locked {
+            missing: Vec::new(),
+            min_zone: None,
+            ai_level: Some(1),
+        });
+        assert_eq!(tag, " (Seems feasible, but we don't know where to start)");
+        let both = state_tag(&ResearchState::Locked {
+            missing: vec!["Automation".into()],
+            min_zone: None,
+            ai_level: Some(1),
+        });
+        assert_eq!(both, " (needs Automation)");
+    }
+
+    #[test]
     fn the_train_row_follows_the_nodes_and_shows_progress() {
         let view = BaseAiView {
             level: 0,
@@ -701,6 +734,7 @@ mod tests {
             state_tag(&ResearchState::Locked {
                 missing: Vec::new(),
                 min_zone: Some(3),
+                ai_level: None,
             }),
             " (needs Zone 3)",
             "a node whose only obstacle is the breach has to say so — this is \
@@ -710,6 +744,7 @@ mod tests {
             state_tag(&ResearchState::Locked {
                 missing: vec!["Neural Interfacing".to_string()],
                 min_zone: Some(3),
+                ai_level: None,
             }),
             " (needs Neural Interfacing, Zone 3)",
             "both reasons, or clearing one leaves the row saying the same thing"
@@ -718,6 +753,7 @@ mod tests {
             state_tag(&ResearchState::Locked {
                 missing: vec!["Automation".to_string()],
                 min_zone: None,
+                ai_level: None,
             }),
             " (needs Automation)",
             "a bootstrap node is untouched by the gate existing"
@@ -880,6 +916,7 @@ mod tests {
         let prereq = |missing: &str| ResearchState::Locked {
             missing: vec![missing.to_string()],
             min_zone: None,
+            ai_level: None,
         };
 
         assert_eq!(
@@ -897,6 +934,7 @@ mod tests {
                 ResearchState::Locked {
                     missing: Vec::new(),
                     min_zone: Some(3),
+                    ai_level: None,
                 },
                 false,
             )),
@@ -909,6 +947,7 @@ mod tests {
                 ResearchState::Locked {
                     missing: vec!["Automation".to_string()],
                     min_zone: Some(3),
+                    ai_level: None,
                 },
                 false,
             )),

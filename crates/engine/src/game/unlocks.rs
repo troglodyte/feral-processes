@@ -383,6 +383,16 @@ impl Game {
     /// the one definition of the gate — `research_nodes` explains it and
     /// `select_research` refuses on it, so a menu cannot promise a node the
     /// purchase would turn down.
+    /// The base AI level `def` is waiting on, or `None` once it is met. The
+    /// level is 0 before the AI fuses.
+    pub(crate) fn research_ai_gate(&self, def: &ResearchDef) -> Option<u32> {
+        let level = match &self.storyline.base_ai {
+            crate::storyline::BaseAi::Fused(f) => f.level,
+            _ => 0,
+        };
+        def.requires_ai_level.filter(|&need| need > level)
+    }
+
     pub(crate) fn research_zone_gate(&self, def: &ResearchDef) -> Option<u32> {
         (def.min_zone > self.world.resource::<ZoneLevel>().0).then_some(def.min_zone)
     }
@@ -803,10 +813,15 @@ impl Game {
                 } else {
                     let missing = self.missing_prereqs(def);
                     let min_zone = self.research_zone_gate(def);
-                    if missing.is_empty() && min_zone.is_none() {
+                    let ai_level = self.research_ai_gate(def);
+                    if missing.is_empty() && min_zone.is_none() && ai_level.is_none() {
                         ResearchState::Available
                     } else {
-                        ResearchState::Locked { missing, min_zone }
+                        ResearchState::Locked {
+                            missing,
+                            min_zone,
+                            ai_level,
+                        }
                     }
                 };
                 let materials: Vec<ResearchMaterial> = def
@@ -1231,6 +1246,9 @@ impl Game {
         }
         if let Some(zone) = self.research_zone_gate(&def) {
             return Err(format!("Requires Zone {zone} first."));
+        }
+        if self.research_ai_gate(&def).is_some() {
+            return Err("Seems feasible, but we don't know where to start.".to_string());
         }
         if let Some(active) = self.world.resource::<ActiveResearch>().id.clone() {
             let name = self

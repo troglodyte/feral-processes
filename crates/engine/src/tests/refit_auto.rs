@@ -342,6 +342,15 @@ fn refit_step_spends_a_core_only_on_an_empty_charge_and_restores_a_point() {
         }
     );
     assert_eq!(
+        step(0, 3, 0),
+        RefitStep {
+            spend_core: false,
+            restored: 0,
+            charge_after: 0
+        },
+        "no wear, no core"
+    );
+    assert_eq!(
         step(0, 0, 5),
         RefitStep {
             spend_core: false,
@@ -484,4 +493,40 @@ fn a_core_poured_into_the_charge_is_logged_to_the_ledger() {
         game.tick();
     }
     assert_eq!(ledger(&game) - before, 1);
+}
+
+#[test]
+fn a_pack_copy_mended_over_several_ticks_stays_one_row() {
+    let (mut game, _) = stand_by_bench(6022, 5);
+    let worn = |wear| worn_copy("kinetic_edge", wear);
+    game.add_copies(&worn(3), 1);
+    for _ in 0..REFIT_IDLE_TICKS + 2 {
+        game.tick();
+    }
+    assert_eq!(game.count_copies(&worn(3)), 0);
+    assert_eq!(game.count_copies(&worn(2)), 0);
+    assert_eq!(game.count_copies(&worn(1)), 1);
+}
+
+#[test]
+fn the_reserve_speaks_for_the_empty_bench_in_reach_not_a_stocked_one_elsewhere() {
+    let (mut game, _) = stand_by_bench(6023, 0);
+    let far = spawn_structure_at(&mut game, "refit_bench", 1, 5);
+    stock_bench(&mut game, far, 12);
+    assert_eq!(game.refit_bench_reserve(), Some((0, 0)));
+    stand_in_base_at(&mut game, 1, 4);
+    assert_eq!(game.refit_bench_reserve(), Some((0, 12)));
+}
+
+#[test]
+fn a_charge_running_dry_mid_stand_says_so_once() {
+    let (mut game, bench) = stand_by_bench(6024, 0);
+    game.world.entity_mut(bench).insert(RefitCharge(3));
+    let player = game.player_entity();
+    wear_on(&mut game, player, &worn_copy(ids::MONOFILAMENT_WHIP, 10));
+    for _ in 0..REFIT_IDLE_TICKS + 8 {
+        game.tick();
+    }
+    assert_eq!(wear_of(&game, player, EquipmentSlot::Weapon), 7);
+    assert_eq!(said_out_of_cores(&game), 1);
 }

@@ -80,12 +80,17 @@ impl Game {
     }
 
     /// The `(charge, cores)` of the bench that would serve: the first
-    /// serviceable one in reach, else the first in the base. `None` when no
+    /// serviceable one in reach, else the first in reach, else the first in
+    /// the base. In reach wins so the view never quotes a stocked bench
+    /// elsewhere beside the log's "out of Annealed Cores". `None` when no
     /// bench stands.
     pub fn refit_bench_reserve(&self) -> Option<(u32, u32)> {
-        self.refit_benches_in_reach()
-            .into_iter()
+        let in_reach = self.refit_benches_in_reach();
+        in_reach
+            .iter()
+            .copied()
             .find(Bench::serviceable)
+            .or_else(|| in_reach.first().copied())
             .or_else(|| self.refit_benches().into_iter().next())
             .map(|b| (b.charge, b.cores))
     }
@@ -197,10 +202,13 @@ impl Game {
     pub(crate) fn run_refit_bench(&mut self) {
         self.count_refit_stand();
         let serving = self.refit_bench_serving();
-        self.world.resource_mut::<RefitStand>().mended = serving.is_some();
+        let was_mending = std::mem::replace(
+            &mut self.world.resource_mut::<RefitStand>().mended,
+            serving.is_some(),
+        );
         match serving {
             Some(bench) => self.mend_next_worn(bench),
-            None => self.warn_refit_bench_empty(),
+            None => self.warn_refit_bench_empty(was_mending),
         }
     }
 
@@ -231,9 +239,11 @@ impl Game {
         };
         let copy = at.copy().clone();
         let step = refit_step(state.charge, state.cores, copy.wear);
-        if step.spend_core {
-            let paid = crate::game::base::stock::spend_supply(self, bench, ConsumeSource::Refit);
-            debug_assert!(paid, "the bench was read as holding a core");
+        if step.spend_core
+            && !crate::game::base::stock::spend_supply(self, bench, ConsumeSource::Refit)
+        {
+            debug_assert!(false, "the bench was read as holding a core");
+            return;
         }
         self.world
             .entity_mut(bench)
@@ -266,11 +276,12 @@ impl Game {
         });
     }
 
-    /// Says so once per stand, on the first tick the wait is over, when work
-    /// is waiting and every bench within reach has neither charge nor cores.
-    fn warn_refit_bench_empty(&mut self) {
+    /// Says so once per stand, when work is waiting and every bench within
+    /// reach has neither charge nor cores: on the first tick the wait is
+    /// over, or on the tick the charge ran dry mid-stand (`was_mending`).
+    fn warn_refit_bench_empty(&mut self, was_mending: bool) {
         let first_ready_tick = self.world.resource::<RefitStand>().ticks == REFIT_IDLE_TICKS + 1;
-        if !first_ready_tick || self.has_active_battle() {
+        if !(first_ready_tick || was_mending) || self.has_active_battle() {
             return;
         }
         let in_reach = self.refit_benches_in_reach();

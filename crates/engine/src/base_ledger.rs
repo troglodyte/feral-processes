@@ -195,8 +195,8 @@ pub enum ConsumeSource {
     /// Spent making something by hand: a hand-compile's ingredients, or
     /// the blank a routine was burnt onto.
     Craft,
-    /// Paid at the Refit Bench to restore a worn copy, whichever of the
-    /// shelves and the pack the units came from.
+    /// A core a Refit Bench spent from its own stock into its repair-point
+    /// charge.
     Refit,
     /// A routine disk written into a slot. It buys the routine and refunds
     /// nothing, which is what makes it a sink rather than a move.

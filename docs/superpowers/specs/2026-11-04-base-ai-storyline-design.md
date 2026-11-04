@@ -1,6 +1,6 @@
 # The base AI: a storyline at the base
 
-**Status:** design, awaiting the user's OK. Architecture: [ADR 0042](../../adr/0042-storylines-are-plain-rust-arcs-owned-by-game.md) (Proposed).
+**Status:** approved 2026-11-04. Architecture: [ADR 0042](../../adr/0042-storylines-are-plain-rust-arcs-owned-by-game.md) (Agreed).
 
 ## Intent
 

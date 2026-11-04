@@ -1,7 +1,7 @@
 # 0042. Storylines are plain Rust arcs owned by Game
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Agreed
+- Decided by: user, on Claude's proposal
 - Date: 2026-11-04
 - Pattern: Plain structs owned in one place; Functional core, imperative shell
 - Depends on: [0019](0019-content-defaults-to-rust.md), [0020](0020-functional-core-imperative-shell.md), [0021](0021-plain-rust-over-ecs-for-discrete-logic.md), [0022](0022-rng-never-depends-on-query-order.md), [0023](0023-saves-are-field-named-ron.md)

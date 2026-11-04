@@ -1431,6 +1431,7 @@ impl Game {
                     remaining: buff.ticks,
                     interval: buff.interval,
                     source: BuffSource::Consumable,
+                    ability: None,
                 },
             );
         }

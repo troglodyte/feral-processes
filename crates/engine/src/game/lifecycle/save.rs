@@ -223,6 +223,7 @@ impl Game {
                 .get::<FieldBuff>(e)
                 .map(|f| f.active.clone())
                 .unwrap_or_default(),
+            auto_recast: self.auto_recast_of(e),
             nest_position,
             patrol_position,
             study_station,
@@ -744,6 +745,7 @@ impl Game {
             tutorial_seeded: true,
             routines,
             field_buffs,
+            auto_recast: self.auto_recast_of(player),
             sorties,
             routes,
             name,

@@ -316,6 +316,7 @@ mod tests {
                             remaining: 0,
                             interval: 1,
                             source: BuffSource::Routine,
+                            ability: None,
                         },
                         ActiveFieldBuff {
                             kind: FieldBuffKind::Regen,
@@ -324,6 +325,7 @@ mod tests {
                             remaining: 30,
                             interval: 1,
                             source: BuffSource::Routine,
+                            ability: None,
                         },
                     ],
                 },

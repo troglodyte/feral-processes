@@ -290,6 +290,7 @@ fn test_field_buff(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
         remaining: 5,
         interval: 1,
         source: BuffSource::Routine,
+        ability: None,
     }
 }
 

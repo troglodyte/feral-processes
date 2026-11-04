@@ -101,6 +101,14 @@ pub struct DropTrooper;
 #[derive(Component, Default, Clone)]
 pub struct Routines(pub Vec<AbilityId>);
 
+/// Routines on this holder flagged to rerun themselves when the timed field
+/// buff they armed runs out (`Game::tick_field_buffs`). Absent means none,
+/// the idiom `KernelRing` documents, so nothing that spawns a body needs to
+/// know it exists. Every id here is also in the holder's `Routines`:
+/// uninstalling clears it, and fusion keeps only what the child still holds.
+#[derive(Component, Default, Clone, Debug, PartialEq, Eq)]
+pub struct AutoRecast(pub Vec<AbilityId>);
+
 /// How many breedings deep a program's lineage runs. Absent reads as 0:
 /// wild, tamed, bought and fused programs are all generation 0, and only a
 /// hatched child carries one.

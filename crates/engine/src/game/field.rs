@@ -313,6 +313,7 @@ impl Game {
                     remaining: duration,
                     interval,
                     source: BuffSource::Routine,
+                    ability: None,
                 },
             );
         }

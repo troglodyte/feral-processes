@@ -3935,6 +3935,7 @@ fn corruption_goes_through_apply_damage_and_so_mitigation_blunts_it() {
             remaining: 99,
             interval: 1,
             source: BuffSource::Consumable,
+            ability: None,
         }],
     });
     let before = player_hp(&game);

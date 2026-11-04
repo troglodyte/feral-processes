@@ -328,6 +328,7 @@ fn a_running_drop_boost_field_buff_scales_every_equipment_drop_chance() {
             remaining: 10,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         }],
     });
 
@@ -384,6 +385,7 @@ fn a_running_xp_boost_field_buff_raises_player_xp_gain() {
             remaining: 10,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         }],
     });
 

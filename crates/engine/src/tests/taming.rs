@@ -237,6 +237,7 @@ fn a_running_capture_boost_field_buff_raises_the_quoted_decompile_odds() {
             remaining: 10,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         }],
     });
 

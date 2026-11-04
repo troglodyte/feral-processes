@@ -372,6 +372,7 @@ fn an_ally_picker_row_carries_the_targets_stats() {
             remaining: 5,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
     let stats = *game.world.get::<Stats>(member).unwrap();
@@ -405,6 +406,7 @@ fn the_ally_pickers_player_row_carries_stats_too() {
             remaining: 5,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
     let stats = *game.world.get::<Stats>(player).unwrap();
@@ -440,6 +442,7 @@ fn an_ally_picker_row_names_the_buff_this_cast_would_replace() {
             remaining: 62,
             interval: 4,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -491,6 +494,7 @@ fn a_consumable_buff_of_the_same_kind_is_not_named_as_replaced() {
             remaining: 30,
             interval: 1,
             source: BuffSource::Consumable,
+            ability: None,
         },
     );
 
@@ -522,6 +526,7 @@ fn an_index_naming_no_field_buff_tags_nothing() {
             remaining: 62,
             interval: 4,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 

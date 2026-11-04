@@ -3,7 +3,7 @@
 use super::convert::{copy_from_save, worn_from_save};
 use super::load::recognized_routines;
 use crate::abilities::AbilityId;
-use crate::components::{Needs, Tools};
+use crate::components::{AutoRecast, Needs, Tools};
 use crate::tuning::CRAFT_ID_PREFIX;
 use crate::*;
 
@@ -146,11 +146,12 @@ impl CreatureRestore {
 /// counterpart on the load path, and the reason that one takes a bare start tile.
 pub(super) fn spawn_player_from_save(
     world: &mut World,
-    player_save: save::PlayerSave,
+    mut player_save: save::PlayerSave,
     player_routines: Vec<AbilityId>,
     player_perk_levels: u32,
 ) -> Entity {
-    world
+    let auto_recast = std::mem::take(&mut player_save.auto_recast);
+    let player = world
         .spawn((
             Player,
             Position {
@@ -317,7 +318,11 @@ pub(super) fn spawn_player_from_save(
                 player_save.phase_keys,
             ),
         ))
-        .id()
+        .id();
+    if !auto_recast.is_empty() {
+        world.entity_mut(player).insert(AutoRecast(auto_recast));
+    }
+    player
 }
 
 impl Game {
@@ -542,6 +547,9 @@ impl Game {
             entity.insert(FieldBuff {
                 active: c.field_buffs.clone(),
             });
+        }
+        if !c.auto_recast.is_empty() {
+            entity.insert(AutoRecast(c.auto_recast.clone()));
         }
         entity.insert(attributes);
         if c.tamed {

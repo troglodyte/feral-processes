@@ -198,6 +198,7 @@ fn selling_a_buffed_companion_leaves_no_orphaned_field_buff() {
             remaining: 4,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 

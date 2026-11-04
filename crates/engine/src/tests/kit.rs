@@ -515,6 +515,7 @@ mod emulation_tests {
                 remaining: 5,
                 interval: 1,
                 source: BuffSource::Routine,
+                ability: None,
             },
         );
 

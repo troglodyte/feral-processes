@@ -744,6 +744,7 @@ fn breaching_keeps_a_running_field_buff() {
             remaining: 9,
             interval: 1,
             source: BuffSource::Consumable,
+            ability: None,
         },
     );
 

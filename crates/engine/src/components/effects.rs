@@ -559,6 +559,11 @@ pub struct ActiveFieldBuff {
     #[serde(default = "crate::abilities::every_turn")]
     pub interval: u32,
     pub source: BuffSource,
+    /// The routine that armed this buff, so an expiry can find the routine
+    /// to rerun (`Game::tick_field_buffs`). `None` for a consumable and for a
+    /// buff saved before this field existed; such a buff never reruns.
+    #[serde(default)]
+    pub ability: Option<crate::abilities::AbilityId>,
 }
 
 impl ActiveFieldBuff {

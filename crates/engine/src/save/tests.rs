@@ -261,6 +261,7 @@ fn sample_data() -> SaveData {
         next_program_id: crate::resources::NextProgramId::START.0,
         outposts: Vec::new(),
         outpost_routes: Vec::new(),
+        storyline: Default::default(),
     }
 }
 
@@ -948,4 +949,39 @@ fn a_truncated_file_fails_cleanly_instead_of_panicking() {
     };
     let _ = std::fs::remove_file(&path);
     assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+}
+
+/// A save written before the storyline existed carries no `storyline` field
+/// and must load dormant. The block is deleted from the text rather than
+/// trusting the derive, the mining test's reason.
+#[test]
+fn a_save_without_a_storyline_field_loads_dormant() {
+    let mut data = sample_data();
+    data.storyline.base_ai = crate::storyline::BaseAi::Claiming {
+        host: crate::components::ProgramId(3),
+        station: (1, 2),
+    };
+    let text = to_ron(&data).unwrap();
+    assert!(
+        text.contains("Claiming"),
+        "the fixture must actually write the field to be a real test"
+    );
+    let mut skipping = false;
+    let older: String = text
+        .lines()
+        .filter(|line| {
+            if line.starts_with("    storyline:") {
+                skipping = true;
+            }
+            let keep = !skipping;
+            if skipping && *line == "    )," {
+                skipping = false;
+            }
+            keep
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!older.contains("Claiming"), "the block was removed");
+    let loaded = from_ron(&older).expect("an absent field must still parse");
+    assert_eq!(loaded.storyline, crate::storyline::Storyline::default());
 }

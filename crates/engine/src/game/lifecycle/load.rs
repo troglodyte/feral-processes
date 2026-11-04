@@ -99,6 +99,7 @@ impl Game {
         let mut data = save::load_from_file(path)?;
         reject_unloadable(&data)?;
         let dbs = load_asset_dbs(assets_dir)?;
+        let storyline = std::mem::take(&mut data.storyline);
         let ResourceRestore {
             mut world,
             load_warnings,
@@ -119,7 +120,7 @@ impl Game {
             data.anchor,
             data.spawn_point,
         );
-        let mut game = assemble_game(world, load_warnings, dropped_player_routines);
+        let mut game = assemble_game(world, storyline, load_warnings, dropped_player_routines);
         let nest_positions = restore_nests_to_build_sites(
             &mut game,
             data.nests,
@@ -671,12 +672,17 @@ fn restore_player(
 /// The `Game` itself, with derived values rebuilt and the load notes logged.
 fn assemble_game(
     world: World,
+    storyline: crate::storyline::Storyline,
     load_warnings: Vec<String>,
     dropped_player_routines: Vec<AbilityId>,
 ) -> Game {
     let schedule = Game::build_schedule();
 
-    let mut game = Game { world, schedule };
+    let mut game = Game {
+        world,
+        schedule,
+        storyline,
+    };
     // Derived values are not trusted from the file: gear, `BoughtStats`
     // and the attributes are, and the stats are rebuilt from them.
     let player = game.player_entity();

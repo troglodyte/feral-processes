@@ -1234,6 +1234,7 @@ impl Game {
             .filter(|e| e.contains::<Tamed>())
             .map(|e| e.id())
             .filter(|&e| self.program_role(e) == Some(ProgramRole::Staff))
+            .filter(|&e| self.world.get::<crate::components::BaseAiHost>(e).is_none())
             .collect();
         staff.sort_by_key(|&e| {
             let rank = self.world.get::<crate::components::StaffRank>(e);

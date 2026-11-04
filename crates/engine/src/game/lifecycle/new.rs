@@ -303,7 +303,11 @@ impl Game {
 
         let schedule = Self::build_schedule();
 
-        let mut game = Self { world, schedule };
+        let mut game = Self {
+            world,
+            schedule,
+            storyline: Default::default(),
+        };
         game.apply_character_choice(choice);
         for warning in load_warnings {
             game.log(warning);

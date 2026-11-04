@@ -1232,6 +1232,14 @@ impl Game {
         // line keeps running. The want is gone only when every wanted member
         // is held.
         let outsiders = self.outsider_posts(staff);
+        // **Once the storyline has claimed the Research Station, nobody else
+        // researches** (ADR 0042): the AI's own output is credited by
+        // `advance_storyline`, so a body posted to any `studies` structure
+        // would be a second researcher.
+        if self.storyline_owns_research() {
+            let stations = self.research_stations();
+            wanted.retain(|(e, _)| !stations.contains(e));
+        }
         wanted.retain(|post| {
             !(member_of.contains_key(&post.0)
                 && post.1 == TaskKind::GatherResource

@@ -218,6 +218,9 @@ const WALL_STRUCTURE_ID: &str = "wall";
 pub struct Game {
     world: World,
     schedule: Schedule,
+    /// Plain Rust, not a `Resource`: a new resource shifts bevy's iteration
+    /// order (ADR 0042).
+    storyline: storyline::Storyline,
 }
 
 #[cfg(test)]

@@ -1072,6 +1072,7 @@ impl Game {
                     crate::routes::RouteEnd::Settlement { .. } => None,
                 })
                 .collect(),
+            storyline: self.storyline.clone(),
         };
         save::save_to_file(path, &data)
     }

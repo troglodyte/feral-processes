@@ -228,3 +228,271 @@ fn practise_after_the_last_offset_never_stalls() {
     assert!(!out.stalled);
     assert!(out.analysis > 125);
 }
+
+/// The arc driven through a real `Game`: a floored base with a Research
+/// Station and three staff programs of distinct Analysis.
+mod in_a_game {
+    use super::*;
+    use crate::resources::ActiveResearch;
+    use crate::tests::support::*;
+    use crate::*;
+
+    const STAFF_ANALYSIS: [i32; 3] = [18, 31, 24];
+
+    struct Fixture {
+        game: Game,
+        station: Entity,
+        staff: Vec<Entity>,
+    }
+
+    fn fixture() -> Fixture {
+        let mut game = Game::new(5200, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        lay_floor_box(&mut game, (-12, -12), (12, 12));
+        let station = base_with_a_research_node(&mut game);
+        let staff = STAFF_ANALYSIS
+            .iter()
+            .enumerate()
+            .map(|(i, &analysis)| {
+                let program = spawn_tamed(&mut game, 20, 5);
+                *game.world.get_mut::<Position>(program).unwrap() = Position {
+                    x: -3 - i as i32,
+                    y: -3,
+                };
+                game.world
+                    .get_mut::<components::Attributes>(program)
+                    .unwrap()
+                    .set(&crate::attributes::AttributeId::from("analysis"), analysis);
+                program
+            })
+            .collect();
+        Fixture {
+            game,
+            station,
+            staff,
+        }
+    }
+
+    fn trigger(game: &Game) -> u32 {
+        trigger_count(game.world.resource::<WorldMap>().seed())
+    }
+
+    fn set_researched(game: &mut Game, n: u32) {
+        let mut research = game.world.resource_mut::<Research>();
+        research.0.clear();
+        research
+            .0
+            .extend((0..n).map(|i| format!("storyline_test_{i}")));
+    }
+
+    fn program_id(game: &Game, e: Entity) -> ProgramId {
+        *game.world.get::<ProgramId>(e).unwrap()
+    }
+
+    fn tick_until(game: &mut Game, limit: u32, done: impl Fn(&Game) -> bool) {
+        for _ in 0..limit {
+            if done(game) {
+                return;
+            }
+            game.tick();
+        }
+        assert!(done(game), "not reached in {limit} ticks");
+    }
+
+    fn is_fused(game: &Game) -> bool {
+        matches!(game.storyline().base_ai, BaseAi::Fused(_))
+    }
+
+    #[test]
+    fn the_awakening_fires_once_research_reaches_the_trigger() {
+        let mut f = fixture();
+        let n = trigger(&f.game);
+        set_researched(&mut f.game, n - 1);
+        f.game.tick();
+        assert!(matches!(f.game.storyline().base_ai, BaseAi::Dormant { .. }));
+        set_researched(&mut f.game, n);
+        f.game.tick();
+        let strongest = program_id(&f.game, f.staff[1]);
+        assert!(matches!(
+            f.game.storyline().base_ai,
+            BaseAi::Claiming { host, .. } if host == strongest
+        ));
+        assert!(
+            f.game
+                .world
+                .get::<components::BaseAiHost>(f.staff[1])
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn a_save_already_past_ten_claims_on_the_first_tick() {
+        let mut f = fixture();
+        set_researched(&mut f.game, 25);
+        f.game.tick();
+        assert!(matches!(
+            f.game.storyline().base_ai,
+            BaseAi::Claiming { .. }
+        ));
+    }
+
+    /// Gives the base a project with progress to lose.
+    fn with_progress_to_lose(f: &mut Fixture) -> (String, u32) {
+        let id = f
+            .game
+            .world
+            .resource::<ResearchDb>()
+            .all()
+            .find(|d| d.requires.is_empty() && d.cost > 5)
+            .map(|d| d.id.clone())
+            .expect("a cheap root project ships");
+        let mut active = f.game.world.resource_mut::<ActiveResearch>();
+        active.id = Some(id.clone());
+        active.progress.insert(id.clone(), 3);
+        (id, 3)
+    }
+
+    #[test]
+    fn progress_on_the_active_project_survives_the_fugue() {
+        let mut f = fixture();
+        let (id, before) = with_progress_to_lose(&mut f);
+        set_researched(&mut f.game, 25);
+        tick_until(&mut f.game, 400, is_fused);
+        let active = f.game.world.resource::<ActiveResearch>();
+        assert_eq!(active.id.as_deref(), Some(id.as_str()));
+        assert_eq!(active.progress.get(&id), Some(&before));
+    }
+
+    #[test]
+    fn no_research_lands_during_the_claim_or_the_fugue() {
+        let mut f = fixture();
+        with_progress_to_lose(&mut f);
+        // A program already working the Station when the claim begins.
+        let worker = f.staff[0];
+        f.game.post_worker(worker, f.station);
+        park_at_post(&mut f.game, worker, f.station);
+        set_researched(&mut f.game, 25);
+        let snapshot = |g: &Game| {
+            let a = g.world.resource::<ActiveResearch>();
+            (a.study, a.progress.clone())
+        };
+        let before = snapshot(&f.game);
+        f.game.tick();
+        assert!(
+            matches!(f.game.storyline().base_ai, BaseAi::Claiming { .. }),
+            "the claim begins on the first tick"
+        );
+        while !is_fused(&f.game) {
+            f.game.tick();
+            assert_eq!(snapshot(&f.game), before);
+        }
+    }
+
+    #[test]
+    fn the_host_fuses_after_the_fugue_and_has_no_task() {
+        let mut f = fixture();
+        set_researched(&mut f.game, 25);
+        tick_until(&mut f.game, 400, is_fused);
+        let BaseAi::Fused(fused) = f.game.storyline().base_ai.clone() else {
+            unreachable!()
+        };
+        let host = f.game.base_ai_host().expect("the host is still there");
+        assert_eq!(host, f.staff[1]);
+        assert!(f.game.world.get::<Task>(host).is_none());
+        assert_eq!(fused.level, 0);
+        assert_eq!(fused.analysis_at_fusion, STAFF_ANALYSIS[1]);
+        assert!(
+            fused.pace_at_fusion > 0.0,
+            "the frozen pace is a real figure"
+        );
+        assert_eq!(f.game.base_ai_station(), Some(f.station));
+        // And the scheduler leaves it alone from then on.
+        for _ in 0..20 {
+            f.game.tick();
+            assert!(f.game.world.get::<Task>(host).is_none());
+        }
+        assert!(!f.game.base_staff().contains(&host));
+    }
+
+    #[test]
+    fn a_host_downed_mid_walk_abandons_and_the_next_claim_does_not_re_announce() {
+        let mut f = fixture();
+        set_researched(&mut f.game, 25);
+        f.game.tick();
+        let first = f.staff[1];
+        assert!(f.game.world.get::<components::BaseAiHost>(first).is_some());
+        f.game.world.entity_mut(first).insert(components::Downed);
+        f.game.tick();
+        assert!(f.game.world.get::<components::BaseAiHost>(first).is_none());
+        assert!(matches!(
+            f.game.storyline().base_ai,
+            BaseAi::Dormant { announced: true } | BaseAi::Claiming { .. }
+        ));
+        f.game.tick();
+        let next = program_id(&f.game, f.staff[2]);
+        assert!(matches!(
+            f.game.storyline().base_ai,
+            BaseAi::Claiming { host, .. } if host == next
+        ));
+        let told = f
+            .game
+            .world
+            .resource::<crate::resources::MessageLog>()
+            .lines
+            .iter()
+            .filter(|m| m.text.contains("going wrong"))
+            .count();
+        assert_eq!(told, 1, "the awakening is told once");
+    }
+
+    fn round_trip(game: &mut Game, tag: &str) -> Game {
+        let path =
+            std::env::temp_dir().join(format!("feral_storyline_{tag}_{}.sav", std::process::id()));
+        game.save(&path).unwrap();
+        let loaded = Game::load(&path, &test_assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&path);
+        loaded
+    }
+
+    #[test]
+    fn the_storyline_round_trips_in_every_stage() {
+        let mut f = fixture();
+        let fused = FusedAi {
+            host: ProgramId(7),
+            station: (2, 2),
+            level: 2,
+            analysis_at_fusion: 31,
+            pace_at_fusion: 0.4375,
+            practice: 12,
+            carry: 0.625,
+            training: TrainingTarget {
+                selected: true,
+                progress: 9,
+            },
+        };
+        let stages = [
+            ("dormant", BaseAi::Dormant { announced: true }),
+            (
+                "claiming",
+                BaseAi::Claiming {
+                    host: ProgramId(7),
+                    station: (2, 2),
+                },
+            ),
+            (
+                "fugue",
+                BaseAi::Fugue {
+                    host: ProgramId(7),
+                    station: (2, 2),
+                    ticks_left: 57,
+                },
+            ),
+            ("fused", BaseAi::Fused(fused)),
+        ];
+        for (tag, stage) in stages {
+            f.game.storyline.base_ai = stage.clone();
+            let loaded = round_trip(&mut f.game, tag);
+            assert_eq!(loaded.storyline().base_ai, stage, "{tag}");
+        }
+    }
+}

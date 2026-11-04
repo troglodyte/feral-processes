@@ -2131,6 +2131,11 @@ pub struct SaveData {
     /// No `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub outpost_routes: Vec<OutpostRouteSave>,
+    /// The storyline arcs' stages — `storyline::Storyline`. A save without
+    /// it loads dormant, which is exactly true of a run that predates the
+    /// arc. No `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub storyline: crate::storyline::Storyline,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)

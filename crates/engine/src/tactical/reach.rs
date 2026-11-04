@@ -760,8 +760,8 @@ mod tests {
         );
         assert_eq!(
             (*band.first().unwrap(), *band.last().unwrap()),
-            (2, 6),
-            "the shipped roster's 6..14 spread must span two through six"
+            (3, 5),
+            "the shipped roster's 6..14 spread must span three through five"
         );
     }
 

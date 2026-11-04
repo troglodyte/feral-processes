@@ -69,18 +69,20 @@ pub const TACTICAL_DEPLOY_GAP: i32 = 6;
 /// Read against `TACTICAL_DEPLOY_GAP`: four points closes six cells in two
 /// turns, which is the "step or two of closing" the gap is sized for, and
 /// it leaves room either side for speed to be worth something — over the
-/// shipped roster the band runs two to six, so the slowest body takes three
-/// turns to cross what the fastest crosses in one.
+/// shipped roster the band runs three to five.
 pub const TACTICAL_MOVE_BASE: u32 = 4;
 
 /// Points of `Game::combat_speed` that buy one more cell of movement.
 ///
-/// Two, against the shipped roster's 6..14 spread and
-/// `DEFAULT_BASE_SPEED`'s 10. One point per cell would triple that spread
-/// and let a single stat decide a tactical fight on its own — speed already
-/// buys initiative, accuracy and evasion — while three would flatten the
-/// roster onto two values.
-pub const TACTICAL_MOVE_SPEED_STEP: i32 = 2;
+/// Four, against the shipped roster's 6..14 spread and
+/// `DEFAULT_BASE_SPEED`'s 10, which puts the roster on three, four and five.
+/// It was two, and the slow end (Construct, Crawler, Sentinel) moved two
+/// cells: a companion of that species took three turns to cross the
+/// deployment gap the player crosses in two, and arrived at a fight that was
+/// mostly over. At four every body closes the gap in two turns. Speed
+/// already buys initiative, accuracy and evasion, so a narrower movement
+/// band costs the fast species little.
+pub const TACTICAL_MOVE_SPEED_STEP: i32 = 4;
 
 /// How far a routine that reaches one recipient may be aimed, in cells.
 ///
@@ -171,7 +173,7 @@ pub const TACTICAL_PARTY_RADIUS: u32 = 3;
 /// and a body that cannot move at all can neither close nor walk off the
 /// board — a fight that cannot finish. Both ends are therefore correctness
 /// bounds, and both are reachable only by a mod: the shipped roster derives
-/// two through six without either clamp biting.
+/// three through five without either clamp biting.
 pub const TACTICAL_MOVE_MIN: u32 = 2;
 pub const TACTICAL_MOVE_MAX: u32 = 8;
 

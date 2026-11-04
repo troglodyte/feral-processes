@@ -335,6 +335,7 @@ fn a_hostile_runs_a_routine_the_player_s_own_gate_would_refuse_it() {
     let mut game = game();
     let pack = tactical_fight(&mut game, 1, 200);
     let wild = pack[0];
+    seat_beside_player(&mut game, wild);
     // The hostile acts first, so its turn does not close the round: closing
     // it ages cooldowns and runs a world tick, and where a hostile lands in
     // the rolled order is seed luck.
@@ -418,6 +419,7 @@ fn a_hostile_s_routine_is_floored_even_when_its_file_authors_no_cooldown() {
     let mut game = game();
     let pack = tactical_fight(&mut game, 1, 200);
     let wild = pack[0];
+    seat_beside_player(&mut game, wild);
     // The hostile acts first, so its turn does not close the round: closing
     // it ages cooldowns and runs a world tick, and where a hostile lands in
     // the rolled order is seed luck.

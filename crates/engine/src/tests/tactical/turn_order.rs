@@ -310,6 +310,7 @@ fn a_routines_cooldown_arms_the_action_it_runs_in_not_the_turn_it_ends() {
     let mut game = game();
     let pack = tactical_fight(&mut game, 1, 200);
     let wild = pack[0];
+    seat_beside_player(&mut game, wild);
     only_routine(&mut game, wild, "acid_wash");
     let def = game
         .world

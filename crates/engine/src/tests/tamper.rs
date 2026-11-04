@@ -2216,15 +2216,15 @@ fn cold_profiled_hallucinating(seed: u32, at: (i32, i32), decoys: &[(i32, i32)])
 /// **(M)** A hallucinating hostile's target is the decoy nearest where its
 /// walk *ends*, and the forecast has to ask from there too. From (0, 0) the
 /// nearer decoy is (3, 0), so that is what the walk closes on; the walk ends
-/// at (5, 2), where (6, 3) is nearer, and that is what the turn strikes.
+/// at (4, 2), where (5, 3) is nearer, and that is what the turn strikes.
 ///
 /// Mutation check: handing `chosen_target` the sides read from the start
 /// cell rather than `tactical_sides_from(destination)` makes the forecast
-/// name (3, 0). Verified and restored — see the commit body.
+/// name a body other than (5, 3). Verified and restored.
 #[test]
 fn a_hallucinating_forecast_names_the_decoy_nearest_where_the_walk_ends() {
     let near_start = (3, 0);
-    let near_end = (6, 3);
+    let near_end = (5, 3);
     let (mut game, hostile) = cold_profiled_hallucinating(9970, (0, 0), &[near_start, near_end]);
 
     let forecast = game

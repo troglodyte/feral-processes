@@ -100,7 +100,8 @@ impl Game {
     }
 
     /// At the base, not in the party, not downed, not jailed, not under
-    /// study, not on a sortie: `ProgramRole::Staff` and standing.
+    /// study, not on a sortie: `ProgramRole::Staff` (or the host's own
+    /// `BaseAi`, once marked) and standing.
     fn is_free_for_claim(&self, program: Entity) -> bool {
         self.program_role(program) == Some(ProgramRole::Staff)
             && self.world.get::<Downed>(program).is_none()
@@ -266,17 +267,19 @@ impl Game {
         }
     }
 
-    /// Stub: Task 3 replaces both announcements with Storyline
-    /// notifications.
     fn announce_awakening(&mut self, host: ProgramId) {
         let name = self
             .program_entity(host)
             .map_or_else(|| "a program".to_string(), |e| self.creature_label(e));
-        self.log_base(format!("Something is going wrong with {name}."));
+        self.notify_filled(
+            crate::notifications::NotificationKind::BaseAiAwakening,
+            &[("name", &name)],
+            None,
+        );
     }
 
     fn announce_fusion(&mut self) {
-        self.log_base("The program seems to have fused with the Research Station.");
+        self.notify(crate::notifications::NotificationKind::BaseAiFused);
     }
 
     /// Marks `host`, drops what it was doing, and frees every program posted

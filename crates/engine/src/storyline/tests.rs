@@ -434,15 +434,28 @@ mod in_a_game {
             f.game.storyline().base_ai,
             BaseAi::Claiming { host, .. } if host == next
         ));
-        let told = f
-            .game
-            .world
-            .resource::<crate::resources::MessageLog>()
-            .lines
-            .iter()
-            .filter(|m| m.text.contains("going wrong"))
-            .count();
+        let told = storyline_notifications(&mut f.game).len();
         assert_eq!(told, 1, "the awakening is told once");
+    }
+
+    /// Drains the queue and keeps what carries the Storyline category.
+    fn storyline_notifications(game: &mut Game) -> Vec<crate::notifications::Notification> {
+        std::iter::from_fn(|| game.take_notification())
+            .filter(|n| n.category == Some(crate::notifications::NotificationCategory::Storyline))
+            .collect()
+    }
+
+    #[test]
+    fn the_awakening_notification_names_the_host() {
+        let mut f = fixture();
+        let n = trigger(&f.game);
+        set_researched(&mut f.game, n);
+        f.game.tick();
+        let name = f.game.creature_label(f.staff[1]);
+        let told = storyline_notifications(&mut f.game);
+        assert_eq!(told.len(), 1, "{told:?}");
+        assert!(told[0].body.contains(&name), "{}", told[0].body);
+        assert!(!told[0].body.contains('{'), "an unfilled hole");
     }
 
     fn round_trip(game: &mut Game, tag: &str) -> Game {

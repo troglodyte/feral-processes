@@ -273,6 +273,9 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::ResearchDiscovered => "Game::discover_research",
             NotificationKind::PhaseKeyFound => "Game::roll_phase_key, via announce_phase_key",
             NotificationKind::ProgramDecompiled => "Game::settle_jail_attempt",
+            NotificationKind::BaseAiAwakening => "Game::announce_awakening",
+            NotificationKind::BaseAiFused => "Game::announce_fusion",
+            NotificationKind::BaseAiLevelUp => "Game::base_ai_level_up",
         }
     }
 

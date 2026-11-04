@@ -24,7 +24,8 @@ fn alert_color(kind: &AlertKind) -> Color {
         | AlertKind::OutpostStale
         | AlertKind::OutpostDeclining
         | AlertKind::OutpostDark
-        | AlertKind::GearWorn => TEXT,
+        | AlertKind::GearWorn
+        | AlertKind::BaseAiWaiting => TEXT,
     }
 }
 

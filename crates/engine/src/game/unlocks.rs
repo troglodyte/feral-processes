@@ -701,7 +701,11 @@ impl Game {
                     .productions()
                     .filter(|p| p.recipe.research.as_deref() == Some(node))
                     .map(move |p| {
-                        format!("{}: {}", structure.name, self.item_name(&p.recipe.produces))
+                        format!(
+                            "{}: {}",
+                            structure.name,
+                            self.unlock_label(&p.recipe.produces)
+                        )
                     })
             })
             .collect()
@@ -717,8 +721,23 @@ impl Game {
                     .as_ref()
                     .is_some_and(|c| c.research.as_deref() == Some(node))
             })
-            .map(|item| item.name.clone())
+            .map(|item| self.unlock_label(&item.id))
             .collect()
+    }
+
+    /// "Overclock Core (5–10 Thermal DMG +3 ATK)": an unlocked item by name,
+    /// and gear with what it is worth through `stat_summary`, the formatter
+    /// every gear screen prints, so the research menu says what a weapon
+    /// does rather than only what it is called.
+    fn unlock_label(&self, item: &ItemId) -> String {
+        let name = self.item_name(item).to_string();
+        match self
+            .equipment_of(item)
+            .map(|(_, stats)| self.stat_summary(stats))
+        {
+            Some(stats) if !stats.is_empty() => format!("{name} ({stats})"),
+            _ => name,
+        }
     }
 
     /// "Unlocks: Fabricator" — everything this node hands over, by display
@@ -743,7 +762,7 @@ impl Game {
             .chain(
                 def.unlocks_recipes
                     .iter()
-                    .map(|r| self.item_name(&r.result).to_string()),
+                    .map(|r| self.unlock_label(&r.result)),
             )
             .chain(self.machine_recipes_gated_by(&def.id))
             .chain(self.item_recipes_gated_by(&def.id))

@@ -25,7 +25,8 @@ Core Fragments.
     //
     // Above the description the menu draws one cyan line naming everything
     // the node hands over, by display name: the structures, the results of
-    // its recipes, and the tools, in that order. A base-tree node never
+    // its recipes, and the tools, in that order. A piece of gear is followed
+    // by its stats in brackets, the same summary the inventory prints. A base-tree node never
     // grants a routine directly — see "Routines are a separate
     // tree" below.
     //

@@ -798,6 +798,150 @@ mod in_a_game {
         assert_eq!(progress_of(&f.game, &id), 0);
     }
 
+    /// Stalls the host at its cap, so "Train your AI" is on offer.
+    fn stall(game: &mut Game, host: Entity) {
+        let BaseAi::Fused(fused) = game.storyline().base_ai.clone() else {
+            unreachable!()
+        };
+        game.world
+            .get_mut::<components::Attributes>(host)
+            .unwrap()
+            .set(
+                &crate::attributes::AttributeId::from("analysis"),
+                crate::storyline::analysis_cap(&fused),
+            );
+    }
+
+    fn fused_state(game: &Game) -> FusedAi {
+        let BaseAi::Fused(fused) = game.storyline().base_ai.clone() else {
+            unreachable!()
+        };
+        fused
+    }
+
+    #[test]
+    fn training_is_refused_until_the_ai_stalls() {
+        let (mut f, host, _id) = fused_with(0.0, 0);
+        assert!(f.game.select_ai_training().is_err());
+        assert!(!fused_state(&f.game).training.selected);
+        assert!(f.game.base_ai_view().is_some_and(|v| !v.training_available));
+        stall(&mut f.game, host);
+        assert!(f.game.base_ai_view().is_some_and(|v| v.training_available));
+        f.game.select_ai_training().unwrap();
+        assert!(fused_state(&f.game).training.selected);
+        assert_eq!(f.game.world.resource::<ActiveResearch>().id, None);
+        assert!(f.game.ai_training_wants_subject());
+    }
+
+    #[test]
+    fn training_wants_a_subject_and_consumes_it_on_completion_only() {
+        let (mut f, host, _id) = fused_with(4.0, 0);
+        stall(&mut f.game, host);
+        f.game.select_ai_training().unwrap();
+        let cost = crate::storyline::training_cost(0);
+        for _ in 0..(cost * 5) {
+            f.game.tick();
+        }
+        assert_eq!(fused_state(&f.game).training.progress, cost);
+        assert_eq!(fused_state(&f.game).level, 0, "no subject, no level");
+        let subject = f.staff[0];
+        pin_subject_at_pen(&mut f.game, subject, f.station);
+        assert!(f.game.world.get::<Stats>(subject).is_some());
+        f.game.tick();
+        assert_eq!(fused_state(&f.game).level, 1);
+        assert!(f.game.world.get::<Stats>(subject).is_none(), "spent");
+    }
+
+    #[test]
+    fn unpinning_before_completion_costs_nothing() {
+        let (mut f, host, _id) = fused_with(0.0, 0);
+        stall(&mut f.game, host);
+        f.game.select_ai_training().unwrap();
+        let subject = f.staff[0];
+        pin_subject_at_pen(&mut f.game, subject, f.station);
+        f.game.tick();
+        f.game.unpin_subject(subject).unwrap();
+        f.game.tick();
+        assert!(f.game.world.get::<Stats>(subject).is_some());
+        assert_eq!(fused_state(&f.game).level, 0);
+    }
+
+    #[test]
+    fn switching_away_from_training_keeps_its_progress() {
+        let (mut f, host, id) = fused_with(0.0, 0);
+        stall(&mut f.game, host);
+        f.game.select_ai_training().unwrap();
+        let BaseAi::Fused(fused) = &mut f.game.storyline.base_ai else {
+            unreachable!()
+        };
+        fused.training.progress = 7;
+        f.game.select_research(&id).unwrap();
+        let after = fused_state(&f.game);
+        assert!(!after.training.selected);
+        assert_eq!(after.training.progress, 7);
+        assert_eq!(
+            f.game.world.resource::<ActiveResearch>().id.as_deref(),
+            Some(id.as_str())
+        );
+    }
+
+    #[test]
+    fn completing_training_raises_the_level_and_practice_resumes() {
+        let (mut f, host, _id) = fused_with(0.0, 0);
+        stall(&mut f.game, host);
+        f.game.select_ai_training().unwrap();
+        let BaseAi::Fused(fused) = &mut f.game.storyline.base_ai else {
+            unreachable!()
+        };
+        fused.training.progress = crate::storyline::training_cost(0);
+        let subject = f.staff[0];
+        pin_subject_at_pen(&mut f.game, subject, f.station);
+        f.game.tick();
+        let after = fused_state(&f.game);
+        assert_eq!(after.level, 1);
+        assert!(!after.training.selected);
+        assert_eq!(after.training.progress, 0);
+        assert!(
+            analysis_of(&f.game, host) < crate::storyline::analysis_cap(&after),
+            "the next threshold is further off"
+        );
+        // Nothing is selected, so the study bank is where credit lands, and
+        // the AI is working again: practice accrues.
+        f.game.tick();
+        assert!(fused_state(&f.game).practice > 0);
+    }
+
+    #[test]
+    fn the_level_up_notification_names_the_level_and_clears_the_alert() {
+        let (mut f, host, _id) = fused_with(0.0, 49);
+        let fused = fused_state(&f.game);
+        let cap = crate::storyline::analysis_cap(&fused);
+        f.game
+            .world
+            .get_mut::<components::Attributes>(host)
+            .unwrap()
+            .set(&crate::attributes::AttributeId::from("analysis"), cap - 1);
+        let BaseAi::Fused(fused) = &mut f.game.storyline.base_ai else {
+            unreachable!()
+        };
+        fused.practice = crate::storyline::practice_cost(cap - 1 - fused.analysis_at_fusion) - 1;
+        f.game.tick();
+        f.game.tick();
+        assert_eq!(waiting_alerts(&f.game), 1);
+        f.game.select_ai_training().unwrap();
+        let BaseAi::Fused(fused) = &mut f.game.storyline.base_ai else {
+            unreachable!()
+        };
+        fused.training.progress = crate::storyline::training_cost(0);
+        let subject = f.staff[0];
+        pin_subject_at_pen(&mut f.game, subject, f.station);
+        f.game.tick();
+        assert_eq!(waiting_alerts(&f.game), 0);
+        let told = storyline_notifications(&mut f.game);
+        let body = told.last().map(|n| n.body.clone()).unwrap_or_default();
+        assert!(body.contains("level 1"), "{body}");
+    }
+
     #[test]
     fn the_storyline_round_trips_in_every_stage() {
         let mut f = fixture();

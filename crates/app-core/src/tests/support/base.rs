@@ -1023,3 +1023,18 @@ pub(crate) fn type_text(app: &mut App, text: &str) {
         app.handle_key(GameKey::Char(c));
     }
 }
+
+/// A base whose one staff program has fused with the Research Station and
+/// stalled at its first threshold, so "Train your AI" is on offer. Built
+/// through the engine's dev door: the arc itself takes a hundred ticks and a
+/// trigger's worth of research.
+pub(crate) fn app_with_a_stalled_base_ai(seed: u32) -> App {
+    let mut app = app_in_base_with_a_research_node(seed);
+    tame_program_at_zone(&mut app, 1);
+    app.game
+        .as_mut()
+        .unwrap()
+        .dev_fuse_base_ai(true)
+        .expect("a staff program and a Research Station stand");
+    app
+}

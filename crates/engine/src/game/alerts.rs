@@ -60,4 +60,13 @@ impl Game {
             text,
         );
     }
+
+    /// Removes every alert of `kind`, for a state that has ended on its own
+    /// and so needs no dismissing.
+    pub(crate) fn clear_alerts_of(&mut self, kind: &AlertKind) {
+        self.world
+            .resource_mut::<AlertBoard>()
+            .alerts
+            .retain(|alert| &alert.kind != kind);
+    }
 }

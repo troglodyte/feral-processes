@@ -114,6 +114,23 @@ impl Game {
             })
     }
 
+    /// Whether "Train your AI" is selected and no program is pinned to spend
+    /// on it: `research_wants_subject`'s answer for the training target.
+    pub fn ai_training_wants_subject(&self) -> bool {
+        let training = matches!(
+            &self.storyline.base_ai,
+            crate::storyline::BaseAi::Fused(f) if f.training.selected
+        );
+        let Some(station) = self.study_station() else {
+            return false;
+        };
+        training
+            && !self.world.iter_entities().any(|e| {
+                e.get::<components::UnderStudy>()
+                    .is_some_and(|u| u.station == station)
+            })
+    }
+
     /// The one subject the active project is actually spending right now, or
     /// `None` when nothing is being worked on a body.
     ///

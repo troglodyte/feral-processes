@@ -6,11 +6,12 @@ use crate::base_grid::BaseGrid;
 use crate::components::{BaseAiHost, Downed, MachineRecipe, ProgramId, Task};
 use crate::game::base::hauling::{self, Step, Touch};
 use crate::storyline::{
-    BaseAi, FusedAi, HostCandidate, StationSpot, StepInput, StepOutcome, Storyline, analysis_cap,
-    pace, practise, step, training_cost, trigger_count,
+    BaseAi, FusedAi, HostCandidate, StationSpot, StepInput, StepOutcome, Storyline, TrainingTarget,
+    analysis_cap, pace, practise, step, training_cost, trigger_count,
 };
 use crate::systems::{CycleModifiers, CyclePace, expected_gather_per_tick, node_cycle_shape};
 use crate::tuning::BASE_AI_FUGUE_TICKS;
+use crate::views::BaseAiView;
 
 const BASE_AI_ALERT_SUBJECT: &str = "base-ai";
 use crate::*;
@@ -104,7 +105,9 @@ impl Game {
         let units = fused.carry.floor();
         fused.carry -= units;
         let room = self.credit_ai_research(&mut fused, units as u32);
-        if room {
+        if self.training_is_ready(&fused) {
+            self.complete_training(&mut fused);
+        } else if room {
             let outcome = practise(&fused, analysis, 1);
             fused.practice = outcome.practice;
             if outcome.analysis != analysis
@@ -124,6 +127,129 @@ impl Game {
             }
         }
         self.storyline.base_ai = BaseAi::Fused(fused);
+    }
+
+    /// Whether the selected training has its full cost and a pinned program
+    /// standing in the pen to spend on it.
+    fn training_is_ready(&self, fused: &FusedAi) -> bool {
+        fused.training.selected
+            && fused.training.progress >= training_cost(fused.level)
+            && self.study_yield_blocker().is_none()
+            && self.pinned_subject().is_some()
+    }
+
+    /// Spends the pinned program, adds a level and lets practice resume.
+    fn complete_training(&mut self, fused: &mut FusedAi) {
+        let Some(subject) = self.pinned_subject() else {
+            return;
+        };
+        self.spend_subject(subject);
+        fused.level += 1;
+        fused.practice = 0;
+        fused.training = TrainingTarget::default();
+        self.base_ai_level_up(fused.level);
+    }
+
+    fn base_ai_level_up(&mut self, level: u32) {
+        self.clear_alerts_of(&AlertKind::BaseAiWaiting);
+        self.notify_filled(
+            crate::notifications::NotificationKind::BaseAiLevelUp,
+            &[("level", &level.to_string())],
+            None,
+        );
+    }
+
+    /// Chooses "Train your AI" as the one thing the AI works on. Refused
+    /// until it has stalled at its threshold. Progress on a project is kept.
+    pub fn select_ai_training(&mut self) -> Result<(), String> {
+        if self.is_game_over().is_some() || self.has_active_battle() {
+            return Err("Can't do that right now.".into());
+        }
+        let Some(view) = self.base_ai_view() else {
+            return Err("There is no AI to train.".into());
+        };
+        if !view.training_available {
+            return Err("The AI hasn't reached the end of what it can learn alone.".into());
+        }
+        if view.training_selected {
+            return Err("The AI is already being trained.".into());
+        }
+        if let BaseAi::Fused(fused) = &mut self.storyline.base_ai {
+            fused.training.selected = true;
+        }
+        self.world
+            .resource_mut::<crate::resources::ActiveResearch>()
+            .id = None;
+        self.refresh_research_reach();
+        self.log_base("Training the base AI.");
+        Ok(())
+    }
+
+    /// Fuses the first base staff program with the first Research Station at
+    /// level 0, as if the arc had run, and with `stalled` leaves it at its
+    /// first threshold. For a test or a hand-built state whose subject is
+    /// what comes after the fusion; the arc itself never calls it.
+    #[doc(hidden)]
+    pub fn dev_fuse_base_ai(&mut self, stalled: bool) -> Result<(), String> {
+        let host = *self
+            .base_staff()
+            .first()
+            .ok_or("no base staff program to fuse")?;
+        let station = *self
+            .research_stations()
+            .first()
+            .ok_or("no Research Station to fuse with")?;
+        let anchor = self
+            .world
+            .get::<Position>(station)
+            .map(|p| (p.x, p.y))
+            .ok_or("the station has no position")?;
+        let analysis = self.analysis_of_program(host);
+        let id = *self
+            .world
+            .get::<ProgramId>(host)
+            .ok_or("the host has no program id")?;
+        let pace_at_fusion = self.host_research_pace(host, anchor);
+        let fused = FusedAi {
+            host: id,
+            station: anchor,
+            level: 0,
+            analysis_at_fusion: analysis,
+            pace_at_fusion,
+            practice: 0,
+            carry: 0.0,
+            training: TrainingTarget::default(),
+        };
+        let cap = analysis_cap(&fused);
+        self.world.entity_mut(host).insert(BaseAiHost);
+        self.storyline.base_ai = BaseAi::Fused(fused);
+        if stalled && let Some(mut attributes) = self.world.get_mut::<components::Attributes>(host)
+        {
+            attributes.set(&crate::attributes::AttributeId::from("analysis"), cap);
+        }
+        Ok(())
+    }
+
+    /// The base AI as the research screen shows it; `None` before it fuses.
+    pub fn base_ai_view(&self) -> Option<BaseAiView> {
+        let BaseAi::Fused(fused) = &self.storyline.base_ai else {
+            return None;
+        };
+        let analysis = self
+            .program_entity(fused.host)
+            .map_or(fused.analysis_at_fusion, |e| self.analysis_of_program(e));
+        let cap = analysis_cap(fused);
+        let stalled = analysis >= cap;
+        Some(BaseAiView {
+            level: fused.level,
+            analysis,
+            next_threshold: (cap != i32::MAX).then_some(cap),
+            stalled,
+            training_available: stalled,
+            training_selected: fused.training.selected,
+            training_progress: fused.training.progress,
+            training_cost: training_cost(fused.level),
+        })
     }
 
     /// Sends `units` to training, the running project or the study bank, and

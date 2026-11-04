@@ -1265,6 +1265,11 @@ impl Game {
         // completed the moment the shelves held it and was gone before the
         // data finished, so anything else eating those units stalled the
         // project for good.
+        // A project and "Train your AI" are the one thing the AI works on;
+        // training keeps what it has earned (`TrainingTarget::progress`).
+        if let crate::storyline::BaseAi::Fused(fused) = &mut self.storyline.base_ai {
+            fused.training.selected = false;
+        }
         self.world.resource_mut::<ActiveResearch>().id = Some(def.id.clone());
         self.refresh_research_reach();
         self.log_base(format!("Research project started: {}.", def.name));
@@ -1696,7 +1701,7 @@ impl Game {
     /// `overkill_term`'s own identity value, so the condition roll is
     /// best-case — a controlled dissection beats overkilling something in the
     /// field.
-    fn spend_subject(&mut self, subject: Entity) {
+    pub(crate) fn spend_subject(&mut self, subject: Entity) {
         let Some(station) = self.study_station() else {
             return;
         };

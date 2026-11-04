@@ -1364,6 +1364,10 @@ impl Game {
                     making: self
                         .placed(entity)
                         .and_then(|p| p.product_name(self.world.resource::<ItemDb>())),
+                    structure_name: self
+                        .structure_def_of(entity)
+                        .filter(|d| !d.barrier && !d.door)
+                        .map(|d| d.name.clone()),
                     entity,
                     pos: (pos.x, pos.y),
                     glyph: glyph.ch,

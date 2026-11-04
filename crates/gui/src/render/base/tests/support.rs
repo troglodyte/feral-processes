@@ -14,6 +14,7 @@ pub(super) fn patient_view(recovering: bool) -> EntityView {
     EntityView {
         unconfigured: false,
         making: None,
+        structure_name: None,
         entity: Entity::PLACEHOLDER,
         pos: (0, 0),
         glyph: 'd',

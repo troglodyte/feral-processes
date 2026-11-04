@@ -834,6 +834,37 @@ fn a_fixed_extractor_is_making_its_work_output_and_a_depot_nothing() {
 }
 
 #[test]
+fn a_structure_is_named_for_alt_but_a_wall_and_a_door_are_not() {
+    let mut game = bare_game();
+    let mut spawn = |kind: &str, x| {
+        let def = game
+            .structure_defs()
+            .into_iter()
+            .find(|d| d.id == kind)
+            .unwrap();
+        game.spawn_structure(&def, x, 40, None)
+    };
+    let factory = spawn("factory", 40);
+    let depot = spawn("depot", 44);
+    let wall = spawn("wall", 48);
+    let door = spawn("door", 50);
+    set_recipe_researched(&mut game, factory, "bytecode_block").unwrap();
+    let views = game.view_entities(60, 60);
+    let name = |e| {
+        views
+            .iter()
+            .find(|v| v.entity == e)
+            .unwrap()
+            .structure_name
+            .clone()
+    };
+    assert_eq!(name(factory).as_deref(), Some("Factory"));
+    assert_eq!(name(depot).as_deref(), Some("Depot"));
+    assert_eq!(name(wall), None);
+    assert_eq!(name(door), None);
+}
+
+#[test]
 fn a_stall_alert_names_the_product() {
     let mut game = bare_game();
     let (factory, _worker) = staffed_full_factory(&mut game);

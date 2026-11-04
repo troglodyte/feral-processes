@@ -948,8 +948,9 @@ mod in_a_game {
     #[test]
     fn the_storyline_round_trips_in_every_stage() {
         let mut f = fixture();
+        let host = program_id(&f.game, f.staff[0]);
         let fused = FusedAi {
-            host: ProgramId(7),
+            host,
             station: (2, 2),
             level: 2,
             analysis_at_fusion: 31,
@@ -966,14 +967,14 @@ mod in_a_game {
             (
                 "claiming",
                 BaseAi::Claiming {
-                    host: ProgramId(7),
+                    host,
                     station: (2, 2),
                 },
             ),
             (
                 "fugue",
                 BaseAi::Fugue {
-                    host: ProgramId(7),
+                    host,
                     station: (2, 2),
                     ticks_left: 57,
                 },
@@ -992,6 +993,14 @@ mod in_a_game {
             f.game.storyline.base_ai = stage.clone();
             let loaded = round_trip(&mut f.game, tag);
             assert_eq!(loaded.storyline().base_ai, stage, "{tag}");
+            if !matches!(stage, BaseAi::Dormant { .. }) {
+                let entity = loaded.program_entity(host).expect("the host loads");
+                assert_eq!(
+                    loaded.program_role(entity),
+                    Some(ProgramRole::BaseAi),
+                    "{tag}"
+                );
+            }
         }
     }
 }

@@ -32,6 +32,14 @@ impl Game {
         self.program_entity(id)
     }
 
+    /// Re-marks the host after a load: only the arc is saved, the marker
+    /// is derived from it.
+    pub(crate) fn restore_base_ai_host(&mut self) {
+        if let Some(host) = self.base_ai_host() {
+            self.world.entity_mut(host).insert(BaseAiHost);
+        }
+    }
+
     /// The `studies` structure standing on the arc's anchor tile.
     pub(crate) fn base_ai_station(&self) -> Option<Entity> {
         let anchor = match &self.storyline.base_ai {

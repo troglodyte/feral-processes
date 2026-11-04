@@ -396,6 +396,20 @@ mod tests {
     /// perfectly and refuse every offer. The research buy and the build are
     /// exactly what the template is for skipping.
     #[test]
+    fn the_base_ai_stalled_template_loads_with_its_host_marked() {
+        let out = std::env::temp_dir().join("feral_processes_template_base_ai_host.bin");
+        generate("base-ai-stalled", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        assert_eq!(
+            game.manifest_roster().iter().filter(|r| r.base_ai).count(),
+            1,
+            "a fused host the roster reads as staff is the load not re-marking it"
+        );
+    }
+
+    #[test]
     fn the_contracts_template_starts_at_a_board_it_can_take_from() {
         let out = std::env::temp_dir().join("feral_processes_template_contracts_board.bin");
         generate("contracts", &out).unwrap();

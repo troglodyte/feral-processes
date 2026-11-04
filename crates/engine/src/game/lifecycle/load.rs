@@ -190,6 +190,7 @@ impl Game {
         game.log("Session restored. Reconnecting to the Basin.");
         restore_tutorial(&mut game, tutorial_seeded);
         reconcile_research(&mut game);
+        game.restore_base_ai_host();
         seed_labour_staff(&mut game);
         game.assess_situations();
         game.mark_seen_tiles();

@@ -61,6 +61,34 @@ fn a_third_program_at_a_two_place_bay_waits() {
     assert_eq!(tally.stranded, 0);
 }
 
+/// The third program stands in reach of the full bay on its way to the free
+/// one `Amenities::route` sent it to; it is passing through, not waiting.
+#[test]
+fn a_program_walking_past_a_full_bay_to_a_free_one_does_not_wait() {
+    let (mut game, staff) = crowded_bay(88, 3);
+    place_now(&mut game, "defrag_bay", -5, 0).expect("a second bay is buildable");
+    // Placing the bay ran ticks with the staff already critical and only the
+    // first bay counted; start the visits afresh once both are.
+    let (critical, _) = threshold(&game, &coherence());
+    for &who in &staff {
+        set_reserve(&mut game, who, &coherence(), critical + 5.0);
+        game.world.entity_mut(who).remove::<OffShift>();
+    }
+    for _ in 0..200 {
+        if game.amenities().servicing(&coherence()).len() == 2 {
+            break;
+        }
+        game.tick();
+    }
+    assert_eq!(game.amenities().servicing(&coherence()).len(), 2);
+    for &who in &staff {
+        set_reserve(&mut game, who, &coherence(), critical - 1.0);
+    }
+    run_until_visits(&mut game, 3);
+    let tally = visits(&game);
+    assert_eq!(tally.waited, 0, "a free bay existed, got {tally:?}");
+}
+
 #[test]
 fn an_unreachable_amenity_is_a_stranded_visit() {
     let (mut game, staff) = crowded_bay(82, 1);

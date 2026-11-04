@@ -241,6 +241,20 @@ pub fn needs_drain_system(
         }
         // An errand in reach of this need's amenity that was not granted a
         // place is waiting for one: the one fact a visit's outcome needs.
+        // Only when every site is full, though: with a free place left
+        // anywhere, `Amenities::route` is walking it there and it is only
+        // passing through a full site's reach.
+        let a_place_is_free = places.iter().any(|(site, count, _)| {
+            let used = granted
+                .values()
+                .filter_map(|m| m.get(&def.id))
+                .filter(|tile| **tile == (site.x, site.y))
+                .count();
+            used < *count
+        });
+        if a_place_is_free {
+            continue;
+        }
         for c in contenders.iter().filter(|c| c.wants) {
             let granted_here = granted.get(&c.who).is_some_and(|m| m.contains_key(&def.id));
             let in_reach_of_one = places.iter().any(|(site, _, radius)| {

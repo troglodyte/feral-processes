@@ -142,3 +142,67 @@ fn a_full_bay_offers_no_breeding() {
     app.handle_key(GameKey::Char('B'));
     assert_eq!(app.mode, Mode::Playing, "no free slot, so B only closes");
 }
+
+/// `[c]` beside the fixture's bay, `Tab` past the Extractor east of the
+/// player (east comes before west), then into the page.
+fn open_the_bay_in_the_hub(app: &mut App) -> Entity {
+    let bay = open_the_bay_sheet(app);
+    app.pending_structure_manifest = None;
+    app.mode = Mode::Playing;
+    app.handle_key(GameKey::Char('c'));
+    app.handle_key(GameKey::Tab);
+    assert_eq!(
+        app.structure_hub.as_ref().map(|h| h.current().entity),
+        Some(bay)
+    );
+    app.handle_key(GameKey::Right);
+    bay
+}
+
+#[test]
+fn c_beside_a_bay_opens_its_breed_page() {
+    let mut app = app_with_a_breeding_bay(8109, 1, false);
+    let bay = open_the_bay_in_the_hub(&mut app);
+    assert_eq!(app.mode, Mode::Breed);
+    assert_eq!(app.pending_breed_bay, Some(bay));
+    assert!(app.hub_at().is_some(), "the picker is a page of the hub");
+}
+
+#[test]
+fn breeding_from_the_hub_lands_on_the_bays_info_page() {
+    let mut app = app_with_a_breeding_bay(8110, 1, false);
+    let bay = open_the_bay_in_the_hub(&mut app);
+    pick_row(&mut app, 0);
+    assert_eq!(app.mode, Mode::BreedSecond);
+    pick_row(&mut app, 0);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.status_line, None);
+    assert_eq!(app.mode, Mode::StructureManifest);
+    assert_eq!(app.pending_structure_manifest, Some(bay));
+    assert!(app.structure_hub.is_some(), "still in the hub");
+    assert_eq!(seeds(&mut app), 0);
+}
+
+#[test]
+fn esc_on_the_second_parent_in_the_hub_steps_back_to_the_breed_page() {
+    let mut app = app_with_a_breeding_bay(8111, 1, false);
+    open_the_bay_in_the_hub(&mut app);
+    pick_row(&mut app, 0);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Breed);
+    assert!(app.hub_at().is_some());
+}
+
+#[test]
+fn a_full_bays_breed_page_refuses_a_pick() {
+    let mut app = app_with_a_breeding_bay(8112, 2, false);
+    open_the_bay_in_the_hub(&mut app);
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
+    app.handle_key(GameKey::Enter);
+    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.mode, Mode::Breed);
+    pick_row(&mut app, 0);
+    assert_eq!(app.mode, Mode::Breed, "nothing is picked");
+    assert_eq!(app.status_line.as_deref(), Some("no free bay"));
+}

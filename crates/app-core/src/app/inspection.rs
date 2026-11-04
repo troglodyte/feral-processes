@@ -131,7 +131,7 @@ impl App {
             && self
                 .game
                 .as_ref()
-                .is_some_and(|g| g.incubations(bay).iter().any(|i| i.child.is_none()))
+                .is_some_and(|g| super::breeding::bay_has_room(g, bay))
         {
             self.pending_structure_manifest = None;
             self.pending_breed_bay = Some(bay);

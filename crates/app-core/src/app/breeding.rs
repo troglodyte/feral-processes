@@ -1,7 +1,9 @@
 //! The three-page breeding flow, opened from a Breeding Bay's structure
-//! sheet: first parent, second parent, then the confirm that spends a seed.
+//! sheet or its Breed page in the `[c]` hub: first parent, second parent,
+//! then the confirm that spends a seed.
 
 use crate::*;
+use feral_processes_engine::breeding::BreedRefusal;
 
 impl App {
     /// Picks the first parent from the whole roster, as fusion does: nothing
@@ -11,6 +13,16 @@ impl App {
     pub(crate) fn handle_breed_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.leave_breeding();
+            return;
+        }
+        // The hub's Breed page stays offered while the bay is full, so it
+        // says so on the first pick rather than after both parents and the
+        // confirm.
+        if key == GameKey::Enter
+            && let Some(bay) = self.pending_breed_bay
+            && !self.game.as_ref().is_some_and(|g| bay_has_room(g, bay))
+        {
+            self.refuse(BreedRefusal::NoFreeSlot.reason());
             return;
         }
         if let Some(parent) = self.pick_parent(key, None) {
@@ -91,10 +103,26 @@ impl App {
         }
     }
 
+    /// Out of the hub, back to wherever the bay's sheet was opened from.
+    /// In it, on to the bay's Info page, which shows the child hatching.
     fn leave_breeding(&mut self) {
         self.pending_breed_bay = None;
         self.pending_breed_first = None;
         self.pending_breed_second = None;
-        self.close_screen();
+        let info = self.structure_hub.as_ref().and_then(|h| {
+            h.current()
+                .pages
+                .iter()
+                .position(|p| *p == StructurePage::Info)
+        });
+        match info {
+            Some(page) => self.enter_structure_page(page),
+            None => self.close_screen(),
+        }
     }
+}
+
+/// Whether `bay` has an empty slot to grow a child in.
+pub(crate) fn bay_has_room(game: &Game, bay: Entity) -> bool {
+    game.incubations(bay).iter().any(|i| i.child.is_none())
 }

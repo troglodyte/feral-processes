@@ -807,6 +807,8 @@ pub(crate) fn app_with_a_breeding_bay(seed: u32, seeds: u32, first_resting: bool
         let first = data.creatures.iter_mut().find(|c| c.tamed).unwrap();
         first.breed_ready_at = u64::MAX / 2;
     }
+    // Beside the bay, so `[c]` finds it.
+    stand_save_on_field(&mut data, 0, 0);
     save::save_to_file(&path, &data).unwrap();
     app.game = Game::load(&path, &assets_dir).ok();
     let _ = std::fs::remove_file(&path);

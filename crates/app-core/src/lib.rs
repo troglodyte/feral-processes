@@ -2823,6 +2823,7 @@ pub fn base_popup_parent(mode: Mode) -> Option<Mode> {
         Mode::RoutineBuildPick | Mode::RoutineBuildName => Some(Mode::RoutineBuild),
         Mode::WeaponBuildPick | Mode::WeaponBuildName => Some(Mode::WeaponBuild),
         Mode::CraftQuantity | Mode::Compiling => Some(Mode::Craft),
+        Mode::BreedSecond | Mode::BreedConfirm => Some(Mode::Breed),
         _ => None,
     }
 }

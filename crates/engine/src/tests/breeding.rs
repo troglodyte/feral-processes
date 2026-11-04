@@ -262,6 +262,15 @@ fn bay_game(a: &str, b: &str, seeds: u32) -> (Game, Entity, Entity, Entity) {
     (game, pa, pb, bay)
 }
 
+#[test]
+fn a_bay_offers_a_breed_page_before_its_info() {
+    let (game, _, _, bay) = bay_game("worm", "worm", 1);
+    assert_eq!(
+        game.structure_pages(bay),
+        vec![crate::StructurePage::Breed, crate::StructurePage::Info]
+    );
+}
+
 fn seeds_in_pack(game: &Game) -> u32 {
     game.world
         .get::<Inventory>(game.player_entity())

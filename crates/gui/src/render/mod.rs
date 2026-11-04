@@ -1298,6 +1298,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 }),
             None,
         )),
+        Mode::Breed => Some((breeding::breed_page_rows(game, selected), None)),
         _ => None,
     });
     if let (Some(frame), Some((rows, nothing_qualifies))) = (&hub_frame, page_rows) {
@@ -1592,16 +1593,20 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         ),
         Mode::Breed => draw_breed_menu(game, selected, refusal, painter, m),
         Mode::BreedSecond => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
             draw_breed_second_menu(game, app.pending_breed_first, selected, refusal, painter, m)
         }
-        Mode::BreedConfirm => draw_breed_confirm_menu(
-            game,
-            app.pending_breed_first,
-            app.pending_breed_second,
-            refusal,
-            painter,
-            m,
-        ),
+        Mode::BreedConfirm => {
+            base_report::draw_popup_parent(popup_parent.as_ref(), painter, m);
+            draw_breed_confirm_menu(
+                game,
+                app.pending_breed_first,
+                app.pending_breed_second,
+                refusal,
+                painter,
+                m,
+            )
+        }
         Mode::RenamePet => draw_rename_menu(
             game,
             app.pending_rename,

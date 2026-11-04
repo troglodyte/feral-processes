@@ -67,6 +67,10 @@ pub fn structure_page(page: StructurePage) -> &'static HubPage {
             title: "Built routines",
             screens: &[Mode::BuiltRoutines],
         },
+        StructurePage::Breed => &HubPage {
+            title: "Breed",
+            screens: &[Mode::Breed],
+        },
         StructurePage::Info => &HubPage {
             title: "Info",
             screens: &[Mode::StructureManifest],
@@ -235,6 +239,10 @@ impl App {
             StructurePage::Salvage => self.mode = Mode::WeaponSalvage,
             StructurePage::Compile => self.mode = Mode::Craft,
             StructurePage::Built => self.mode = Mode::BuiltRoutines,
+            StructurePage::Breed => {
+                self.pending_breed_bay = Some(entity);
+                self.mode = Mode::Breed;
+            }
             StructurePage::Info => {
                 self.pending_structure_manifest = Some(entity);
                 self.mode = Mode::StructureManifest;
@@ -318,6 +326,9 @@ impl App {
         self.siphon = None;
         self.splice_rig = None;
         self.pending_plot = None;
+        self.pending_breed_bay = None;
+        self.pending_breed_first = None;
+        self.pending_breed_second = None;
         self.pending_structure_manifest = None;
         self.drop_routine_craft_state();
         self.drop_gear_craft_state();

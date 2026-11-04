@@ -9,8 +9,9 @@ in the way: 14 Core Fragments and 2 Bytecode Blocks. A Breeding Seed is the item
 spends, and wild programs shed them now and then, most often Glitches and Drones, then Scrappers
 and Worms.
 
-Open the bay's sheet and press B. You pick the first parent, then the second, then confirm with
-Enter, and the seed is spent. The parents come from your whole roster, wherever they are standing.
+Stand beside the bay and press c: the bay's Breed page lists your programs. (Its sheet, from x,
+takes you there too with B.) You pick the first parent, then the second, then confirm with Enter,
+and the seed is spent. The parents come from your whole roster, wherever they are standing.
 A program cannot be paired with itself, a boss cannot breed, and a program that bred recently is
 listed but refuses until it has rested. A bay holds one child at a time, so a second breeding waits
 for the first to hatch.

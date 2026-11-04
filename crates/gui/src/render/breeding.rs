@@ -56,13 +56,9 @@ fn label_of(pets: &[PetInfo], e: Option<Entity>) -> String {
         .map_or_else(|| "it".to_string(), |p| p.name.clone())
 }
 
-pub(super) fn draw_breed_menu(
-    game: &mut Game,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
+/// The first-parent rows, shared by the popup the bay's sheet opens and the
+/// `[c]` hub's Breed page, whose keybar stands in for the footer.
+pub(super) fn breed_page_rows(game: &mut Game, selected: usize) -> Vec<Row> {
     let pets = game.owned_pets();
     let candidates: Vec<&PetInfo> = pets.iter().collect();
     let mut rows = vec![text_row("Breed which program? Pick the first of two.")];
@@ -70,6 +66,17 @@ pub(super) fn draw_breed_menu(
         rows.push(text_row("(you have no compiled programs)"));
     }
     push_parent_rows(&mut rows, game, &candidates, selected);
+    rows
+}
+
+pub(super) fn draw_breed_menu(
+    game: &mut Game,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = breed_page_rows(game, selected);
     push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
     draw_popup("Breed", PopupSize::Large, &rows, refusal, painter, m);
 }

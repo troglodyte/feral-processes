@@ -954,7 +954,13 @@ fn frame(
     };
     // **Before `begin_frame` consumes the vector**, and played whether or
     // not `Fx` is enabled — sound is not a visual effect.
-    for event in frame_cues(queued, &cues.effects, &cues.tactical_fx, at_home) {
+    for event in frame_cues(
+        queued,
+        &cues.effects,
+        &cues.tactical_fx,
+        &cues.routines,
+        at_home,
+    ) {
         sounds.play(&mut commands, event, volume);
     }
     fe.fx.begin_frame(now, cues, in_battle);
@@ -1051,7 +1057,8 @@ fn fx_in_fight(app: &App) -> bool {
 /// player just took.
 ///
 /// A third, a battle map's reaction, comes off the tactical fx queue and
-/// plays at most once a frame the same way.
+/// plays at most once a frame the same way; a fourth, a routine run there,
+/// comes off the `RoutineCue` queue the effects layer draws from.
 ///
 /// **The two base kinds are heard only from the base's floor**, `at_home`
 /// being `Game::on_base_floor()`: a crew keeps cutting while the player is
@@ -1060,6 +1067,7 @@ fn frame_cues(
     queued: Vec<SoundEvent>,
     effects: &[feral_processes_engine::resources::VisualEffect],
     tactical_fx: &[feral_processes_engine::TacticalFxCue],
+    routines: &[feral_processes_engine::RoutineCue],
     at_home: bool,
 ) -> Vec<SoundEvent> {
     use feral_processes_engine::EffectKind;
@@ -1083,6 +1091,9 @@ fn frame_cues(
         .any(|c| c.kind == feral_processes_engine::TacticalFxKind::Reaction)
     {
         cues.push(SoundEvent::Reaction);
+    }
+    if !routines.is_empty() {
+        cues.push(SoundEvent::Routine);
     }
     cues
 }
@@ -1205,6 +1216,7 @@ mod tests {
                 vec![SoundEvent::Step],
                 &[effect(EffectKind::Mine)],
                 &[],
+                &[],
                 true
             ),
             vec![SoundEvent::Mine],
@@ -1224,6 +1236,7 @@ mod tests {
                     effect(EffectKind::Mine),
                 ],
                 &[],
+                &[],
                 true,
             ),
             vec![SoundEvent::Mine],
@@ -1238,6 +1251,7 @@ mod tests {
         let cues = frame_cues(
             vec![SoundEvent::Hit, SoundEvent::Step, SoundEvent::Victory],
             &[effect(EffectKind::Mine)],
+            &[],
             &[],
             true,
         );
@@ -1257,6 +1271,7 @@ mod tests {
                 vec![SoundEvent::Step],
                 &[effect(EffectKind::Brawl)],
                 &[],
+                &[],
                 true
             ),
             vec![SoundEvent::Step, SoundEvent::Hit],
@@ -1271,6 +1286,7 @@ mod tests {
             frame_cues(
                 vec![SoundEvent::Step],
                 &[effect(EffectKind::Hit), effect(EffectKind::Destroyed)],
+                &[],
                 &[],
                 true,
             ),
@@ -1289,6 +1305,7 @@ mod tests {
                 vec![SoundEvent::Hit],
                 &[],
                 &[cue(TacticalFxKind::Reaction), cue(TacticalFxKind::Reaction)],
+                &[],
                 false,
             ),
             vec![SoundEvent::Hit, SoundEvent::Reaction],
@@ -1298,10 +1315,35 @@ mod tests {
                 vec![SoundEvent::Hit],
                 &[],
                 &[cue(TacticalFxKind::Hit(4))],
+                &[],
                 false
             ),
             vec![SoundEvent::Hit],
             "only a reaction has the clip"
+        );
+    }
+
+    /// A routine is heard when it is run, whatever it does — a debuff, a
+    /// summon or a blast over empty cells lands no swing and so queues no
+    /// hit or miss of its own. Once a frame, however many were run in it.
+    #[test]
+    fn a_routine_is_heard_on_a_battle_map() {
+        use feral_processes_engine::RoutineCue;
+        let cue = || RoutineCue {
+            from: (0, 0),
+            aim: (3, 3),
+            cells: vec![(3, 3), (3, 4)],
+            color: GlyphColor::Red,
+            fx: None,
+        };
+        assert_eq!(
+            frame_cues(Vec::new(), &[], &[], &[cue(), cue()], false),
+            vec![SoundEvent::Routine],
+        );
+        assert_eq!(
+            frame_cues(vec![SoundEvent::Hit], &[], &[], &[], false),
+            vec![SoundEvent::Hit],
+            "no routine, no clip"
         );
     }
 
@@ -1314,6 +1356,7 @@ mod tests {
             frame_cues(
                 vec![SoundEvent::Step],
                 &[effect(EffectKind::Mine), effect(EffectKind::Brawl)],
+                &[],
                 &[],
                 false,
             ),

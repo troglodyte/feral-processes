@@ -29,6 +29,7 @@ pub struct SoundBank {
     defeat: Handle<AudioSource>,
     mine: Handle<AudioSource>,
     reaction: Handle<AudioSource>,
+    routine: Handle<AudioSource>,
     round_end: Handle<AudioSource>,
     ambient_drone: Handle<AudioSource>,
     ambient_blips: [Handle<AudioSource>; AMBIENT_BLIPS],
@@ -60,6 +61,7 @@ impl SoundBank {
             defeat: add(include_bytes!("../../../assets/sounds/defeat.wav")),
             mine: add(include_bytes!("../../../assets/sounds/mine.wav")),
             reaction: add(include_bytes!("../../../assets/sounds/reaction.wav")),
+            routine: add(include_bytes!("../../../assets/sounds/routine.wav")),
             round_end: add(include_bytes!("../../../assets/sounds/round_end.wav")),
             ambient_drone: add(include_bytes!("../../../assets/sounds/ambient_drone.wav")),
             ambient_blips: [
@@ -97,6 +99,7 @@ impl SoundBank {
             SoundEvent::Defeat => &self.defeat,
             SoundEvent::Mine => &self.mine,
             SoundEvent::Reaction => &self.reaction,
+            SoundEvent::Routine => &self.routine,
             SoundEvent::RoundEnd => &self.round_end,
         };
         self.play_clip(commands, source, volume);

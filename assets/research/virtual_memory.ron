@@ -2,7 +2,7 @@
     id: "virtual_memory",
     name: "Virtual Memory",
     description: "A bigger Depot.",
-    cost: 220,
+    cost: 330,
     materials: [("cache_grain", 14), ("charge_coil", 16)],
     min_zone: 4,
     requires_subject: true,

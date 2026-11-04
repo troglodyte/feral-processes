@@ -2,7 +2,7 @@
     id: "monofilament",
     name: "Monofilament Edge",
     description: "The hardest-hitting weapon at its tier, and it can hit from two cells away. Made at a Workbench.",
-    cost: 110,
+    cost: 165,
     materials: [("trace_sniffer", 5), ("logic_wafer", 12)],
     min_zone: 3,
     requires_subject: true,

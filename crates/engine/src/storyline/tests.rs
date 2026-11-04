@@ -1,6 +1,8 @@
 use super::*;
 use crate::components::ProgramId;
-use crate::tuning::{BASE_AI_FUGUE_TICKS, BASE_AI_START_SPEED};
+use crate::tuning::{
+    BASE_AI_FUGUE_TICKS, BASE_AI_PRACTICE_BASE, BASE_AI_PRACTICE_PER_TICK, BASE_AI_START_SPEED,
+};
 
 fn cand(id: u32, analysis: i32, free: bool) -> HostCandidate {
     HostCandidate {
@@ -718,7 +720,8 @@ mod in_a_game {
     fn analysis_grows_while_it_researches_and_shows_on_its_attributes() {
         let (mut f, host, _id) = fused_with(0.0, 0);
         let start = analysis_of(&f.game, host);
-        for _ in 0..60 {
+        // The first point costs `BASE_AI_PRACTICE_BASE` at `BASE_AI_PRACTICE_PER_TICK` a tick.
+        for _ in 0..(BASE_AI_PRACTICE_BASE / BASE_AI_PRACTICE_PER_TICK) {
             f.game.tick();
         }
         assert_eq!(analysis_of(&f.game, host), start + 1);

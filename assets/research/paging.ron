@@ -2,7 +2,7 @@
     id: "paging",
     name: "Paging",
     description: "A bigger Depot, with twice the room of your first one.",
-    cost: 50,
+    cost: 75,
     materials: [("bytecode_block", 16), ("charge_coil", 6)],
     min_zone: 2,
     requires_subject: true,

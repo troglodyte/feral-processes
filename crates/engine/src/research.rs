@@ -783,7 +783,7 @@ mod tests {
         );
         assert_eq!(
             db.get("cortex").map(|d| d.cost),
-            Some(125),
+            Some(190),
             "cortex is a zone-3 node"
         );
     }

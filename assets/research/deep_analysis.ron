@@ -2,11 +2,12 @@
     id: "deep_analysis",
     name: "Deep Analysis",
     description: "Two tools for downed programs: one pulls out materials, one pulls off its gear.",
-    cost: 130,
+    cost: 195,
     materials: [("routine_disk", 16), ("logic_wafer", 16)],
     min_zone: 3,
     requires_subject: true,
     discoverable: true,
     requires: ["routine_fabrication"],
+    requires_ai_level: Some(1),
     unlocks_tools: ["core_tap", "harness_puller"],
 )

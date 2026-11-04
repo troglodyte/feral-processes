@@ -10,7 +10,7 @@ use crate::storyline::{
     analysis_cap, pace, practise, step, training_cost, trigger_count,
 };
 use crate::systems::{CycleModifiers, CyclePace, expected_gather_per_tick, node_cycle_shape};
-use crate::tuning::BASE_AI_FUGUE_TICKS;
+use crate::tuning::{BASE_AI_FUGUE_TICKS, BASE_AI_PRACTICE_PER_TICK};
 use crate::views::BaseAiView;
 
 const BASE_AI_ALERT_SUBJECT: &str = "base-ai";
@@ -108,7 +108,7 @@ impl Game {
         if self.training_is_ready(&fused) {
             self.complete_training(&mut fused);
         } else if room {
-            let outcome = practise(&fused, analysis, 1);
+            let outcome = practise(&fused, analysis, BASE_AI_PRACTICE_PER_TICK);
             fused.practice = outcome.practice;
             if outcome.analysis != analysis
                 && let Some(mut attributes) = self.world.get_mut::<components::Attributes>(host)

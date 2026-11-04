@@ -2,7 +2,7 @@
     id: "overclock",
     name: "Overclock Cores",
     description: "An accurate weapon that hits harder than what you start with. Made at a Workbench.",
-    cost: 45,
+    cost: 70,
     materials: [("trace_sniffer", 2), ("logic_wafer", 8)],
     min_zone: 2,
     requires_subject: true,

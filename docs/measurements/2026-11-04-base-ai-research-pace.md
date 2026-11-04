@@ -23,7 +23,9 @@ The proposed table below clears all three bars for a fusion Analysis of 15 to
   is back to the old pace about 4 hours after the awakening and ends at 1.76x.
 - Each of the four levels opens at least one node.
 
-The table is a proposal. Nothing in `assets/` or `tuning/` has been changed.
+**Status: applied.** The user approved the table as proposed, and it is now in
+`tuning/storyline.rs` and `assets/research/*.ron`. The harness measures the live
+values and prints exactly the figures the proposal predicted.
 
 ## How to reproduce it
 
@@ -54,9 +56,10 @@ The harness is `crates/engine/src/storyline/measure.rs`, and both tests are
   Each tick replays `Game::tick_fused_ai`: `carry += pace(..)`, a whole-unit
   credit capped at the cost, then either training completion or `practise`
   when there was room. The **Live** rows call the real `practise`,
-  `analysis_cap` and `training_cost`. The **Proposed** rows use a stand-in with
-  the same shapes over the figures below. When the table is applied, Live must
-  print exactly what Proposed printed, and Proposed is then deleted.
+  `analysis_cap` and `training_cost`. Before the table was applied, a stand-in
+  measured the proposal; once applied, the live rows printed the same figures
+  and the stand-in was deleted. The tables under "Tree completion, live
+  placeholders" below are the pre-application figures and no longer reproduce.
 
 Times assume the world's two ticks a second (`Normal` speed). The `Fastest`
 speed halves them.
@@ -229,8 +232,7 @@ stays within 0.4 hours.
 - **Programs spent are counted, not paced.** The trained player spends 38
   programs on studies and trainings, against 34 for the no-fusion player. The
   time to catch them is not modelled.
-- **`balance_sim` was not run.** Nothing was applied, so it could not move.
-  Task 8 step 4 runs it.
+- **`balance_sim`** was run after the table was applied: see "Applied".
 
 ## Open questions
 
@@ -241,3 +243,13 @@ stays within 0.4 hours.
 - **Multi-station bases.** Should the trained AI's growth be fitted to a
   two-station baseline instead? Doing that would need a steeper growth term
   than `pace`'s linear ratio, or a larger final offset.
+
+## Applied
+
+The table went in as proposed: four levels, offsets `[20, 45, 70, 100]`,
+`BASE_AI_PRACTICE_PER_TICK` 8, practice base 1600 and quad 1, training cost
+unchanged, `requires_ai_level` on the six nodes above, and the 1.5x costs.
+`cargo test -p feral-processes-engine storyline::measure -- --ignored --nocapture`
+now reproduces the "Tree completion under the proposal" and sensitivity tables
+exactly (23.0 h / 29.3 h / 18.7 h at Analysis 22). `balance_sim` and the asset
+census tests pass with no curve moved.

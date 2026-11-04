@@ -6,17 +6,14 @@
 //! The ordinary pace is read off real `dev-saves/` through
 //! `Game::host_research_pace`, the call the fusion itself freezes. The tree
 //! walk calls `pace` and, for the live figures, `practise`, `analysis_cap`
-//! and `training_cost`. `Proposed` is the one stand-in: the same shapes over
-//! the proposed figures, so the table can be measured before it is applied.
-//! Once applied, `Live` must print what `Proposed` printed and `Proposed` is
-//! deleted.
+//! and `training_cost`, so it measures whatever the tuning and `assets/` hold.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use super::*;
 use crate::research::{ResearchDb, ResearchTree};
-use crate::tuning::{BASE_AI_FUGUE_TICKS, BASE_AI_LEVEL_OFFSETS};
+use crate::tuning::{BASE_AI_FUGUE_TICKS, BASE_AI_LEVEL_OFFSETS, BASE_AI_PRACTICE_PER_TICK};
 use crate::*;
 
 const TEMPLATES: [&str; 4] = ["fred", "study", "extraction", "chains"];
@@ -131,7 +128,7 @@ fn measure_ordinary_research_pace() {
     }
 }
 
-/// The AI's growth knobs: the live tuning, or the proposed table.
+/// The AI's growth knobs, as the live tuning has them.
 trait Growth {
     fn levels(&self) -> u32;
     fn practise(&self, f: &FusedAi, analysis: i32) -> PracticeOutcome;
@@ -146,7 +143,7 @@ impl Growth for Live {
         BASE_AI_LEVEL_OFFSETS.len() as u32
     }
     fn practise(&self, f: &FusedAi, analysis: i32) -> PracticeOutcome {
-        practise(f, analysis, 1)
+        practise(f, analysis, BASE_AI_PRACTICE_PER_TICK)
     }
     fn cap(&self, f: &FusedAi) -> i32 {
         analysis_cap(f)
@@ -155,86 +152,6 @@ impl Growth for Live {
         training_cost(level)
     }
 }
-
-/// `practice_cost`'s and `analysis_cap`'s shapes over the proposed figures.
-struct Proposed {
-    offsets: &'static [i32],
-    practice_per_tick: u32,
-    practice_base: u32,
-    practice_quad: u32,
-    training: &'static [u32],
-}
-
-impl Growth for Proposed {
-    fn levels(&self) -> u32 {
-        self.offsets.len() as u32
-    }
-    fn practise(&self, f: &FusedAi, analysis: i32) -> PracticeOutcome {
-        let cap = self.cap(f);
-        let (mut analysis, mut practice) = (analysis, f.practice);
-        if analysis < cap {
-            practice += self.practice_per_tick;
-            let g = (analysis - f.analysis_at_fusion).max(0) as u32;
-            let cost = self.practice_base + self.practice_quad * g * g;
-            if practice >= cost {
-                practice -= cost;
-                analysis += 1;
-            }
-        }
-        let stalled = analysis >= cap;
-        PracticeOutcome {
-            analysis,
-            practice: if stalled { 0 } else { practice },
-            stalled,
-        }
-    }
-    fn cap(&self, f: &FusedAi) -> i32 {
-        self.offsets
-            .get(f.level as usize)
-            .map_or(i32::MAX, |o| f.analysis_at_fusion + o)
-    }
-    fn training_cost(&self, level: u32) -> u32 {
-        self.training.get(level as usize).copied().unwrap_or(0)
-    }
-}
-
-const PROPOSED: Proposed = Proposed {
-    offsets: &[20, 45, 70, 100],
-    practice_per_tick: 8,
-    practice_base: 1600,
-    practice_quad: 1,
-    training: &[20, 40, 60, 80],
-};
-
-/// Node costs and AI gates; `None` keeps the shipped `.ron` figure.
-const PROPOSED_NODES: &[(&str, Option<u32>, Option<u32>)] = &[
-    ("cache_coherence", Some(60), None),
-    ("charge_density", Some(60), None),
-    ("mod_bench", Some(60), None),
-    ("dispatch", Some(70), None),
-    ("firewall", Some(70), None),
-    ("overclock", Some(70), None),
-    ("drop_pods", Some(75), None),
-    ("paging", Some(75), None),
-    ("wetware_splicing", Some(75), None),
-    ("long_range_decompile", Some(85), None),
-    ("neural_amp", Some(85), None),
-    ("memory_mapping", Some(90), Some(1)),
-    ("program_refactoring", Some(110), None),
-    ("capacitance", Some(135), None),
-    ("deep_splicing", Some(135), None),
-    ("ablative", Some(165), None),
-    ("monofilament", Some(165), None),
-    ("broadcast_decompile", Some(180), None),
-    ("segmentation", Some(180), None),
-    ("cortex", Some(190), Some(2)),
-    ("deep_analysis", Some(195), Some(1)),
-    ("model_inspection", Some(240), Some(3)),
-    ("virtual_memory", Some(330), None),
-    ("wide_broadcast_decompile", Some(330), Some(3)),
-    ("shard_mapping", Some(540), None),
-    ("cold_archive", Some(810), Some(4)),
-];
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum Player {
@@ -250,12 +167,8 @@ struct Node {
     subject: bool,
 }
 
-fn base_tree(
-    db: &ResearchDb,
-    overrides: &[(&str, Option<u32>, Option<u32>)],
-) -> BTreeMap<String, Node> {
-    let mut tree: BTreeMap<String, Node> = db
-        .all()
+fn base_tree(db: &ResearchDb) -> BTreeMap<String, Node> {
+    db.all()
         .filter(|d| d.tree == ResearchTree::Base)
         .map(|d| {
             (
@@ -268,15 +181,7 @@ fn base_tree(
                 },
             )
         })
-        .collect();
-    for &(id, cost, gate) in overrides {
-        let node = tree.get_mut(id).unwrap_or_else(|| panic!("no node {id}"));
-        if let Some(c) = cost {
-            node.cost = c;
-        }
-        node.gate = gate.or(node.gate);
-    }
-    tree
+        .collect()
 }
 
 /// The cheapest node whose prerequisites are done and whose gate is open;
@@ -497,19 +402,12 @@ fn measure_tree_completion() {
     let game = load_template("study");
     let db = game.world.resource::<ResearchDb>();
     let (a0, p0) = fred_host();
-    report("live placeholders", &base_tree(db, &[]), &Live, a0, p0);
-    report(
-        "proposed",
-        &base_tree(db, PROPOSED_NODES),
-        &PROPOSED,
-        a0,
-        p0,
-    );
+    report("live", &base_tree(db), &Live, a0, p0);
     for a in [15, 30] {
         report(
-            &format!("proposed, host analysis {a}"),
-            &base_tree(db, PROPOSED_NODES),
-            &PROPOSED,
+            &format!("live, host analysis {a}"),
+            &base_tree(db),
+            &Live,
             a,
             p0,
         );

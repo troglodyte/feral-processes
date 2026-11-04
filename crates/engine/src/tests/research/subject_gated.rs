@@ -346,6 +346,17 @@ fn every_subject_gated_node_is_flagged_without_a_pinned_subject() {
         discover_all_research(&mut game);
         base_with_a_research_node(&mut game);
         research_prereqs_of(&mut game, &id);
+        // This census is about the subject gate, so every AI-level gate is open.
+        game.storyline.base_ai = crate::storyline::BaseAi::Fused(crate::storyline::FusedAi {
+            host: ProgramId(1),
+            station: (0, 0),
+            level: u32::MAX,
+            analysis_at_fusion: 20,
+            pace_at_fusion: 1.0,
+            practice: 0,
+            carry: 0.0,
+            training: crate::storyline::TrainingTarget::default(),
+        });
         let def = game
             .world
             .resource::<ResearchDb>()

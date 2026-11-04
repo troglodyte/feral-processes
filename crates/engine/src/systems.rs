@@ -674,6 +674,51 @@ pub(crate) fn expected_gather_per_tick(
     chance * payout * pace.steps_per_tick / f64::from(pace.ticks.max(1))
 }
 
+/// Where a research credit went, and whether there was anywhere for it to go.
+pub(crate) struct ResearchCredit {
+    /// Units that landed on the running project; `0` for a study bank.
+    pub landed: u32,
+    /// Whether the project or the study bank could still take a unit, ahead
+    /// of this credit. A zero-unit credit can still have room.
+    pub room: bool,
+}
+
+/// Credits `payout` units of the research currency: to the running project
+/// up to its cost, or with none selected to the study bank.
+///
+/// **`id.is_none()`, not `landed == 0`.** They are different states: a
+/// project sitting *at* its cost also lands nothing and will settle next
+/// tick, and feeding the study from it would make "study or advance" a lie
+/// for one tick an attentive player could farm. Shared by `deliver_payout`
+/// and the base AI's own research (`Game::tick_fused_ai`), which have the
+/// same caps.
+pub(crate) fn credit_research(
+    payout: u32,
+    research: &mut crate::resources::ActiveResearch,
+    research_defs: &crate::research::ResearchDb,
+) -> ResearchCredit {
+    if research.id.is_none() {
+        let room = research.study < crate::tuning::STUDY_ATTEMPT_DATA;
+        research.credit_study(payout, crate::tuning::STUDY_ATTEMPT_DATA);
+        return ResearchCredit { landed: 0, room };
+    }
+    let cap = research
+        .id
+        .as_ref()
+        .and_then(|id| research_defs.get(id))
+        .map_or(0, |def| def.cost);
+    let held = research
+        .id
+        .as_ref()
+        .and_then(|id| research.progress.get(id))
+        .copied()
+        .unwrap_or(0);
+    ResearchCredit {
+        landed: research.credit(payout, cap),
+        room: held < cap,
+    }
+}
+
 /// Where a resolved payout lands, and the whole of the difference between a
 /// banked resource and ordinary salvage. Returns the units that landed.
 ///
@@ -719,25 +764,16 @@ pub(crate) fn deliver_payout(
     research_defs: &crate::research::ResearchDb,
 ) -> u32 {
     if items.research_currency() == Some(resource) {
-        // **`id.is_none()`, not `landed == 0`.** They are different states: a
-        // project sitting *at* its cost also lands nothing and will settle
-        // next tick, and feeding the study from it would make "study or
-        // advance" a lie for one tick an attentive player could farm.
-        //
-        // Returning `0` is what keeps `cycle_line` silent, exactly as it is
-        // today — the study speaks for itself through `Game::settle_study`
-        // rather than through a cycle line reading "extracted 0 Research
-        // Data".
-        if research.id.is_none() {
-            research.credit_study(payout, crate::tuning::STUDY_ATTEMPT_DATA);
-            return 0;
-        }
-        let cap = research
-            .id
-            .as_ref()
-            .and_then(|id| research_defs.get(id))
-            .map_or(0, |def| def.cost);
-        return research.credit(payout, cap);
+        // Returning `0` for a study is what keeps `cycle_line` silent, exactly
+        // as it is today — the study speaks for itself through
+        // `Game::settle_study` rather than through a cycle line reading
+        // "extracted 0 Research Data".
+        let credit = credit_research(payout, research, research_defs);
+        return if research.id.is_none() {
+            0
+        } else {
+            credit.landed
+        };
     }
     if items.get(resource.as_str()).is_some_and(|d| d.banked) {
         return match bank {

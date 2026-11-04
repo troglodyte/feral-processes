@@ -1,14 +1,18 @@
 //! The shell around the storyline arcs (ADR 0042): gather a plain input
 //! from the world, hand it to the pure `storyline::step`, apply its outcome.
 
+use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
 use crate::components::{BaseAiHost, Downed, MachineRecipe, ProgramId, Task};
 use crate::game::base::hauling::{self, Step, Touch};
 use crate::storyline::{
-    BaseAi, HostCandidate, StationSpot, StepInput, StepOutcome, Storyline, step, trigger_count,
+    BaseAi, FusedAi, HostCandidate, StationSpot, StepInput, StepOutcome, Storyline, analysis_cap,
+    pace, practise, step, training_cost, trigger_count,
 };
 use crate::systems::{CycleModifiers, CyclePace, expected_gather_per_tick, node_cycle_shape};
 use crate::tuning::BASE_AI_FUGUE_TICKS;
+
+const BASE_AI_ALERT_SUBJECT: &str = "base-ai";
 use crate::*;
 
 impl Game {
@@ -71,6 +75,10 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return;
         }
+        if matches!(self.storyline.base_ai, BaseAi::Fused(_)) {
+            self.tick_fused_ai();
+            return;
+        }
         // Only the opening is held: an arc a save already carries keeps going.
         if !self.storyline_enabled() && matches!(self.storyline.base_ai, BaseAi::Dormant { .. }) {
             return;
@@ -79,6 +87,64 @@ impl Game {
         let outcome = step(&self.storyline.base_ai.clone(), &input.as_step_input());
         self.apply_base_ai(outcome);
         self.walk_claiming_host();
+    }
+
+    /// One tick of the fused AI: its pace, whole units credited, and the
+    /// practice that grows its Analysis. The host has no `Task`, so
+    /// `task_progress_system` never credits it; this is the only researcher.
+    fn tick_fused_ai(&mut self) {
+        let BaseAi::Fused(mut fused) = self.storyline.base_ai.clone() else {
+            return;
+        };
+        let Some(host) = self.program_entity(fused.host) else {
+            return;
+        };
+        let analysis = self.analysis_of_program(host);
+        fused.carry += pace(&fused, analysis);
+        let units = fused.carry.floor();
+        fused.carry -= units;
+        let room = self.credit_ai_research(&mut fused, units as u32);
+        if room {
+            let outcome = practise(&fused, analysis, 1);
+            fused.practice = outcome.practice;
+            if outcome.analysis != analysis
+                && let Some(mut attributes) = self.world.get_mut::<components::Attributes>(host)
+            {
+                attributes.set(
+                    &crate::attributes::AttributeId::from("analysis"),
+                    outcome.analysis,
+                );
+            }
+            if outcome.stalled && analysis < analysis_cap(&fused) {
+                self.post_alert(
+                    AlertKind::BaseAiWaiting,
+                    BASE_AI_ALERT_SUBJECT,
+                    "The base AI has learned all it can on its own and is waiting to be trained.",
+                );
+            }
+        }
+        self.storyline.base_ai = BaseAi::Fused(fused);
+    }
+
+    /// Sends `units` to training, the running project or the study bank, and
+    /// reports whether any of them had room to take one.
+    fn credit_ai_research(&mut self, fused: &mut FusedAi, units: u32) -> bool {
+        if fused.training.selected {
+            let cost = training_cost(fused.level);
+            let room = fused.training.progress < cost;
+            fused.training.progress = (fused.training.progress + units).min(cost);
+            return room;
+        }
+        self.world.resource_scope(
+            |world, mut research: Mut<crate::resources::ActiveResearch>| {
+                crate::systems::credit_research(
+                    units,
+                    &mut research,
+                    world.resource::<crate::research::ResearchDb>(),
+                )
+                .room
+            },
+        )
     }
 
     fn gather_base_ai(&mut self) -> BaseAiGather {

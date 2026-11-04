@@ -648,6 +648,156 @@ mod in_a_game {
         loaded
     }
 
+    /// The fused fixture with the arc's figures replaced, so a test reads
+    /// the shell's arithmetic and not the formula behind `pace_at_fusion`.
+    fn fused_with(pace: f64, practice: u32) -> (Fixture, Entity, String) {
+        let (mut f, host) = fused_fixture();
+        let (id, _) = with_progress_to_lose(&mut f);
+        f.game
+            .world
+            .resource_mut::<ActiveResearch>()
+            .progress
+            .insert(id.clone(), 0);
+        let BaseAi::Fused(fused) = &mut f.game.storyline.base_ai else {
+            unreachable!()
+        };
+        fused.pace_at_fusion = pace;
+        fused.practice = practice;
+        fused.carry = 0.0;
+        (f, host, id)
+    }
+
+    fn progress_of(game: &Game, id: &str) -> u32 {
+        game.world
+            .resource::<ActiveResearch>()
+            .progress
+            .get(id)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn analysis_of(game: &Game, host: Entity) -> i32 {
+        game.analysis_of_program(host)
+    }
+
+    fn waiting_alerts(game: &Game) -> usize {
+        game.alerts()
+            .iter()
+            .filter(|a| a.kind == crate::alerts::AlertKind::BaseAiWaiting)
+            .count()
+    }
+
+    #[test]
+    fn the_ai_researches_at_a_quarter_of_its_old_pace_at_fusion() {
+        let (mut f, host, id) = fused_with(0.4, 0);
+        let start = analysis_of(&f.game, host);
+        let BaseAi::Fused(fused) = f.game.storyline().base_ai.clone() else {
+            unreachable!()
+        };
+        assert_eq!(start, fused.analysis_at_fusion);
+        for _ in 0..40 {
+            f.game.tick();
+        }
+        // 40 ticks at 0.4 * 0.25, with no Analysis gained yet.
+        let landed = progress_of(&f.game, &id);
+        assert!((3..=5).contains(&landed), "{landed}");
+    }
+
+    #[test]
+    fn the_ai_banks_study_when_nothing_is_selected() {
+        let (mut f, _host, _id) = fused_with(4.0, 0);
+        f.game.world.resource_mut::<ActiveResearch>().id = None;
+        for _ in 0..8 {
+            f.game.tick();
+        }
+        let study = f.game.world.resource::<ActiveResearch>().study;
+        assert!(study > 0, "a study attempt is banking");
+    }
+
+    #[test]
+    fn analysis_grows_while_it_researches_and_shows_on_its_attributes() {
+        let (mut f, host, _id) = fused_with(0.0, 0);
+        let start = analysis_of(&f.game, host);
+        for _ in 0..60 {
+            f.game.tick();
+        }
+        assert_eq!(analysis_of(&f.game, host), start + 1);
+        let stored = f
+            .game
+            .world
+            .get::<components::Attributes>(host)
+            .unwrap()
+            .get(&crate::attributes::AttributeId::from("analysis"));
+        assert_eq!(stored, Some(start + 1));
+    }
+
+    #[test]
+    fn analysis_stops_at_the_threshold_and_the_waiting_alert_posts() {
+        let (mut f, host, _id) = fused_with(0.0, 49);
+        let BaseAi::Fused(fused) = f.game.storyline().base_ai.clone() else {
+            unreachable!()
+        };
+        let cap = crate::storyline::analysis_cap(&fused);
+        f.game
+            .world
+            .get_mut::<components::Attributes>(host)
+            .unwrap()
+            .set(&crate::attributes::AttributeId::from("analysis"), cap - 1);
+        // One point short of the cap, with the next one a tick away.
+        let BaseAi::Fused(fused) = &mut f.game.storyline.base_ai else {
+            unreachable!()
+        };
+        fused.practice = crate::storyline::practice_cost(cap - 1 - fused.analysis_at_fusion) - 1;
+        assert_eq!(waiting_alerts(&f.game), 0);
+        f.game.tick();
+        assert_eq!(analysis_of(&f.game, host), cap);
+        assert_eq!(waiting_alerts(&f.game), 1);
+        for _ in 0..30 {
+            f.game.tick();
+        }
+        assert_eq!(analysis_of(&f.game, host), cap, "no overshoot");
+        assert_eq!(waiting_alerts(&f.game), 1, "posted once, on the stall");
+    }
+
+    #[test]
+    fn a_stall_does_not_stop_the_running_project() {
+        let (mut f, host, id) = fused_with(4.0, 0);
+        let BaseAi::Fused(fused) = f.game.storyline().base_ai.clone() else {
+            unreachable!()
+        };
+        f.game
+            .world
+            .get_mut::<components::Attributes>(host)
+            .unwrap()
+            .set(
+                &crate::attributes::AttributeId::from("analysis"),
+                crate::storyline::analysis_cap(&fused),
+            );
+        let before = progress_of(&f.game, &id);
+        for _ in 0..4 {
+            f.game.tick();
+        }
+        assert!(progress_of(&f.game, &id) > before);
+    }
+
+    #[test]
+    fn other_stations_produce_nothing_after_fusion() {
+        let (mut f, _host, id) = fused_with(0.0, 0);
+        // The project is selected, so the scheduler wants the Station worked
+        // and would post a staff program to it were it not the AI's.
+        for _ in 0..40 {
+            f.game.tick();
+            let posted = f
+                .game
+                .world
+                .query::<&Task>()
+                .iter(&f.game.world)
+                .any(|t| t.target == f.station);
+            assert!(!posted, "nobody is posted to the Station");
+        }
+        assert_eq!(progress_of(&f.game, &id), 0);
+    }
+
     #[test]
     fn the_storyline_round_trips_in_every_stage() {
         let mut f = fixture();
@@ -681,7 +831,15 @@ mod in_a_game {
                     ticks_left: 57,
                 },
             ),
-            ("fused", BaseAi::Fused(fused)),
+            ("fused", BaseAi::Fused(fused.clone())),
+            (
+                "stalled",
+                BaseAi::Fused(FusedAi {
+                    practice: 0,
+                    carry: 0.375,
+                    ..fused
+                }),
+            ),
         ];
         for (tag, stage) in stages {
             f.game.storyline.base_ai = stage.clone();

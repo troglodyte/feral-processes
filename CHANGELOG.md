@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.40
+
+**Once your base has researched between five and ten projects, your best analyst wakes up as the base AI: it walks to the nearest Research Station, goes quiet for a while, and fuses with it.** From then on it is the only researcher, and that is your only Research Station. It starts at a quarter of that program's old research speed and gets faster the longer it works. It stops at each of its four levels until you choose "Train your AI" in the research list (or press `[T]`) and pin a program for it to take in. Six late projects now need an AI level and read "Seems feasible, but we don't know where to start" until the AI reaches it, and every project costing 40 or more costs half as much again. Idle staff now carry research materials to the AI's station, raids and sieges leave that station alone, and the AI can't join the party, be sold, fused or spent. The awakening, fusion and level-ups arrive as Storyline notifications. Saves load unchanged; an existing save that has already passed the trigger wakes the AI on the first tick.
+
 ## 0.21.39
 
 **Pressing `c` beside a Holding Cell now opens a Hold page where you pick a downed program to put in it.** Before, the cell had no page of its own, so `c` skipped it and opened your pack's transfer screen instead, where `+` did nothing. The only way in was the base menu's "Hold a program" row, which still works. Saves load unchanged.

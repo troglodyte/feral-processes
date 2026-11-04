@@ -76,7 +76,7 @@ impl Game {
     }
 
     /// One amenity visit for `need`, through `report_base`'s one door.
-    pub(crate) fn note_visit(
+    pub(super) fn note_visit(
         &mut self,
         need: &crate::needs::NeedId,
         outcome: crate::base_ledger::VisitOutcome,

@@ -139,18 +139,18 @@ fn a_waited_or_stranded_visit_makes_a_built_need_short_and_clean_visits_do_not()
             .unwrap()
     };
 
-    game.note_visit(&coherence(), VisitOutcome::Served);
+    game.note_amenity_visit(&coherence(), VisitOutcome::Served, None);
     let row = coherence_row(&game);
     assert_eq!((row.visits, row.waited, row.stranded), (1, 0, 0));
     assert!(!row.is_short(), "enough amenities and nobody blocked");
 
-    game.note_visit(&coherence(), VisitOutcome::Waited);
+    game.note_amenity_visit(&coherence(), VisitOutcome::Waited, None);
     let row = coherence_row(&game);
     assert_eq!((row.visits, row.waited), (2, 1));
     assert!(row.is_short());
 
     let (mut game, _) = game_with_staff(99, 3);
-    game.note_visit(&coherence(), VisitOutcome::Stranded);
+    game.note_amenity_visit(&coherence(), VisitOutcome::Stranded, None);
     assert!(coherence_row(&game).is_short());
 }
 

@@ -545,7 +545,12 @@ impl Game {
                         } else {
                             VisitOutcome::Served
                         };
-                        self.note_visit(&need, outcome);
+                        let site = self
+                            .world
+                            .get::<Position>(worker)
+                            .and_then(|here| amenities.nearest(&need, *here))
+                            .map(|(site, _, _)| site);
+                        self.note_amenity_visit(&need, outcome, site);
                     }
                     self.world.entity_mut(worker).remove::<OffShift>();
                 }
@@ -798,12 +803,17 @@ impl Game {
     /// Gives the errand up and latches the need: the amenity exists but this
     /// body cannot reach it, which is a different complaint from there being
     /// no amenity at all and leaves the player a different errand.
-    pub(crate) fn strand_off_shift(&mut self, worker: Entity) {
+    pub(crate) fn strand_off_shift(&mut self, worker: Entity, amenities: &Amenities) {
         let Some(need) = self.world.get::<OffShift>(worker).map(|o| o.need.clone()) else {
             return;
         };
         self.fray(worker, &need, true);
-        self.note_visit(&need, VisitOutcome::Stranded);
+        let site = self
+            .world
+            .get::<Position>(worker)
+            .and_then(|here| amenities.nearest(&need, *here))
+            .map(|(site, _, _)| site);
+        self.note_amenity_visit(&need, VisitOutcome::Stranded, site);
         self.world.entity_mut(worker).remove::<OffShift>();
     }
 }

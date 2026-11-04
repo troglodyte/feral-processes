@@ -93,3 +93,81 @@ fn a_repeated_beat_for_the_same_need_keeps_the_waited_flag() {
     }
     assert!(game.world.get::<OffShift>(staff[0]).unwrap().waited);
 }
+
+// ---------------------------------------------------------------------------
+// The alert: posted on the first blocked visit, latched until the window
+// holds no blocked visit for that need.
+// ---------------------------------------------------------------------------
+
+mod alert {
+    use super::*;
+    use crate::alerts::AlertKind;
+    use crate::base_ledger::{BUCKET_TICKS, VisitOutcome};
+
+    fn bay_site(game: &mut Game) -> Position {
+        let bay = find_structure_by_kind(game, "defrag_bay").unwrap();
+        *game.world.get::<Position>(bay).unwrap()
+    }
+
+    fn blocked_rows(game: &Game) -> Vec<(u32, String)> {
+        game.alerts()
+            .into_iter()
+            .filter(|a| a.kind == AlertKind::AmenityBlocked)
+            .map(|a| (a.count, a.text))
+            .collect()
+    }
+
+    #[test]
+    fn the_first_blocked_visit_posts_naming_the_amenity() {
+        let (mut game, _) = crowded_bay(84, 1);
+        let site = bay_site(&mut game);
+
+        game.note_amenity_visit(&coherence(), VisitOutcome::Waited, Some(site));
+        let rows = blocked_rows(&game);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].1,
+            "Staff waited for a place at the Log Analyzer Bay"
+        );
+
+        let (mut game, _) = crowded_bay(85, 1);
+        let site = bay_site(&mut game);
+        game.note_amenity_visit(&coherence(), VisitOutcome::Stranded, Some(site));
+        assert_eq!(
+            blocked_rows(&game)[0].1,
+            "Staff can't reach the Log Analyzer Bay"
+        );
+    }
+
+    #[test]
+    fn a_second_block_while_latched_adds_nothing() {
+        let (mut game, _) = crowded_bay(86, 1);
+        let site = bay_site(&mut game);
+        game.note_amenity_visit(&coherence(), VisitOutcome::Waited, Some(site));
+        game.note_amenity_visit(&coherence(), VisitOutcome::Waited, Some(site));
+        game.note_amenity_visit(&coherence(), VisitOutcome::Stranded, Some(site));
+
+        let rows = blocked_rows(&game);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, 1, "no repeat post while latched");
+    }
+
+    #[test]
+    fn a_clean_visit_after_the_window_empties_clears_the_latch() {
+        let (mut game, _) = crowded_bay(87, 1);
+        let site = bay_site(&mut game);
+        game.note_amenity_visit(&coherence(), VisitOutcome::Waited, Some(site));
+
+        // A clean visit while the block is still inside the window leaves
+        // the latch set.
+        game.note_amenity_visit(&coherence(), VisitOutcome::Served, Some(site));
+        game.note_amenity_visit(&coherence(), VisitOutcome::Waited, Some(site));
+        assert_eq!(blocked_rows(&game)[0].0, 1);
+
+        let tick = game.current_tick();
+        game.world.resource_mut::<GameClock>().tick = tick + BUCKET_TICKS * 3;
+        game.note_amenity_visit(&coherence(), VisitOutcome::Served, Some(site));
+        game.note_amenity_visit(&coherence(), VisitOutcome::Waited, Some(site));
+        assert_eq!(blocked_rows(&game)[0].0, 2, "posted again after the clear");
+    }
+}

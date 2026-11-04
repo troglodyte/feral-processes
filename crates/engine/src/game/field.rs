@@ -634,6 +634,17 @@ impl Game {
                 });
             }
 
+            if let Some(haste) = self.world.get::<Hasted>(holder).copied() {
+                views.push(ActiveBuffView {
+                    name: format!("Hasted v{}", haste.version),
+                    magnitude: "\u{2014}".to_string(),
+                    // Lasts the fight, not a round count, so there is no
+                    // `Nt` to print.
+                    remaining: String::new(),
+                    holder_label: holder_label.clone(),
+                });
+            }
+
             if let Some(active) = self.world.get::<CombatBuff>(holder).and_then(|b| b.active) {
                 // `CombatBuff` carries no invocation-time name like `FieldBuff`
                 // does, only which stat it moves — `Def`/`Atk` share the

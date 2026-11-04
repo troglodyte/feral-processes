@@ -65,6 +65,7 @@ pub(super) fn core_figures(core: Core) -> CoreFigures {
         Core::Debuff => t::CRAFT_DEBUFF,
         Core::Cleanse => t::CRAFT_CLEANSE,
         Core::Cloak => t::CRAFT_CLOAK,
+        Core::Haste => t::CRAFT_HASTE,
         Core::Fork => t::CRAFT_FORK,
         Core::Respawn => t::CRAFT_RESPAWN,
         Core::ColdSample => t::CRAFT_COLD_SAMPLE,
@@ -233,6 +234,9 @@ fn effect_of(s: &Split) -> AbilityEffect {
         }
         Core::Cleanse => AbilityEffect::Cleanse,
         Core::Cloak => AbilityEffect::Cloak { duration: rounds },
+        Core::Haste => AbilityEffect::Haste {
+            version: s.version.number() as u8,
+        },
         Core::Fork => {
             let (count, extra, rarity_penalty) = t::CRAFT_FORK_BODIES[v];
             AbilityEffect::Summon {

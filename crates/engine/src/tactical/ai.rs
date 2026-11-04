@@ -1561,7 +1561,22 @@ impl Game {
                     let body_is_hostile = self.world.get::<Hostile>(body).is_some();
                     worth += if helpful {
                         if body == actor || body_is_hostile == acting_side {
-                            1
+                            // A Haste on a body already as quick adds nothing.
+                            match &def.effect {
+                                AbilityEffect::Haste { version }
+                                    if self
+                                        .world
+                                        .get::<crate::components::Hasted>(body)
+                                        .is_some_and(|h| h.version >= *version) =>
+                                {
+                                    0
+                                }
+                                _ => 1,
+                            }
+                        } else if matches!(def.effect, AbilityEffect::Haste { .. }) {
+                            // Haste never lands on the other side, so
+                            // covering it costs nothing.
+                            0
                         } else {
                             -1
                         }

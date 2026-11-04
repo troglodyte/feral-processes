@@ -73,6 +73,8 @@ pub struct TacticalBody {
     /// can leak it is the presentation half of "a body that approaches
     /// unseen", and is deliberately not built yet.
     pub cloaked: bool,
+    /// Whether this body holds a `components::Hasted` — the renderer's pip.
+    pub hasted: bool,
     /// Whether this body has partial cover against the body whose turn it
     /// is, and then only while that body is hostile.
     ///
@@ -666,6 +668,10 @@ impl Game {
             hp_fraction: stats.map(|s| s.hp_fraction()),
             level: self.world.get::<Experience>(entity).map(|e| e.level),
             cloaked: self.is_cloaked(entity),
+            hasted: self
+                .world
+                .get::<crate::components::Hasted>(entity)
+                .is_some(),
             in_cover: attacker.is_some_and(|a| self.body_in_cover(a, entity)),
             footprint,
             respawned: self.world.get::<Respawned>(entity).is_some(),

@@ -178,6 +178,7 @@ impl Game {
         // what keeps it out of `save/` — left set, it would follow the
         // player out of the fight and hide them from the next one.
         self.uncloak(player);
+        self.unhaste(player);
         // `ReachCharge` for the same reason and with the same consequence:
         // left set, a reach weapon's first swing of the *next* fight would
         // be held narrow by a charge armed in this one.
@@ -214,6 +215,7 @@ impl Game {
                 c.0.clear();
             }
             self.uncloak(hostile);
+            self.unhaste(hostile);
             self.disarm_reach_charge(hostile);
             self.remove_charging(hostile);
             self.detamper(hostile);
@@ -234,6 +236,7 @@ impl Game {
                 c.0.clear();
             }
             self.uncloak(companion);
+            self.unhaste(companion);
             self.disarm_reach_charge(companion);
             self.remove_charging(companion);
             self.detamper(companion);
@@ -267,6 +270,13 @@ impl Game {
     fn uncloak(&mut self, entity: Entity) {
         if let Ok(mut body) = self.world.get_entity_mut(entity) {
             body.remove::<Cloaked>();
+        }
+    }
+
+    /// Drops `entity`'s haste with no line, `uncloak`'s shape and reason.
+    fn unhaste(&mut self, entity: Entity) {
+        if let Ok(mut body) = self.world.get_entity_mut(entity) {
+            body.remove::<Hasted>();
         }
     }
 

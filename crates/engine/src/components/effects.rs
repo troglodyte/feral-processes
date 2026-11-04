@@ -112,6 +112,19 @@ pub struct Cloaked {
     pub remaining: u32,
 }
 
+/// Battle-scoped: a body hasted for the rest of the fight, by
+/// `AbilityEffect::Haste`.
+///
+/// `Cloaked`'s reasons for not being a `CombatBuff` or `StatusEffects` entry:
+/// Haste stacks with Boost Attack, Mitigation and Defend and none of them
+/// may overwrite it. No serde derive; `Game::finish_fight` clears it beside
+/// `Cloaked`, so it cost no `SAVE_FORMAT_VERSION` bump.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct Hasted {
+    /// 1..=3. A recast keeps the higher version; versions never add.
+    pub version: u8,
+}
+
 /// Battle-scoped: what a `Tamper` routine (`AbilityEffect::Tamper`) has done
 /// to this body's decision-making. At most one entry per `TamperSlot` —
 /// `TamperSlot`'s own doc is why Heat and Cold replace each other while

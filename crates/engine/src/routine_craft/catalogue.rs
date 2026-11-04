@@ -44,6 +44,7 @@ pub enum Core {
     Phase,
     Jump,
     Symlink,
+    Haste,
 }
 
 /// Which side a Core's effect lands on, which is how an Area part reads.
@@ -58,7 +59,7 @@ pub enum Facing {
 }
 
 impl Core {
-    pub const ALL: [Core; 31] = [
+    pub const ALL: [Core; 32] = [
         Core::Damage,
         Core::Heal,
         Core::Drain,
@@ -90,6 +91,7 @@ impl Core {
         Core::Phase,
         Core::Jump,
         Core::Symlink,
+        Core::Haste,
     ];
 
     /// The snake-case word `Subroutine::key` spells this Core with.
@@ -130,6 +132,7 @@ impl Core {
             Core::Phase => "Phase",
             Core::Jump => "Jump",
             Core::Symlink => "Symlink",
+            Core::Haste => "Haste",
         }
     }
 
@@ -146,6 +149,7 @@ impl Core {
             | Core::SapMitigation
             | Core::Fork
             | Core::Respawn
+            | Core::Haste
             | Core::FieldRegen
             | Core::Recharge
             | Core::FieldAttack
@@ -188,6 +192,7 @@ impl Core {
             | Core::BoostMitigation
             | Core::Cleanse
             | Core::Cloak
+            | Core::Haste
             | Core::Fork
             | Core::Respawn
             | Core::Reinforce
@@ -276,6 +281,7 @@ impl Core {
             | Core::BoostMitigation
             | Core::Cleanse
             | Core::Cloak
+            | Core::Haste
             | Core::FieldRegen
             | Core::Recharge => &[AreaKind::Group],
             _ => &[],
@@ -625,7 +631,8 @@ pub fn material(part: &Subroutine) -> (ItemId, u32) {
                 | Core::BoostAttack
                 | Core::BoostMitigation
                 | Core::Cleanse
-                | Core::Cloak => CRAFT_MATERIAL_BYTECODE,
+                | Core::Cloak
+                | Core::Haste => CRAFT_MATERIAL_BYTECODE,
                 Core::Damage
                 | Core::Drain
                 | Core::SapAttack

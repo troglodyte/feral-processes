@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.29
+
+**You and your companions can now be hasted in battle.** A new Haste routine core, built at three versions in the routine crafter, lets a program cover four cells more on the battle map at v1 and eight more at v2 and v3. At v3 it also swings twice with each ordinary attack, on top of any second swing the class already grants. Haste lands on your own side only, even when a group shape also covers hostiles, and a v3 body strikes a structure twice as well. It lasts until the fight ends, a recast keeps the stronger version, and a hasted program shows a double chevron on the map and a "Hasted vN" row in the buffs list.
+
 ## 0.21.28
 
 **The Refit Bench now mends any worn gear, slowly, while you stand beside it.** Before, it only touched gear below the low-condition warning, so a bench full of Annealed Cores could leave worn gear alone. Each core now gives the bench 50 repair points, and each point restores one fight of condition, so light wear wastes nothing. The bench mends one point per tick and logs a line when a piece is back to full. The instant refit from the item menu is gone: `R` on a worn copy now shows its condition and the bench's points and cores.

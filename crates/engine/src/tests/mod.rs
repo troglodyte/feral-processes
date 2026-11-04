@@ -76,6 +76,7 @@ mod gear_combat;
 mod gear_craft;
 mod gear_detail;
 mod gear_passives;
+mod haste;
 mod hauling;
 mod heal_over_time;
 mod healing;

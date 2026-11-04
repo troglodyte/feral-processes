@@ -6,6 +6,7 @@ use super::compile::{Split, split};
 use crate::abilities::{AbilityDef, AbilityEffect, AbilityTarget, TamperKind, range_label};
 use crate::components::BuffKind;
 use crate::components::FieldBuffKind;
+use crate::tuning as t;
 
 /// The plain-language line a screen previews before a build is compiled.
 /// Empty when `parts` holds no Core.
@@ -101,6 +102,17 @@ pub(super) fn sentence(def: &AbilityDef, s: &Split) -> String {
         AbilityEffect::Cleanse => format!("Clear status conditions from {to}"),
         AbilityEffect::Cloak { duration } => {
             format!("Hide {to} from targeting for {duration} rounds")
+        }
+        AbilityEffect::Haste { version } => {
+            let bonus = t::haste_move_bonus(*version);
+            match *version >= t::HASTE_DOUBLE_SWING_VERSION {
+                true => format!(
+                    "Haste {to}: +{bonus} movement on the battle map for the rest of the fight, and every swing strikes twice"
+                ),
+                false => format!(
+                    "Haste {to}: +{bonus} movement on the battle map for the rest of the fight"
+                ),
+            }
         }
         AbilityEffect::Summon { count, extra, .. } => match extra {
             0 => format!("Fork {count} temporary program into the fight"),

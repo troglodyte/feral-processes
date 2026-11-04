@@ -48,5 +48,6 @@ pub(crate) mod tantrum;
 pub(crate) mod teardown;
 pub(crate) mod tidy;
 pub mod transfer;
+pub(crate) mod unsupplied;
 pub(crate) mod upkeep;
 pub(crate) mod work_orders;

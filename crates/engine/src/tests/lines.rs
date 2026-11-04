@@ -621,6 +621,54 @@ fn a_structure_report_carries_its_line_key_only_for_a_line_of_two_or_more() {
     assert_eq!(key(alone), None);
 }
 
+fn unsupplied(g: &mut Game, machine: Entity) -> bool {
+    g.structure_report()
+        .into_iter()
+        .find(|r| r.entity == machine)
+        .unwrap()
+        .unsupplied
+}
+
+#[test]
+fn a_machine_whose_ingredient_nothing_makes_is_unsupplied() {
+    let mut g = base_game(100);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 1, 0);
+    assert!(unsupplied(&mut g, factory));
+
+    // Anywhere in the base, not only beside it: the haulers walk the rest.
+    spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 9, 9);
+    assert!(!unsupplied(&mut g, factory), "an extractor makes it now");
+}
+
+#[test]
+fn a_depot_holding_the_ingredient_supplies_it() {
+    let mut g = base_game(101);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "blank_substrate", 1, 0);
+    let depot = spawn_machine_at(&mut g, "depot", 4, 0);
+    put_output(&mut g, depot, ids::CORE_FRAGMENT, 10);
+    assert!(!unsupplied(&mut g, factory));
+}
+
+#[test]
+fn a_farm_plot_growing_the_ingredient_supplies_it() {
+    let mut g = base_game(102);
+    let factory = spawn_machine_with_recipe_at(&mut g, "factory", "charge_coil", 1, 0);
+    assert!(unsupplied(&mut g, factory));
+    g.world.spawn(crate::components::FarmPlot {
+        recipe: Some(crate::crops::CropId::from("power_cell")),
+    });
+    assert!(!unsupplied(&mut g, factory), "a plot grows Power Cells");
+}
+
+#[test]
+fn an_extractor_and_an_unset_machine_are_never_unsupplied() {
+    let mut g = base_game(103);
+    let mine = spawn_machine_with_recipe_at(&mut g, "extractor", "core_fragment", 1, 0);
+    let unset = spawn_machine_at(&mut g, "factory", 5, 0);
+    assert!(!unsupplied(&mut g, mine));
+    assert!(!unsupplied(&mut g, unset));
+}
+
 // ---------------------------------------------------------------------
 // Review findings
 // ---------------------------------------------------------------------

@@ -150,6 +150,7 @@ fn killing_a_boss_can_drop_its_signature_parts() {
             remaining: 999,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         }],
     });
 
@@ -208,6 +209,7 @@ fn killing_a_boss_can_find_the_parts_it_drops() {
             remaining: 999,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         }],
     });
     let pos = *game.world.get::<Position>(player).unwrap();

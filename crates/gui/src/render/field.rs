@@ -5,7 +5,7 @@
 use super::battle::cell;
 use super::popup::*;
 use super::*;
-use feral_processes_engine::{ActiveBuffView, FieldRoutineTargetView};
+use feral_processes_engine::{ActiveBuffView, FieldRoutineTargetView, FieldRoutineView};
 
 /// Width of the buff name column, in monospace cells. Long enough for every
 /// shipped routine's name with room to spare; a name that overruns clips
@@ -227,10 +227,7 @@ pub(super) fn draw_field_routine(
     for (i, r) in routines.iter().enumerate() {
         // `cost` arrives already carrying its unit, which is the engine's to
         // decide, not this file's.
-        let label = format!(
-            "{} — {} — {} ({})",
-            r.name, r.cost, r.description, r.holder_label,
-        );
+        let label = field_routine_label(r);
         // Greyed rather than hidden, and still selectable: the engine
         // refuses it again on commit with the reason in `App::status_line`,
         // and a row that vanished would leave the player wondering where a
@@ -241,7 +238,7 @@ pub(super) fn draw_field_routine(
             Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
         });
     }
-    push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
+    push_key_footer(&mut rows, &["Enter run", "A auto", "Esc cancel"]);
     draw_popup(
         "Run a routine",
         PopupSize::Large,
@@ -250,6 +247,21 @@ pub(super) fn draw_field_routine(
         painter,
         m,
     );
+}
+
+/// One routine row's text. The `[auto]` tag sits right after the name so a
+/// row that wraps keeps it on the first line, and exists only while the
+/// flag is on — an off or ineligible row reads exactly as before.
+fn field_routine_label(r: &FieldRoutineView) -> String {
+    let tag = if r.auto_recast == Some(true) {
+        " [auto]"
+    } else {
+        ""
+    };
+    format!(
+        "{}{tag} — {} — {} ({})",
+        r.name, r.cost, r.description, r.holder_label,
+    )
 }
 
 /// Who a `OneAlly` field routine picked in `Mode::FieldRoutine` lands on: you,
@@ -974,5 +986,43 @@ mod tests {
                 );
             }
         });
+    }
+
+    fn routine_view(name: &str, description: &str, auto_recast: Option<bool>) -> FieldRoutineView {
+        FieldRoutineView {
+            ability: "x".into(),
+            name: name.to_string(),
+            description: description.to_string(),
+            holder: Entity::PLACEHOLDER,
+            holder_label: "You".to_string(),
+            cost: "9999 PWR".to_string(),
+            unavailable: None,
+            second_pick: feral_processes_engine::FieldRoutinePick::None,
+            auto_recast,
+        }
+    }
+
+    #[test]
+    fn the_auto_tag_shows_only_while_the_flag_is_on() {
+        let label = |flag| field_routine_label(&routine_view("Patch", "heals", flag));
+        assert!(label(Some(true)).starts_with("Patch [auto] — "));
+        assert!(!label(Some(false)).contains("[auto]"));
+        assert!(!label(None).contains("[auto]"));
+        assert_eq!(label(Some(false)), label(None));
+    }
+
+    /// The tag is the new width on this row. The head — name, tag, cost —
+    /// is measured on its own at the widest crafted name
+    /// (`CRAFT_NAME_MAX`, wide glyphs) and the longest cost, which is what
+    /// the tag competes with; the head must leave room for the rest of the
+    /// row, and the description beyond it is the engine's authored text,
+    /// unchanged by this tag.
+    #[test]
+    fn the_widest_crafted_name_with_the_auto_tag_fits_the_popup() {
+        let name = "W".repeat(feral_processes_engine::tuning::CRAFT_NAME_MAX);
+        let label = field_routine_label(&routine_view(&name, "", Some(true)));
+        assert!(label.contains(&format!("{name} [auto] — 9999 PWR")));
+        let rows = [item_row(label, true)];
+        assert_rows_fit(&rows, PopupSize::Large);
     }
 }

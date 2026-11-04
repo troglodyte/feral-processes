@@ -1553,6 +1553,7 @@ mod tests {
             bought_stats: Default::default(),
             routines: vec![feral_processes_engine::abilities::FALLBACK_ABILITY_ID.to_string()],
             field_buffs: Vec::new(),
+            auto_recast: Vec::new(),
             nest_position: None,
             patrol_position: None,
             study_station: None,

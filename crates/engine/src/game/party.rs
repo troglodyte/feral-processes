@@ -1726,6 +1726,7 @@ impl Game {
             .get::<crate::components::StaffRank>(dominant)
             .copied();
         let fused_skills = self.world.get::<crate::skills::Skills>(dominant).cloned();
+        let fused_auto_recast = self.auto_recast_of(dominant);
         fn fuse_stat(x: i32, y: i32) -> i32 {
             x.max(y) + x.min(y) / FUSION_LESSER_STAT_DIVISOR
         }
@@ -1892,6 +1893,18 @@ impl Game {
         self.world.entity_mut(fused_entity).insert(fused_attrs);
         self.seat_derived(fused_entity);
         self.install_innate_routines(fused_entity);
+        // The child's kit is its species' own, so a flag survives only for a
+        // routine the child holds again.
+        let kept: Vec<crate::abilities::AbilityId> = {
+            let kit = self.world.get::<Routines>(fused_entity);
+            fused_auto_recast
+                .into_iter()
+                .filter(|id| kit.is_some_and(|k| k.0.contains(id)))
+                .collect()
+        };
+        for id in kept {
+            self.set_auto_recast(fused_entity, &id, true);
+        }
         self.log(match &final_name {
             Some(name) => format!(
                 "You fuse {name_a} and {name_b} into {name}, a new {}.",

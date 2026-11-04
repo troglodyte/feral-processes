@@ -423,6 +423,7 @@ fn tick_field_buffs_decrements_and_expires_after_the_exact_tick_count() {
             remaining: 5,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -459,6 +460,7 @@ fn tick_field_buffs_logs_the_armed_name_not_the_kind_on_expiry() {
             remaining: 1,
             interval: 1,
             source: BuffSource::Consumable,
+            ability: None,
         },
     );
 
@@ -489,6 +491,7 @@ fn tick_field_buffs_ages_buffs_on_party_members_too() {
             remaining: 2,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -522,6 +525,7 @@ fn an_until_rest_routine_buff_is_never_aged() {
             remaining: 1,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -562,6 +566,7 @@ fn a_consumable_buff_of_an_until_rest_kind_still_expires() {
             remaining: 2,
             interval: 1,
             source: BuffSource::Consumable,
+            ability: None,
         },
     );
 
@@ -583,13 +588,10 @@ fn a_consumable_buff_of_an_until_rest_kind_still_expires() {
     );
 }
 
-/// Rest is the expiry event for the until-rest ones, and only for those. A
-/// counted buff comes out of a rest **unaged** now that no rest advances the
-/// clock — the drop is a thing `rest` does on purpose, not a side effect of
-/// time passing, and that distinction is the whole of why the counted one
-/// survives.
+/// Rest ends every routine buff, counted ones included, and leaves a
+/// consumable's alone. `runs_until_rest` decides only whether a buff ages.
 #[test]
-fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
+fn resting_drops_every_routine_buff_and_keeps_a_consumables() {
     let mut game = Game::new(622, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let player = game.player_entity();
     stand_in_base_beside_home(&mut game);
@@ -602,6 +604,7 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
             remaining: 0,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
     game.arm_field_buff(
@@ -613,6 +616,19 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
             remaining: 12,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
+        },
+    );
+    game.arm_field_buff(
+        player,
+        ActiveFieldBuff {
+            kind: FieldBuffKind::Regen,
+            name: "Sustain Cell".to_string(),
+            power: 1,
+            remaining: 12,
+            interval: 1,
+            source: BuffSource::Consumable,
+            ability: None,
         },
     );
 
@@ -622,19 +638,21 @@ fn resting_drops_until_rest_buffs_and_leaves_counted_ones_aged() {
     assert_eq!(
         active.len(),
         1,
-        "only the until-rest buff should go: {active:?}"
+        "only the consumable's should stay: {active:?}"
     );
-    assert_eq!(active[0].kind, FieldBuffKind::Regen);
+    assert_eq!(active[0].source, BuffSource::Consumable);
     assert_eq!(
         active[0].remaining, 12,
-        "a counted buff is untouched: a rest passes no time to age it with"
+        "a rest passes no time to age it with"
     );
-    assert!(
-        game.message_log(20)
-            .iter()
-            .any(|e| e.text.contains("Overclock Single")),
-        "the drop is announced by the name that armed it, as an expiry is"
-    );
+    for name in ["Overclock Single", "Repair Loop Single"] {
+        assert!(
+            game.message_log(20)
+                .iter()
+                .any(|e| e.text.contains(name) && e.text.contains("fades")),
+            "the drop is announced by the name that armed it, as an expiry is: {name}"
+        );
+    }
 }
 
 /// The drop walks the player *and* the party — the same set
@@ -654,6 +672,7 @@ fn resting_drops_a_companions_until_rest_buffs_too() {
             remaining: 0,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -685,6 +704,7 @@ fn a_refused_rest_keeps_until_rest_buffs() {
             remaining: 0,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -723,6 +743,7 @@ fn an_until_rest_buff_row_says_so_where_a_counted_one_shows_turns() {
             remaining: 0,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
     game.arm_field_buff(
@@ -734,6 +755,7 @@ fn an_until_rest_buff_row_says_so_where_a_counted_one_shows_turns() {
             remaining: 40,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -763,6 +785,7 @@ fn tick_field_buffs_regen_heals_the_carrier_and_caps_at_max_hp() {
             remaining: 5,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -805,6 +828,7 @@ fn an_interval_makes_a_field_buff_fire_on_a_cadence_not_every_tick() {
             remaining: 8,
             interval: 4,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -848,6 +872,7 @@ fn tick_field_buffs_regen_heals_a_companion_not_the_player() {
             remaining: 5,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -885,6 +910,7 @@ fn tick_field_buffs_regen_does_not_revive_a_dead_companion() {
             remaining: 10,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
     let wild = spawn_wild_on_player_tile(&mut game);
@@ -932,6 +958,7 @@ fn a_full_tick_applies_trickle_on_top_of_that_ticks_decay() {
             remaining: 5,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -970,6 +997,7 @@ fn tick_field_buffs_applies_a_buffs_last_tick_before_it_expires() {
             remaining: 1,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -1010,6 +1038,7 @@ fn field_buffs_survive_a_save_load_round_trip() {
             remaining: 7,
             interval: 1,
             source: BuffSource::Consumable,
+            ability: None,
         },
     );
     game.arm_field_buff(
@@ -1021,6 +1050,7 @@ fn field_buffs_survive_a_save_load_round_trip() {
             remaining: 3,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -1193,6 +1223,7 @@ fn a_prebattle_buff_armed_on_the_map_is_live_at_the_next_intrusion() {
             remaining: 5,
             interval: 1,
             source: BuffSource::Consumable,
+            ability: None,
         },
     );
 

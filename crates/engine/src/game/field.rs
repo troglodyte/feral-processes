@@ -15,6 +15,31 @@ use crate::game::stack::StackPos;
 use crate::tuning::{TRACE_PER_JUMP, TRACE_PER_PHASE};
 use crate::*;
 
+/// What `Game::cast_field_routine` armed, for the caller to word.
+pub(crate) struct FieldCast {
+    pub holder_label: String,
+    pub name: String,
+}
+
+/// Why `Game::cast_field_routine` armed nothing. The split exists for
+/// auto-recast, which treats a vanished target and every other refusal
+/// differently (`field_recast`).
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum CastError {
+    /// `field_recipients` refused: the ally is benched, down or gone.
+    TargetGone(String),
+    /// Anything else: the row is unavailable, short of Power, or not a buff.
+    Refused(String),
+}
+
+impl std::fmt::Display for CastError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CastError::TargetGone(s) | CastError::Refused(s) => f.write_str(s),
+        }
+    }
+}
+
 impl Game {
     /// Every **field-only** ability installed on you or a program you own,
     /// flat across holders. `Game::routine_holders` is the walk over "you,
@@ -93,6 +118,9 @@ impl Game {
                         AbilityEffect::Jump => FieldRoutinePick::Cell,
                         _ => FieldRoutinePick::None,
                     },
+                    auto_recast: def
+                        .auto_recastable()
+                        .then(|| self.is_auto_recast(holder.entity, id)),
                 });
             }
         }
@@ -184,6 +212,21 @@ impl Game {
             })
     }
 
+    /// Flips auto-recast on the routine `field_routines()[index]` stands for
+    /// and returns the new state. Same index space as `run_field_routine`.
+    pub fn toggle_field_auto_recast(&mut self, index: usize) -> Result<bool, String> {
+        let routines = self.field_routines();
+        let Some(view) = routines.get(index) else {
+            return Err("No such routine.".into());
+        };
+        if view.auto_recast.is_none() {
+            return Err(format!("{} doesn't run out on its own.", view.name));
+        }
+        let on = !self.is_auto_recast(view.holder, &view.ability);
+        self.set_auto_recast(view.holder, &view.ability, on);
+        Ok(on)
+    }
+
     /// Whether `entity` is someone a `Creature`-scoped field buff can land
     /// on: the player, or a current `Party` member. The same set
     /// `field_routine_targets` offers and `tick_field_buffs`/`active_buffs`
@@ -236,9 +279,6 @@ impl Game {
         let Some(view) = routines.get(index) else {
             return Err("No such routine.".into());
         };
-        if let Some(reason) = &view.unavailable {
-            return Err(format!("Can't run {} — {reason}.", view.name));
-        }
         let ability_id = view.ability.clone();
         let holder = view.holder;
         let holder_label = view.holder_label.clone();
@@ -250,17 +290,67 @@ impl Game {
             .cloned()
             .expect("field_routines only lists abilities AbilityDb actually holds");
 
-        match def.effect {
-            AbilityEffect::Phase => return self.run_phase(holder, &def, pick),
-            AbilityEffect::Jump => return self.run_jump(holder, &def, pick),
-            AbilityEffect::Symlink => return self.run_symlink(holder, &def, pick),
-            AbilityEffect::Heal { .. } => {
-                return self.run_field_heal(holder, &holder_label, &def, pick);
-            }
-            _ => {}
+        // A buff goes through `cast_field_routine`, which re-reads the row and
+        // runs the unavailable gate itself; the other effects keep theirs here.
+        if matches!(def.effect, AbilityEffect::FieldBuff { .. }) {
+            let cast = self
+                .cast_field_routine(holder, &ability_id, pick)
+                .map_err(|e| e.to_string())?;
+            self.log(format!("{} runs {}.", cast.holder_label, cast.name));
+            self.tick();
+            return Ok(());
+        }
+        if let Some(reason) = &view.unavailable {
+            return Err(format!("Can't run {} — {reason}.", view.name));
         }
 
-        let player = self.player_entity();
+        match def.effect {
+            AbilityEffect::Phase => self.run_phase(holder, &def, pick),
+            AbilityEffect::Jump => self.run_jump(holder, &def, pick),
+            AbilityEffect::Symlink => self.run_symlink(holder, &def, pick),
+            AbilityEffect::Heal { .. } => self.run_field_heal(holder, &holder_label, &def, pick),
+            _ => unreachable!("field_routines lists only field-only effects and heals"),
+        }
+    }
+
+    /// Arms the field buff `holder`'s `ability` row stands for, without
+    /// logging that it ran or spending a tick.
+    ///
+    /// **The one place a buff routine is gated, priced and armed**, so a
+    /// manual run (`run_field_routine`) and an auto-recast (called from inside
+    /// `tick_inner`, where a `tick()` would recurse) cannot price or arm
+    /// differently. It finds the row in `field_routines()` by `(holder,
+    /// ability)` so both share that one builder, refuses on its `unavailable`
+    /// reason, and draws no RNG.
+    ///
+    /// Not gated on a battle: `run_field_routine`'s outer guard owns that,
+    /// because an expiry mid-battle is upkeep and not an action.
+    pub(crate) fn cast_field_routine(
+        &mut self,
+        holder: Entity,
+        ability: &str,
+        pick: FieldRoutineTarget,
+    ) -> Result<FieldCast, CastError> {
+        let routines = self.field_routines();
+        let Some(view) = routines
+            .iter()
+            .find(|r| r.holder == holder && r.ability == ability)
+        else {
+            return Err(CastError::Refused("No such routine.".into()));
+        };
+        if let Some(reason) = &view.unavailable {
+            return Err(CastError::Refused(format!(
+                "Can't run {} — {reason}.",
+                view.name
+            )));
+        }
+        let holder_label = view.holder_label.clone();
+        let def = self
+            .world
+            .resource::<AbilityDb>()
+            .get(ability)
+            .cloned()
+            .expect("field_routines only lists abilities AbilityDb actually holds");
         let AbilityEffect::FieldBuff {
             kind,
             power,
@@ -268,11 +358,13 @@ impl Game {
             interval,
         } = def.effect
         else {
-            unreachable!(
-                "field_routines lists only field-only effects, and the three above returned"
-            );
+            return Err(CastError::Refused(format!(
+                "{} doesn't arm a buff.",
+                def.name
+            )));
         };
 
+        let player = self.player_entity();
         let recipients: Vec<Entity> = match kind.scope() {
             // `Run`-scoped kinds are pressure/economy knobs the whole run
             // feels, not a single combatant's stats — see
@@ -280,7 +372,9 @@ impl Game {
             // when a companion is the one holding (and paying to run) the
             // routine.
             FieldScope::Run => vec![player],
-            FieldScope::Creature => self.field_recipients(&def, pick)?,
+            FieldScope::Creature => self
+                .field_recipients(&def, pick)
+                .map_err(CastError::TargetGone)?,
         };
 
         // The holder is the invoker: level and affinity are read off whoever
@@ -313,12 +407,14 @@ impl Game {
                     remaining: duration,
                     interval,
                     source: BuffSource::Routine,
+                    ability: Some(def.id.clone()),
                 },
             );
         }
-        self.log(format!("{holder_label} runs {}.", def.name));
-        self.tick();
-        Ok(())
+        Ok(FieldCast {
+            holder_label,
+            name: def.name,
+        })
     }
 
     /// Who an ally-facing field invocation lands on: the picked ally for a

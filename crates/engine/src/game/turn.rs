@@ -235,9 +235,8 @@ impl Game {
 
     /// Shared implementation behind `tick`. `age_temporary` controls
     /// whether this tick counts toward any `Temporary` structure's
-    /// remaining lifespan (see `age_temporary_structures`) — `rest`'s
-    /// internal loop passes `false` so resting at a structure doesn't burn
-    /// down its lifespan any faster than leaving it standing idle would.
+    /// remaining lifespan (see `age_temporary_structures`). Only tests pass
+    /// `false`: `rest` advances no clock, so it never reaches here.
     pub(crate) fn tick_inner(&mut self, age_temporary: bool) {
         if self.is_game_over().is_some() {
             return;
@@ -488,10 +487,9 @@ impl Game {
         if age_temporary {
             self.age_temporary_structures();
         }
-        // Deliberately outside the `age_temporary` guard, unlike the call
-        // just above: a `Temporary` structure does not decay while the
-        // player rests, but a field buff does — rest is time passing for a
-        // buff, not base upkeep the player paused by staying home.
+        // Outside the `age_temporary` guard: a field buff ages on every
+        // tick, battle rounds included, and an expiry here is where an
+        // auto-recast fires. A rest ends routine buffs outright instead.
         self.tick_field_buffs();
         // Before the clock moves, so the window a snapshot is stamped with
         // is the one whose events follow it: `base_ledger::fold` opens a
@@ -1431,6 +1429,7 @@ impl Game {
                     remaining: buff.ticks,
                     interval: buff.interval,
                     source: BuffSource::Consumable,
+                    ability: None,
                 },
             );
         }
@@ -1527,7 +1526,7 @@ impl Game {
     /// that takes the charge**, so a free base rest never reaches the roll
     /// and the slab stays safe without a locale check of its own. A jumped
     /// rest **clears nothing** — the heal, the roster walk and
-    /// `drop_until_rest_buffs_on_party` all sit below it, which is the rule
+    /// `drop_routine_buffs_on_party` all sit below it, which is the rule
     /// a *refused* rest already follows, so the two failure modes agree. And
     /// a roll that hits but **fields no pack lapses into an ordinary rest**,
     /// because a charge burnt for no fight at all is the one outcome a
@@ -1627,7 +1626,7 @@ impl Game {
         // Below the gates rather than beside them, so a refused rest clears
         // nothing. The walk is player then `Party` — the same set
         // `tick_field_buffs` ages.
-        self.drop_until_rest_buffs_on_party();
+        self.drop_routine_buffs_on_party();
         // Collected up front: the loop below takes the world mutably.
         let owned: Vec<Entity> = {
             let mut query = self

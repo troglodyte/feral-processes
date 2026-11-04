@@ -176,6 +176,10 @@ pub struct PlayerSave {
     /// `components::FieldBuff`. Player state, not zone-local, so
     /// `Game::enter_next_zone` must never clear it.
     pub field_buffs: Vec<ActiveFieldBuff>,
+    /// Routines flagged to rerun when their timed buff runs out — see
+    /// `components::AutoRecast`. Additive behind a default, so no version bump.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_recast: Vec<crate::abilities::AbilityId>,
     /// Every squad currently away from the base — see `resources::Sorties`.
     ///
     /// Additive behind `#[serde(default)]`, so a save written before sorties
@@ -642,6 +646,10 @@ pub struct CreatureSave {
     /// `Game::dissolve_tamed_program` nor `Game::fuse_companions` needs to
     /// know this field exists.
     pub field_buffs: Vec<ActiveFieldBuff>,
+    /// Routines flagged to rerun when their timed buff runs out — see
+    /// `components::AutoRecast`. Additive behind a default, so no version bump.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub auto_recast: Vec<crate::abilities::AbilityId>,
     /// The nest this creature is tethered to, if it's a `NestGuardian` —
     /// identified by the nest's position rather than its entity id, since
     /// entity ids aren't stable across a save/load round trip (same reason

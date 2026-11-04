@@ -388,7 +388,8 @@ impl Game {
             .unwrap_or(0)
     }
 
-    /// Ends every until-rest buff on the player and each party member,
+    /// Ends every routine buff, timed ones included, on the player and each
+    /// party member,
     /// logging one line per drop in the same words an expiry uses — from the
     /// player's side a loadout ending because they slept is the same event as
     /// one ending because its clock ran out.
@@ -397,9 +398,9 @@ impl Game {
     /// for the same reason: it is the only set an invocation will ever arm one on.
     /// `Game::rest` is one of the two callers; the other is
     /// `difficulty::death_handling_system`, which is a bevy system and so
-    /// reaches `drop_until_rest_buffs` directly instead of coming through
+    /// reaches `drop_routine_buffs` directly instead of coming through
     /// here.
-    pub(crate) fn drop_until_rest_buffs_on_party(&mut self) {
+    pub(crate) fn drop_routine_buffs_on_party(&mut self) {
         let player = self.player_entity();
         let subjects: Vec<Entity> = std::iter::once(player)
             .chain(self.world.resource::<Party>().0.clone())
@@ -408,7 +409,7 @@ impl Game {
         let mut dropped: Vec<String> = Vec::new();
         for entity in subjects {
             if let Some(mut field_buff) = self.world.get_mut::<FieldBuff>(entity) {
-                dropped.extend(components::drop_until_rest_buffs(&mut field_buff));
+                dropped.extend(components::drop_routine_buffs(&mut field_buff));
             }
         }
         for name in dropped {
@@ -461,15 +462,15 @@ impl Game {
             }
         }
 
-        let mut expired: Vec<String> = Vec::new();
+        let mut expired: Vec<(Entity, String, Option<crate::abilities::AbilityId>)> = Vec::new();
         for entity in subjects {
             let Some(mut field_buff) = self.world.get_mut::<FieldBuff>(entity) else {
                 continue;
             };
             field_buff.active.retain_mut(|buff| {
                 // An until-rest buff has no turn count to spend — `rest` and
-                // a Forgiving reboot are what end it, through
-                // `drop_until_rest_buffs`. Skipping the decrement rather than
+                // a Forgiving reboot end it, through `drop_routine_buffs`,
+                // as they end a timed routine buff too. Skipping the decrement rather than
                 // the whole entry keeps the cadence filter above untouched:
                 // only `Regen` and `Trickle` fire per tick, and neither is
                 // ever an until-rest kind.
@@ -478,16 +479,14 @@ impl Game {
                 }
                 buff.remaining = buff.remaining.saturating_sub(1);
                 if buff.remaining == 0 {
-                    expired.push(buff.name.clone());
+                    expired.push((entity, buff.name.clone(), buff.ability.clone()));
                     false
                 } else {
                     true
                 }
             });
         }
-        for name in expired {
-            self.log(format!("{name} fades."));
-        }
+        self.resolve_expired_buffs(expired);
     }
 
     /// One tick of a single running field buff's effect on `entity`. The

@@ -559,13 +559,19 @@ pub struct ActiveFieldBuff {
     #[serde(default = "crate::abilities::every_turn")]
     pub interval: u32,
     pub source: BuffSource,
+    /// The routine that armed this buff, so an expiry can find the routine
+    /// to rerun (`Game::tick_field_buffs`). `None` for a consumable and for a
+    /// buff saved before this field existed; such a buff never reruns.
+    #[serde(default)]
+    pub ability: Option<crate::abilities::AbilityId>,
 }
 
 impl ActiveFieldBuff {
     /// Whether this buff has no turn count at all and runs until the party
     /// rests. **The one definition**, read by `Game::tick_field_buffs` (which
-    /// skips ageing it), `drop_until_rest_buffs` below (which ends it) and
-    /// `duration_label` (which says so on the row).
+    /// skips ageing it) and `duration_label` (which says so on the row). It
+    /// decides ageing only: `drop_routine_buffs` ends every routine buff on a
+    /// rest, timed or not.
     ///
     /// **It reads `source` as well as `kind`, and that half is the load-bearing
     /// one.** `ItemEffect::prebattle_buff` arms this same struct from a
@@ -601,22 +607,28 @@ impl ActiveFieldBuff {
     }
 }
 
-/// Ends every until-rest buff on one holder, returning the names of what
-/// went so the caller can log it.
+/// Ends every routine-armed field buff on one holder, timed ones included,
+/// returning the names of what went so the caller can log it. A
+/// consumable's buff stays: an item is spent, and its clock is its own.
+///
+/// A rest or a Forgiving reboot ends the expedition, and a routine buff was
+/// bought for it. `runs_until_rest` decides only whether a buff ages; it
+/// does not decide whether a rest ends it. Dropping the timed ones too is
+/// also what keeps an auto-recast from firing on a rest.
 ///
 /// A free function taking the component directly, for exactly the reason
 /// `field_buff_power_of` below is one: the two callers are `Game::rest`, a
 /// method, and `difficulty::death_handling_system`, a plain bevy system with
 /// no `Game` to reach through. The same split
 /// `CLAUDE.md` records for `game::stack::surfaced`.
-pub fn drop_until_rest_buffs(buff: &mut FieldBuff) -> Vec<String> {
+pub fn drop_routine_buffs(buff: &mut FieldBuff) -> Vec<String> {
     let dropped: Vec<String> = buff
         .active
         .iter()
-        .filter(|b| b.runs_until_rest())
+        .filter(|b| b.source == BuffSource::Routine)
         .map(|b| b.name.clone())
         .collect();
-    buff.active.retain(|b| !b.runs_until_rest());
+    buff.active.retain(|b| b.source != BuffSource::Routine);
     dropped
 }
 

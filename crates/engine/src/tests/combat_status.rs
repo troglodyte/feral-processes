@@ -930,6 +930,7 @@ fn consumable(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
         remaining: 10,
         interval: 1,
         source: BuffSource::Consumable,
+        ability: None,
     }
 }
 
@@ -941,6 +942,7 @@ fn routine(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
         remaining: 10,
         interval: 1,
         source: BuffSource::Routine,
+        ability: None,
     }
 }
 
@@ -1183,6 +1185,7 @@ fn running_field_buff(kind: FieldBuffKind, power: i32) -> ActiveFieldBuff {
         remaining: 5,
         interval: 1,
         source: BuffSource::Routine,
+        ability: None,
     }
 }
 

@@ -253,6 +253,11 @@ impl Game {
             ));
         }
         let removed = installed.remove(slot);
+        // A reinstall starts with the flag off (spec: no flag comes back by
+        // itself), unless a second copy of the id is still standing here.
+        if !installed.contains(&removed) {
+            self.set_auto_recast(entity, &removed, false);
+        }
         self.world.entity_mut(entity).insert(Routines(installed));
         // A built routine exists only in its slot or on the Built page, so
         // pulling it out destroys it (ADR 0029).

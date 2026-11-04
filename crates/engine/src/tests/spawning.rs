@@ -1714,6 +1714,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             phase_keys: crate::components::PhaseKeys::default(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
+            auto_recast: Vec::new(),
             sorties: Vec::new(),
             routes: Vec::new(),
             name: String::new(),
@@ -1757,6 +1758,7 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
             bought_stats: crate::components::BoughtStats::default(),
             routines: Vec::new(),
             field_buffs: Vec::new(),
+            auto_recast: Vec::new(),
             // No NestSave anywhere in this data names this tile.
             nest_position: Some((999, 999)),
             patrol_position: None,

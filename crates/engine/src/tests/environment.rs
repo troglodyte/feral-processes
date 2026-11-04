@@ -360,6 +360,7 @@ fn a_mitigation_buff_reduces_the_bite() {
             remaining: 100,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
     game.move_player(1, 0);
@@ -890,6 +891,7 @@ fn ground_and_weather_attrition_lands_as_one_bite() {
             remaining: 100,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
 
@@ -1094,6 +1096,7 @@ fn mitigation_blunts_the_stacked_bite() {
             remaining: 100,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         },
     );
     game.move_player(1, 0);

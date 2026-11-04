@@ -46,7 +46,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **Every routine that can be *run* is priced in Power; only a passive is
   exempt**, because a passive is never invoked.
 - **A field buff's lifetime is decided by its kind *and* its source**, and
-  `ActiveFieldBuff::runs_until_rest` is the one predicate.
+  `ActiveFieldBuff::runs_until_rest` is the one predicate, for ageing only —
+  a rest or reboot ends every routine buff, timed ones included
+  (`drop_routine_buffs`), so an auto-recast never fires on a rest.
 - **`Trickle` is the one restore kind that does not scale with its
   invoker.** `Regen`'s ceiling is `max_hp` and grows with level; Power's is
   a fixed `POWER_MAX` forever, so a scaled `power: 1` is 7 a turn at the

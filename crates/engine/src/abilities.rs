@@ -1558,6 +1558,19 @@ impl AbilityDef {
             && crate::abilities::routine_power_cost(self, None) > 0.0
     }
 
+    /// Whether a holder can flag this routine to rerun itself when the buff it
+    /// armed runs out: a field-runnable `FieldBuff` of a kind that ages.
+    /// An until-rest kind never runs out, so there is nothing to rerun.
+    ///
+    /// The one rule: the menu row, the toggle and the recast all ask here.
+    pub fn auto_recastable(&self) -> bool {
+        self.field_runnable()
+            && matches!(
+                self.effect,
+                AbilityEffect::FieldBuff { kind, .. } if !kind.runs_until_rest()
+            )
+    }
+
     /// Whether this routine fires on a trigger rather than being chosen.
     ///
     /// A predicate rather than a `triggers.is_some()` at each site, for

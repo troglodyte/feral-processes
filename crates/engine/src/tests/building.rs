@@ -657,6 +657,7 @@ fn cronjob_work_xp_is_boosted_by_a_running_xp_boost_field_buff() {
             remaining: 10,
             interval: 1,
             source: BuffSource::Routine,
+            ability: None,
         }],
     });
     boosted.tick();

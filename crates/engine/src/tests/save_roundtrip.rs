@@ -160,6 +160,7 @@ fn seed_the_roster(game: &mut Game) -> Roster {
                 remaining: 62,
                 interval: 4,
                 source: BuffSource::Routine,
+                ability: None,
             }],
         },
     ));
@@ -382,6 +383,7 @@ fn a_rich_program_writes_every_field_it_was_given() {
         bought_stats: _,
         routines: _,
         field_buffs: _,
+        auto_recast: _,
         nest_position: _,
         patrol_position: _,
         study_station: _,

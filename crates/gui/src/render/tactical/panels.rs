@@ -203,11 +203,17 @@ pub(crate) fn draw_tactical_routines(
         rows.push(text_row("(nothing this body can run in a fight)"));
     }
     for (i, option) in options.iter().enumerate() {
-        let label = tactical_routine_label(option);
-        rows.push(match &option.unavailable {
-            None => item_row(label, i == selected),
-            Some(reason) => spent_item_row(format!("{label} — {reason}"), i == selected),
+        let mut lines = tactical_routine_lines(option).into_iter();
+        let head = lines
+            .next()
+            .expect("tactical_routine_lines always emits the routine's row");
+        rows.push(match option.unavailable {
+            None => item_row(head, i == selected),
+            Some(_) => spent_item_row(head, i == selected),
         });
+        for line in lines {
+            rows.push(colored_item_row(line, false, super::super::TEXT_DIM));
+        }
     }
     push_key_footer(&mut rows, &["Enter run", "Esc cancel"]);
     draw_popup(
@@ -220,19 +226,31 @@ pub(crate) fn draw_tactical_routines(
     );
 }
 
-/// One routine's row: name, how far it may be aimed, then what it does.
+/// One routine's lines: its name, how far it may be aimed and why it cannot
+/// run now on the row the cursor lands on, then what it does underneath.
 ///
-/// The range sits beside the name rather than after the prose because it is
-/// what a player standing on a board chooses by, and a row too long for its
-/// box loses its tail first. A reach of nothing is the invoker's own cell.
-pub(crate) fn tactical_routine_label(option: &SpecialOption) -> String {
+/// The description goes to continuation lines because it is authored prose
+/// of any length and a popup row is never clipped or wrapped — Emulate's
+/// and Respawn's ran off the box at 1280x720 on one line. A reach of nothing
+/// is the invoker's own cell.
+///
+/// Returns the lines rather than drawing them so their width is measurable
+/// without a window.
+pub(crate) fn tactical_routine_lines(option: &SpecialOption) -> Vec<String> {
     let range = match option.range {
         None => String::new(),
-        Some(AbilityRange { max: 0, .. }) => "self — ".to_string(),
-        Some(AbilityRange { min: 0, max }) => format!("range {max} — "),
-        Some(AbilityRange { min, max }) => format!("range {min}–{max} — "),
+        Some(AbilityRange { max: 0, .. }) => " — self".to_string(),
+        Some(AbilityRange { min: 0, max }) => format!(" — range {max}"),
+        Some(AbilityRange { min, max }) => format!(" — range {min}–{max}"),
     };
-    format!("{} — {range}{}", option.name, option.detail)
+    let reason = option
+        .unavailable
+        .as_deref()
+        .map(|r| format!(" — {r}"))
+        .unwrap_or_default();
+    std::iter::once(format!("{}{range}{reason}", option.name))
+        .chain(continuation_lines(&option.detail))
+        .collect()
 }
 
 /// Which learned image does Emulate invoke? `draw_tactical_routines`'s

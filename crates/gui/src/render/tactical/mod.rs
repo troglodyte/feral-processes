@@ -31,7 +31,8 @@ use super::lighting::{Lighting, Lit};
 use super::marks;
 use super::marks::draw_rarity_bar;
 use super::popup::{
-    PopupSize, Row, draw_popup, item_row, push_key_footer, spent_item_row, text_row,
+    PopupSize, Row, colored_item_row, continuation_lines, draw_popup, item_row, push_key_footer,
+    spent_item_row, text_row,
 };
 use crate::fx::{BOLT_THICKNESS_PX, Fx, cell_centers};
 use crate::paint::{Color, Painter, Rect};

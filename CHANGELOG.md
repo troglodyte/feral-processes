@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.28
+
+**The Refit Bench now mends any worn gear, slowly, while you stand beside it.** Before, it only touched gear below the low-condition warning, so a bench full of Annealed Cores could leave worn gear alone. Each core now gives the bench 50 repair points, and each point restores one fight of condition, so light wear wastes nothing. The bench mends one point per tick and logs a line when a piece is back to full. The instant refit from the item menu is gone: `R` on a worn copy now shows its condition and the bench's points and cores.
+
 ## 0.21.27
 
 **The program picker for building or upgrading a structure no longer lists your party members.** Before, companions showed up with an "(in party)" tag, so one misread row could spend a program you had been training. Now only programs at the base can be picked.

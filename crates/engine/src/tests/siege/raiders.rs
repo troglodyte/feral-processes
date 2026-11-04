@@ -748,6 +748,37 @@ mod raiders_wreck {
         );
     }
 
+    /// A raider beside the Research Station the base AI claimed leaves it to
+    /// the generic AI rather than wrecking it.
+    #[test]
+    fn a_raider_beside_the_ai_station_does_not_wreck_it() {
+        let mut game = Game::new(989, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        open_pocket_battle(&mut game);
+        let station = spawn_structure(&mut game, 10_000, 0);
+        game.world
+            .entity_mut(station)
+            .insert(Position { x: 5, y: 5 });
+        game.world.get_mut::<Structure>(station).unwrap().kind = "research_node".to_string();
+        game.storyline.base_ai = crate::storyline::BaseAi::Claiming {
+            host: ProgramId(1),
+            station: (5, 5),
+        };
+        let besieger = spawn_besieger(&mut game);
+        {
+            let mut battle = game.world.resource_mut::<TacticalBattle>();
+            battle.place(station, (3, 1));
+            battle.place(besieger, (4, 1));
+            battle.set_initiative(vec![besieger]);
+        }
+
+        assert!(!game.besieger_turn(besieger), "nothing in reach to wreck");
+        assert_eq!(
+            game.world.get::<Durability>(station).unwrap().hp,
+            10_000,
+            "the AI's station takes no damage"
+        );
+    }
+
     /// A raider beside a stocked one steals instead — steal before wreck.
     #[test]
     fn a_raider_beside_a_stocked_machine_steals_instead() {

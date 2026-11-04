@@ -1041,6 +1041,83 @@ mod in_a_game {
         assert_eq!(left, 0, "the bill left the shelf");
     }
 
+    fn shelf_units(game: &Game, depot: Entity) -> u32 {
+        game.world
+            .get::<Stock>(depot)
+            .unwrap()
+            .output
+            .get(&ItemId::from(ids::CORE_FRAGMENT))
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn fused_host(game: &Game) -> Entity {
+        let BaseAi::Fused(fused) = &game.storyline.base_ai else {
+            unreachable!()
+        };
+        game.program_entity(fused.host).expect("the host stands")
+    }
+
+    #[test]
+    fn the_errand_leaves_what_the_bill_does_not_want_on_the_shelf() {
+        const SURPLUS: u32 = 4;
+        let (mut f, depot, _assets) = fused_with_a_bill("errand_surplus", 4.0);
+        f.game
+            .world
+            .get_mut::<Stock>(depot)
+            .unwrap()
+            .output
+            .insert(ItemId::from(ids::CORE_FRAGMENT), BILL + SURPLUS);
+        let host = fused_host(&f.game);
+        for _ in 0..1500 {
+            if f.game
+                .world
+                .resource::<Research>()
+                .0
+                .contains("errand_billed")
+            {
+                break;
+            }
+            f.game.tick();
+            assert!(
+                f.game.world.get::<Carrying>(host).is_none(),
+                "the AI host never carries the bill"
+            );
+        }
+        assert!(
+            f.game
+                .world
+                .resource::<Research>()
+                .0
+                .contains("errand_billed")
+        );
+        assert_eq!(
+            shelf_units(&f.game, depot),
+            SURPLUS,
+            "only the bill leaves the shelf"
+        );
+    }
+
+    #[test]
+    fn a_delivery_still_completes_after_a_save_and_load_mid_errand() {
+        let (mut f, _depot, assets) = fused_with_a_bill("errand_save_load", 4.0);
+        tick_until(&mut f.game, 1500, |g| {
+            g.world
+                .iter_entities()
+                .any(|e| e.get::<Carrying>().is_some())
+        });
+        let path = std::env::temp_dir().join(format!(
+            "feral_storyline_errand_mid_{}.sav",
+            std::process::id()
+        ));
+        f.game.save(&path).unwrap();
+        let mut loaded = Game::load(&path, &assets).unwrap();
+        let _ = std::fs::remove_file(&path);
+        tick_until(&mut loaded, 1500, |g| {
+            g.world.resource::<Research>().0.contains("errand_billed")
+        });
+    }
+
     #[test]
     fn the_errand_credits_no_research_itself() {
         let (mut f, _depot, _assets) = fused_with_a_bill("errand_no_credit", 0.0);

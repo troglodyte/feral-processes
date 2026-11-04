@@ -22,11 +22,10 @@ use bevy_ecs::prelude::*;
 
 use crate::Game;
 use crate::base_grid::BaseGrid;
-use crate::components::{Carrying, Clearing, Position, Stock, Task, TaskKind};
-use crate::game::base::floor::take_floor_item;
-use crate::game::base::hauling::{at_station, crew_reach, reaches, take_from};
+use crate::components::{Carrying, Clearing, Position, Stock, Task};
+use crate::game::base::floor::take_floor_unit;
+use crate::game::base::hauling::{at_station, crew_reach, is_bound_for, reaches, take_from};
 use crate::game::base::research_supply::{ResearchLedger, Source};
-use crate::items::FloorThing;
 use crate::research::ResearchDb;
 use crate::resources::ActiveResearch;
 
@@ -74,9 +73,7 @@ impl Game {
             .filter_map(|e| {
                 let load = e.get::<Carrying>()?;
                 let bound = match e.get::<Task>() {
-                    Some(task) => {
-                        task.kind == TaskKind::GatherResource && stations.contains(&task.target)
-                    }
+                    Some(task) => is_bound_for(task, |e| stations.contains(e)),
                     None => e.get::<Clearing>().is_some(),
                 };
                 bound.then(|| (load.item.clone(), load.qty))
@@ -190,10 +187,7 @@ impl Game {
         let want = board.ledger.fetch_want(&item);
         let qty = if on_floor {
             // The pile may have been lifted since the board was built.
-            match take_floor_item(&mut self.world, entity) {
-                Some(FloorThing::Item(_)) => 1,
-                _ => 0,
-            }
+            u32::from(take_floor_unit(&mut self.world, entity, &item))
         } else {
             self.world
                 .get_mut::<Stock>(entity)

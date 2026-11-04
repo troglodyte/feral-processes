@@ -57,6 +57,13 @@ pub(crate) fn take_haul_load(
 /// same buffers on the base's own behalf, and a second copy of the
 /// remove-or-decrement is how a buffer ends up holding a zero entry that
 /// every reader then has to know to skip.
+/// Whether a worker's task aims at one of `stations`, so a load it carries is
+/// already on its way to the research bill. The one rule the posted haulers'
+/// ledger and the idle provisioner's share.
+pub(crate) fn is_bound_for(task: &Task, stations: impl Fn(&Entity) -> bool) -> bool {
+    stations(&task.target)
+}
+
 pub(crate) fn take_from(stock: &mut Stock, item: &ItemId, qty: u32) -> u32 {
     take_from_buffer(&mut stock.output, item, qty)
 }
@@ -1404,7 +1411,7 @@ pub(crate) fn haul_step_system(
             .map(|(_, _, stock, _)| &stock.input),
         workers.iter().filter_map(|(_, _, task, carrying, ..)| {
             carrying
-                .filter(|_| stations.contains(&task.target))
+                .filter(|_| is_bound_for(task, |e| stations.contains(e)))
                 .map(|load| (load.item.clone(), load.qty))
         }),
     );

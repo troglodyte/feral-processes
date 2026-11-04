@@ -390,11 +390,6 @@ mod tests {
         );
     }
 
-    /// Loading is not the bar for `contracts` either: it exists so a session
-    /// testing the contracts loop starts *at a board it can sign*, and a
-    /// template that parked the player off their own slab would load
-    /// perfectly and refuse every offer. The research buy and the build are
-    /// exactly what the template is for skipping.
     #[test]
     fn the_base_ai_stalled_template_loads_with_its_host_marked() {
         let out = std::env::temp_dir().join("feral_processes_template_base_ai_host.bin");
@@ -409,6 +404,11 @@ mod tests {
         );
     }
 
+    /// Loading is not the bar for `contracts` either: it exists so a session
+    /// testing the contracts loop starts *at a board it can sign*, and a
+    /// template that parked the player off their own slab would load
+    /// perfectly and refuse every offer. The research buy and the build are
+    /// exactly what the template is for skipping.
     #[test]
     fn the_contracts_template_starts_at_a_board_it_can_take_from() {
         let out = std::env::temp_dir().join("feral_processes_template_contracts_board.bin");

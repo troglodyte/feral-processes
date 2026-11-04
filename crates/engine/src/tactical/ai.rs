@@ -2028,4 +2028,58 @@ mod tests {
         );
         assert!(clear > blocked, "clear {clear}, blocked {blocked}");
     }
+
+    /// The base AI's claimed station is never a target, while an ordinary
+    /// damageable structure beside it is.
+    #[test]
+    fn a_hostile_does_not_target_the_station_the_base_ai_claimed() {
+        use crate::components::Position;
+        use crate::tests::support::test_assets_dir;
+        use crate::tests::tactical::{free_neighbour, tactical_fight};
+
+        let mut game = Game::new(
+            11,
+            crate::resources::DifficultyMode::Forgiving,
+            &test_assets_dir(),
+        )
+        .unwrap();
+        let hostile = tactical_fight(&mut game, 1, 100)[0];
+        let player = game.player_entity();
+        let beside = |game: &mut Game, kind: &str, x: i32| {
+            let at = game
+                .world
+                .resource::<TacticalBattle>()
+                .cell_of(player)
+                .unwrap();
+            let cell = free_neighbour(game, at);
+            let e = game
+                .world
+                .spawn((
+                    Structure {
+                        kind: kind.to_string(),
+                    },
+                    Position { x, y: 900 },
+                    Durability { hp: 30, max_hp: 30 },
+                ))
+                .id();
+            assert!(game.world.resource_mut::<TacticalBattle>().place(e, cell));
+            (e, cell)
+        };
+        let (_, plain_cell) = beside(&mut game, "extractor", 800);
+        let (_, station_cell) = beside(&mut game, "research_node", 801);
+        game.storyline.base_ai = crate::storyline::BaseAi::Claiming {
+            host: crate::components::ProgramId(1),
+            station: (801, 900),
+        };
+
+        let targets = game.tactical_sides(hostile).targets;
+        assert!(
+            targets.contains(&plain_cell),
+            "an ordinary structure is fair game"
+        );
+        assert!(
+            !targets.contains(&station_cell),
+            "the AI's station is not a target"
+        );
+    }
 }

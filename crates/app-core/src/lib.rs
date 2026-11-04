@@ -250,7 +250,7 @@ pub fn inventory_item_actions(game: &mut Game, item: &ItemId) -> Vec<(char, Stri
         actions.push(('m', "[M] Modify affixes...".to_string()));
     }
     if game.equipment_of(item).is_some() {
-        actions.push(('r', "[R]efit...".to_string()));
+        actions.push(('r', "[R]efit status...".to_string()));
     }
     if game.is_usable(item) {
         actions.push(('c', "[C]onsume".to_string()));
@@ -1911,9 +1911,9 @@ pub enum Mode {
     /// `Mode::ModPickAffix` with Enter. Reached with `[M]` from
     /// `Mode::InventoryItemAction`.
     ModCopy,
-    /// The Refit Bench screen for `App::refit_copy`: the copy's condition,
-    /// the bill to restore it, and Enter to pay. Reached with `[R]` from
-    /// `Mode::InventoryItemAction`.
+    /// The Refit Bench view for `App::refit_copy`: the copy's condition and
+    /// the bench's repair points and cores. Read-only. Reached with `[R]`
+    /// from `Mode::InventoryItemAction` or a slot's swap screen.
     RefitCopy,
     /// The researched affixes that fit `App::mod_copy`, each with its stats
     /// and `apply_cost`. A row applies it; a refusal stays here on the
@@ -3159,8 +3159,7 @@ pub struct App {
     /// apply or strip hands back, because a modded copy is a different
     /// ledger key from the one the screen was opened on.
     pub mod_copy: Option<GearCopy>,
-    /// The copy `Mode::RefitCopy` is mending. Re-keyed on success, as
-    /// `mod_copy` is: a refit returns it to a plain key.
+    /// The copy `Mode::RefitCopy` is showing.
     pub refit_copy: Option<GearCopy>,
     /// What `Mode::ItemDescribe` is showing, and where Esc goes — see
     /// `GearInspect`. Set by every `[I]` and by `[d]` on the action list,

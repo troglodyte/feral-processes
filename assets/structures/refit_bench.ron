@@ -1,7 +1,7 @@
 (
     id: "refit_bench",
     name: "Refit Bench",
-    description: "Where worn gear is restored: one Annealed Core from its stock returns a copy to full condition, whatever the copy. Haulers keep up to 20 Cores on it, or load it by hand from the Transfer screen. One standing anywhere in the base is enough.",
+    description: "Mends worn gear slowly while you stand beside it. Each Annealed Core from its stock gives 50 repair points, and one point restores one fight of condition. Haulers keep up to 20 Cores on it, or load it by hand from the Transfer screen.",
     glyph: 'F',
     color: Cyan,
     build_cost: [("core_fragment", 12)],

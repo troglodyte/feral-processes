@@ -41,6 +41,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         battery_charge: 0,
+        refit_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });
@@ -63,6 +64,7 @@ pub(super) fn app_at_a_relay(seed: u32, item: &ItemId, qty: u32) -> App {
         standing_tool: None,
         pod_charged: None,
         battery_charge: 0,
+        refit_charge: 0,
         incubating: Vec::new(),
         study_yield: None,
     });

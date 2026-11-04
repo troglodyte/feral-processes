@@ -850,7 +850,7 @@ Node.
 `refit_bench.ron` is the one structure the engine looks up by id for gear
 wear (the Mod Bench is the other). Gear loses a point of durability for every
 fight its wearer is in (see `durability` in `assets/items/README.md`), and the
-Refit Bench restores a copy to full condition.
+Refit Bench restores it, a repair point at a time.
 
 It is gated: `program_refactoring` names it in `unlocks_structures`. A bench
 already standing keeps working if a mod removes the gate.
@@ -858,15 +858,17 @@ already standing keeps working if a mod removes the gate.
 It is a stocked structure, like a Turret. It authors `supply:
 Some("annealed_core")` and `supply_capacity: Some(20)`, so haulers keep up to
 20 Annealed Cores in its input from the base's shelves, and the player can
-load it by hand from the Transfer screen (`c`) when standing beside it. Every
-refit costs exactly one Annealed Core from that stock, whatever the copy and
-whatever its rarity; the constant is `REFIT_CORES` in
-`crates/engine/src/tuning.rs`. The menu refit (`R` on a worn copy) draws on
-the first bench holding a core, in `(x, y)` order, and is refused with "Load
-the Refit Bench with Annealed Cores first." when none does.
+load it by hand from the Transfer screen (`c`) when standing beside it.
 
-The bench also mends on its own. When the player has stood still within
-`REFIT_REACH` tiles of a stocked bench for more than `REFIT_IDLE_TICKS` ticks,
-it mends one copy a tick, one core each: worn gear on the player and the
-party first, most worn first, then worn copies in the pack. Only a broken copy
-or one below the `GEAR_WORN_ALERT_PERCENT` line is mended this way.
+Mending is the bench's alone, and slow. When the player has stood still within
+`REFIT_REACH` tiles of a bench for more than `REFIT_IDLE_TICKS` ticks, it
+restores `REFIT_POINTS_PER_TICK` repair points a tick (one point is one unit of
+a copy's wear) to the most urgent worn copy: gear on the player, then the
+party in order, most worn first, then worn copies in the pack. Any wear at all
+is served. When its charge is empty the bench spends one Annealed Core from its
+stock for `REFIT_POINTS_PER_CORE` points; the unspent charge is saved on the
+bench. The first bench in `(x, y)` order with charge or cores serves, and the
+log says "The Refit Bench is out of Annealed Cores." once per stand when none
+in reach has either. Both constants are in `crates/engine/src/tuning/items.rs`.
+`R` on a worn copy opens a read-only view of its condition and the bench's
+reserve.

@@ -333,7 +333,7 @@ fn cell_ellipsis(t: &str, w: usize) -> String {
 /// measured by `the_widest_base_row_fits_the_narrowest_column`. The name and
 /// program columns are sized against it.
 const BASE_ROW_CHARS: usize = 42;
-/// A BASE row's fixed characters: the idle mark and the OUT header.
+/// A BASE row's fixed characters: the unsupplied mark and the OUT header.
 const BASE_ROW_FIXED_CHARS: usize = 1 + 3;
 
 /// Structures, production, defence, the build queue and the labour shortfall.
@@ -347,76 +347,7 @@ fn base_rows(d: &PaneData) -> Vec<Row> {
         out.push(text(vec![dim("no base to report on")]));
         return out;
     }
-
-    let rows: Vec<(&StructureReport, String)> = d
-        .structures
-        .iter()
-        .filter(|s| s.workable)
-        .map(|s| {
-            let program = s
-                .assignees
-                .first()
-                .map(|a| a.label.clone())
-                .unwrap_or_else(|| "\u{2014} none \u{2014}".to_string());
-            (s, program)
-        })
-        .collect();
-    // Each column is as wide as the widest cell drawn in it, plus a gap: a
-    // machine label ("Assembler (Recompile Kernel)") outgrows any fixed cell,
-    // and a cut name would run into the program beside it.
-    // Both are capped so the row provably fits the narrowest column
-    // (`BASE_ROW_CHARS`): a program name is at most `MAX_CUSTOM_NAME_LEN`
-    // characters, and the machine label gives way to an ellipsis for the
-    // room that is left.
-    let program_w = rows
-        .iter()
-        .map(|(_, p)| p.chars().count())
-        .chain(["PROGRAM".len()])
-        .max()
-        .unwrap_or(0)
-        .min(feral_processes_engine::MAX_CUSTOM_NAME_LEN.max("PROGRAM".len()))
-        + 1;
-    let name_w = rows
-        .iter()
-        .map(|(s, _)| s.label.chars().count())
-        .chain(["NAME".len()])
-        .max()
-        .unwrap_or(0)
-        .min(BASE_ROW_CHARS - BASE_ROW_FIXED_CHARS - program_w - 1)
-        + 1;
-    out.push(text(vec![(
-        format!(
-            " {}{}{}",
-            cell("NAME", name_w),
-            cell("PROGRAM", program_w),
-            "OUT"
-        ),
-        palette::LABEL,
-        false,
-    )]));
-    for (s, program) in &rows {
-        let idle = s.assignees.is_empty();
-        let out_qty: u32 = s.output.iter().map(|(_, q)| q).sum();
-        let mark = if idle { "!" } else { " " };
-        let colour = if idle {
-            palette::ATTENTION
-        } else {
-            palette::BODY
-        };
-        out.push(text(vec![(
-            format!(
-                "{mark}{}{}{}",
-                cell_ellipsis(&s.label, name_w),
-                cell(program, program_w),
-                out_qty
-            ),
-            colour,
-            false,
-        )]));
-    }
-    if !d.structures.iter().any(|s| s.workable) {
-        out.push(text(vec![dim("  no workable structures")]));
-    }
+    out.extend(machine_rows(d));
 
     out.push(Row::Rule);
     out.push(subhead("PRODUCTION"));
@@ -509,6 +440,78 @@ fn base_rows(d: &PaneData) -> Vec<Row> {
         ));
     } else {
         out.push(text(vec![dim("  every post is filled")]));
+    }
+    out
+}
+
+/// The staffed machines, `!` on one with an ingredient nothing in the base
+/// supplies (`StructureReport::unsupplied`). An unstaffed machine is left to
+/// the idle count under PROGRAMS AVAILABLE: listing each one buried the rows
+/// that need a build.
+fn machine_rows(d: &PaneData) -> Vec<Row> {
+    let mut out = Vec::new();
+    let rows: Vec<(&StructureReport, &str)> = d
+        .structures
+        .iter()
+        .filter(|s| s.workable)
+        .filter_map(|s| Some((s, s.assignees.first()?.label.as_str())))
+        .collect();
+    // Each column is as wide as the widest cell drawn in it, plus a gap: a
+    // machine label ("Assembler (Recompile Kernel)") outgrows any fixed cell,
+    // and a cut name would run into the program beside it.
+    // Both are capped so the row provably fits the narrowest column
+    // (`BASE_ROW_CHARS`): a program name is at most `MAX_CUSTOM_NAME_LEN`
+    // characters, and the machine label gives way to an ellipsis for the
+    // room that is left.
+    let program_w = rows
+        .iter()
+        .map(|(_, p)| p.chars().count())
+        .chain(["PROGRAM".len()])
+        .max()
+        .unwrap_or(0)
+        .min(feral_processes_engine::MAX_CUSTOM_NAME_LEN.max("PROGRAM".len()))
+        + 1;
+    let name_w = rows
+        .iter()
+        .map(|(s, _)| s.label.chars().count())
+        .chain(["NAME".len()])
+        .max()
+        .unwrap_or(0)
+        .min(BASE_ROW_CHARS - BASE_ROW_FIXED_CHARS - program_w - 1)
+        + 1;
+    out.push(text(vec![(
+        format!(
+            " {}{}{}",
+            cell("NAME", name_w),
+            cell("PROGRAM", program_w),
+            "OUT"
+        ),
+        palette::LABEL,
+        false,
+    )]));
+    for (s, program) in &rows {
+        let out_qty: u32 = s.output.iter().map(|(_, q)| q).sum();
+        let mark = if s.unsupplied { "!" } else { " " };
+        let colour = if s.unsupplied {
+            palette::ATTENTION
+        } else {
+            palette::BODY
+        };
+        out.push(text(vec![(
+            format!(
+                "{mark}{}{}{}",
+                cell_ellipsis(&s.label, name_w),
+                cell(program, program_w),
+                out_qty
+            ),
+            colour,
+            false,
+        )]));
+    }
+    if !d.structures.iter().any(|s| s.workable) {
+        out.push(text(vec![dim("  no workable structures")]));
+    } else if rows.is_empty() {
+        out.push(text(vec![dim("  no machine is staffed")]));
     }
     out
 }
@@ -878,6 +881,7 @@ mod tests {
             battery: None,
             prison: None,
             line: None,
+            unsupplied: false,
         }
     }
 
@@ -1296,6 +1300,48 @@ mod tests {
         }
     }
 
+    /// **Only a machine with no source for an ingredient wears the `!`**, and
+    /// an unstaffed one is not listed at all — the idle count says so.
+    #[test]
+    fn the_base_list_marks_the_unsupplied_and_leaves_out_the_idle() {
+        let mut starved = structure("Factory (Blank Substrate)", false);
+        starved.unsupplied = true;
+        let structures = [
+            structure("Extractor (Idle One)", true),
+            starved,
+            structure("Extractor (Core Fragment)", false),
+        ];
+        let d = busy(&[], &structures, &[], &[], &[], &[]);
+        let lines: Vec<(String, crate::paint::Color)> = rows(InfoTab::Base, &d)
+            .into_iter()
+            .filter_map(|r| match r {
+                Row::Text { left, .. } => {
+                    let colour = left.first()?.1;
+                    Some((left.into_iter().map(|(t, _, _)| t).collect(), colour))
+                }
+                _ => None,
+            })
+            .collect();
+        let find = |name: &str| lines.iter().find(|(t, _)| t.contains(name));
+        assert!(
+            !lines
+                .iter()
+                .any(|(t, _)| t[1..].starts_with("Extractor (Idle One)")),
+            "{lines:?}"
+        );
+        let (text, colour) = find("!Factory").expect("listed");
+        assert!(
+            text.starts_with('!') && *colour == palette::ATTENTION,
+            "{text}"
+        );
+        let (text, colour) = find(" Extractor (Core").expect("listed");
+        assert!(text.starts_with(' ') && *colour == palette::BODY, "{text}");
+        assert!(
+            lines.iter().any(|(t, _)| t.contains("1 idle")),
+            "the idle count still counts it: {lines:?}"
+        );
+    }
+
     /// **The column is a fixed slice of the window and cannot widen**, and
     /// `draw_line` clips nothing horizontally — so an over-wide row is drawn
     /// off the panel in silence. This is the ceiling the buff-tag rule moved
@@ -1313,10 +1359,9 @@ mod tests {
         let body = column_body(&m);
         let room = body.w - m.inset * 2.0;
         let pets = [pet("Grubtender Prime", Some(0)), pet("Hexweave", None)];
-        let structures = [
-            structure("Research Node", true),
-            structure("Assembly Lathe", false),
-        ];
+        let mut unsupplied = structure("Research Node", false);
+        unsupplied.unsupplied = true;
+        let structures = [unsupplied, structure("Assembly Lathe", false)];
         let stock = [StockRow {
             item: feral_processes_engine::items::ItemId::from("cache_grain"),
             tag: "CG".to_string(),

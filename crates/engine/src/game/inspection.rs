@@ -1559,6 +1559,7 @@ impl Game {
 
         let line_of = crate::game::base::lines::membership(&self.production_lines());
         let rooms = crate::rooms::of_world(&self.world);
+        let unsupplied = self.unsupplied_machines();
         let mut report: Vec<StructureReport> = found
             .into_iter()
             .map(|(entity, kind, pos)| {
@@ -1628,6 +1629,7 @@ impl Game {
                     battery: self.battery_state(entity),
                     prison: self.prison_state(entity),
                     line: line_of.get(&entity).copied(),
+                    unsupplied: unsupplied.contains(&entity),
                 }
             })
             .collect();

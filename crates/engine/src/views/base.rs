@@ -106,6 +106,10 @@ pub struct StructureReport {
     /// The production line this structure belongs to, `Some` only for a line
     /// of two or more.
     pub line: Option<crate::game::base::lines::LineKey>,
+    /// An ingredient of this machine's recipe has no source in the base —
+    /// `Game::unsupplied_machines`. Staffing it fixes nothing; building a
+    /// supplier, sowing a plot or stocking a Depot does.
+    pub unsupplied: bool,
 }
 
 /// One Holding Cell as the roster draws it — `Game::prison_state`.

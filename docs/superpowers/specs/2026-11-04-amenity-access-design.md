@@ -46,7 +46,8 @@ player should act on is whether staff who go to use one **get in**.
   the amenity, either the one it waited at or the one it was routed to:
   "Staff waited for a place at the Sandbox" / "Staff can't reach the Log Analyzer Bay".
 - **Coverage row:**
-  `{name}  built {b} · places {p}/{c} · waited {w}/{v} · stranded {s}{!}  critical {n} · low {n}  lost ~{x}%`.
+  `{name:<9}  built {b} places {p}/{c} waited {w}/{v} stranded {s}{ !}  crit {n} low {n}  lost ~{x}%`
+  (need names elided to 9 characters, no separators).
   The indented cause line under a short row says what to do:
   nothing built → the existing "build a {built_by}" line; waited → "full: build another {built_by}";
   stranded → "unreachable: lay floor to it"; boxed in → the existing boxed-in line.

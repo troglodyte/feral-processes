@@ -538,6 +538,9 @@ impl Game {
             }
             match (current, verdict) {
                 (Some(need), None) => {
+                    // A visit is emitted only at content. `has(need)` fails
+                    // only when every amenity for the need is gone, and then
+                    // `built == 0` flags the need on the coverage screen anyway.
                     if finished {
                         let waited = self.world.get::<OffShift>(worker).is_some_and(|o| o.waited);
                         let outcome = if waited {

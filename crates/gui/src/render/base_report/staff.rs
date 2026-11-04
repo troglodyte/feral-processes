@@ -103,7 +103,7 @@ pub(super) fn coverage_rows(report: &[CoverageRow], selected: usize) -> Vec<Row>
         .unwrap_or(0)
         .min(NEED_NAME_CHARS);
     let mut rows = vec![Row::TextColored(
-        "Approximate: walking time is not counted.".to_string(),
+        "Approximate: lost ~% does not count walking time.".to_string(),
         TEXT_DIM,
     )];
     for (i, r) in report.iter().enumerate() {
@@ -354,6 +354,8 @@ mod tests {
     fn the_widest_coverage_row_fits_the_content_rect() {
         let worst = CoverageRow {
             name: "N".repeat(40),
+            // Three-digit built/places counts are out of scope: they overflow
+            // the row, and no base builds a hundred of one amenity.
             built: 10,
             places: 20,
             capacity: 20,

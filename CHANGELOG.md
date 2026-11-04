@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.35
+
+**On a battle map, slow programs now move three cells a turn instead of two, and the fastest move five instead of six.** A Construct, Crawler or Sentinel in your party used to take three turns to reach a fight you reach in two, so it often arrived after the fight was mostly over. Every program now reaches the enemy in two turns. The player and average-speed programs still move four. Wild programs move the same way.
+
 ## 0.21.34
 
 **The base tab's yellow `!` now marks only a machine that has nothing to supply it.** That means a machine whose recipe needs something no other machine makes, no farm plot grows and no Depot holds. A machine with no program posted is no longer listed; the idle count under PROGRAMS AVAILABLE still counts it.

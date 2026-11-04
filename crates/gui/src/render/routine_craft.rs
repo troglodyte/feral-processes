@@ -256,7 +256,11 @@ pub(super) fn name_rows(draft: &RoutineDraft) -> Vec<Row> {
         text_row(""),
         text_entry_row(&draft.name),
         text_row(""),
-        text_row(key_hints(&["Type a name", "Enter or Esc finish"])),
+        text_row(key_hints(&[
+            "Type a name",
+            "Left/Right move",
+            "Enter or Esc finish",
+        ])),
     ]
 }
 

@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.27
+
+**The program picker for building or upgrading a structure no longer lists your party members.** Before, companions showed up with an "(in party)" tag, so one misread row could spend a program you had been training. Now only programs at the base can be picked.
+
 ## 0.21.26
 
 **Idle staff now carry a downed program lying on the floor to a Quarantine Rack with room.** Before, they only emptied a Research Station's slot, so a program left on the floor stayed there next to an empty rack. A station's program still goes first, and the last free rack slot is kept for it.

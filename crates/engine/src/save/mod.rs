@@ -727,6 +727,16 @@ pub struct CreatureSave {
     /// held programs, which is what it had.
     #[serde(default)]
     pub siphon: Option<(i32, i32)>,
+    /// The Breeding Bay's tile and the reserved slot, if this program is on a
+    /// breeding visit (`components::BreedingVisit`) — a tile for
+    /// `study_station`'s reason. Resolved after `restore_structures`; a tile
+    /// naming no bay drops the marker silently, and a pending slot left with
+    /// no parents is refunded by the first `step_breeding_visits`.
+    ///
+    /// Additive behind `#[serde(default)]`, so **no `SAVE_FORMAT_VERSION`
+    /// bump**.
+    #[serde(default)]
+    pub breeding_visit: Option<((i32, i32), usize)>,
     /// The Holding Cell this program is a prisoner of, if it is
     /// `ProgramRole::Jailed` — `components::Jailed`, with the cell resolved to
     /// its tile for `study_station`'s reason: entity ids aren't stable across

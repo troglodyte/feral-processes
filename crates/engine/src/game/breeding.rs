@@ -7,19 +7,24 @@
 //! about it can change between start and hatch.
 
 use crate::Game;
-use crate::breeding::{BreedRefusal, Incubation, ParentRolls, child_species, inherit, roll_span};
+use crate::breeding::{
+    BreedRefusal, Incubation, ParentRolls, VisitPause, child_species, inherit, roll_span,
+};
 use crate::components::{
-    Attributes, BreedReadyAt, Creature, Generation, Glyph, Incubator, Position, Potential, Rarity,
+    Attributes, BreedReadyAt, BreedingVisit, Creature, Downed, Generation, Glyph, Incubator, Position, Potential, Rarity,
     Routines, Stats, StatusEffects, Structure, Tamed,
 };
+use crate::game::party::ProgramRole;
 use crate::items::ItemId;
 use crate::resources::{GameClock, GameRng, MessageKind};
 use crate::species::SpeciesDb;
-use crate::views::{BreedPreview, BreedSpeciesPreview, IncubatingChild, IncubationView, RollRange};
+use crate::views::{
+    BreedPreview, BreedSpeciesPreview, IncubatingChild, IncubationView, RollRange, VisitStage,
+};
 use bevy_ecs::prelude::{Entity, Mut};
 
 /// The pack item one breeding costs.
-const BREEDING_SEED: &str = "breeding_seed";
+pub(crate) const BREEDING_SEED: &str = "breeding_seed";
 
 impl Game {
     fn clock_tick(&self) -> u64 {
@@ -64,6 +69,25 @@ impl Game {
         };
         if def.is_boss {
             return Some(BreedRefusal::Boss);
+        }
+        match self.program_role(program) {
+            Some(
+                ProgramRole::InParty
+                | ProgramRole::Wielded
+                | ProgramRole::Sortie
+                | ProgramRole::Outpost,
+            ) => return Some(BreedRefusal::AwayFromBase),
+            Some(
+                ProgramRole::UnderStudy
+                | ProgramRole::Jailed
+                | ProgramRole::Siphoned
+                | ProgramRole::BaseAi,
+            ) => return Some(BreedRefusal::Held),
+            Some(ProgramRole::Visiting) => return Some(BreedRefusal::OnVisit),
+            Some(ProgramRole::Staff) | None => {}
+        }
+        if self.world.get::<Downed>(program).is_some() {
+            return Some(BreedRefusal::Recovering);
         }
         if self
             .world
@@ -162,15 +186,19 @@ impl Game {
             (id, rolls)
         });
 
-        let now = self.clock_tick();
         self.world
             .get_mut::<crate::components::Inventory>(player)
             .expect("checked above")
             .take(seed, 1);
         for parent in [a, b] {
+            // `pin_subject`'s unposting: a posted parent is `Staff`, so the
+            // role check above never saw its `Task`, and a stale one would
+            // stop the walk to the bay.
+            self.drop_load(parent);
             self.world
                 .entity_mut(parent)
-                .insert(BreedReadyAt(now + crate::tuning::BREEDING_COOLDOWN_TICKS));
+                .insert(BreedingVisit { bay, slot })
+                .remove::<crate::components::Task>();
         }
         self.world
             .get_mut::<Incubator>(bay)
@@ -180,10 +208,13 @@ impl Game {
             potential: rolls.potential,
             attributes: rolls.attributes,
             generation: rolls.generation,
-            due: now + crate::tuning::INCUBATION_TICKS,
+            due: 0,
+            visit: Some(VisitPause {
+                pause_left: crate::tuning::BREEDING_VISIT_PAUSE_TICKS,
+            }),
         });
         let line = format!(
-            "{} and {} are bred. A child starts to incubate.",
+            "{} and {} are bred. Both head for the Breeding Bay.",
             self.creature_label(a),
             self.creature_label(b)
         );
@@ -243,8 +274,19 @@ impl Game {
                         .get(&child.species)
                         .map_or_else(|| child.species.clone(), |d| d.name.clone()),
                     generation: child.generation,
-                    ticks_left: child.due.saturating_sub(now),
-                    held: child.due <= now && self.roster_room() == 0,
+                    ticks_left: if child.visit.is_some() {
+                        crate::tuning::INCUBATION_TICKS
+                    } else {
+                        child.due.saturating_sub(now)
+                    },
+                    held: child.visit.is_none() && child.due <= now && self.roster_room() == 0,
+                    visit: child.visit.map(|pause| {
+                        if pause.pause_left < crate::tuning::BREEDING_VISIT_PAUSE_TICKS {
+                            VisitStage::AtTheBay
+                        } else {
+                            VisitStage::OnTheWay
+                        }
+                    }),
                 }),
             })
             .collect()
@@ -298,7 +340,10 @@ impl Game {
                         .slots
                         .iter()
                         .enumerate()
-                        .filter(move |(_, slot)| slot.as_ref().is_some_and(|c| c.due <= now))
+                        .filter(move |(_, slot)| {
+                            slot.as_ref()
+                                .is_some_and(|c| c.visit.is_none() && c.due <= now)
+                        })
                         .map(move |(i, _)| (at.x, at.y, bay, i))
                 })
                 .collect()

@@ -313,6 +313,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
         ProgramRole::Jailed => "Held in a Holding Cell",
         ProgramRole::Siphoned => "Held in Power Siphon",
         ProgramRole::BaseAi => "Base AI",
+        ProgramRole::Visiting => "At the bay",
         ProgramRole::Staff => "Base staff",
     }
 }
@@ -1557,6 +1558,7 @@ mod tests {
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            breeding_visit: None,
             outpost: None,
             siphon: None,
             jailed: None,

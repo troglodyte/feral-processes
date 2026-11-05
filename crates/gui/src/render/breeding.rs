@@ -256,7 +256,7 @@ mod tests {
         assert_fits(&rows, PopupSize::Large);
     }
 
-    const ALL_REFUSALS: [BreedRefusal; 8] = [
+    const ALL_REFUSALS: [BreedRefusal; 12] = [
         BreedRefusal::Busy,
         BreedRefusal::SameProgram,
         BreedRefusal::NotYours,
@@ -265,6 +265,10 @@ mod tests {
         BreedRefusal::NoSeed,
         BreedRefusal::UnknownKind,
         BreedRefusal::Boss,
+        BreedRefusal::AwayFromBase,
+        BreedRefusal::Held,
+        BreedRefusal::OnVisit,
+        BreedRefusal::Recovering,
     ];
 
     #[test]
@@ -296,6 +300,7 @@ mod tests {
                 generation: 12,
                 ticks_left: 0,
                 held: true,
+                visit: None,
             }),
         };
         let mut lines = incubation_lines(&[held.clone(), IncubationView { child: None }]);
@@ -311,6 +316,7 @@ mod tests {
                 generation: 1,
                 ticks_left: 5,
                 held: false,
+                visit: None,
             }),
         };
         assert_eq!(bay_footer(std::slice::from_ref(&full)), "Any key back");
@@ -326,6 +332,7 @@ mod tests {
                     generation: 2,
                     ticks_left: 7,
                     held: false,
+                    visit: None,
                 }),
             },
             IncubationView { child: None },

@@ -99,6 +99,7 @@ fn game_with_a_pinned_subject(
             nest_position: None,
             patrol_position: None,
             study_station: None,
+            breeding_visit: None,
             outpost: None,
             siphon: None,
             jailed: None,

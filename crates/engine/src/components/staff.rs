@@ -134,8 +134,14 @@ impl Incubator {
         }
     }
 
+    /// Whether demolishing would lose a child. A slot still waiting on its
+    /// parents' visit holds no child yet, and demolition cancels it with a
+    /// refund instead.
     pub fn is_occupied(&self) -> bool {
-        self.slots.iter().any(Option::is_some)
+        self.slots
+            .iter()
+            .flatten()
+            .any(|child| child.visit.is_none())
     }
 }
 
@@ -323,6 +329,24 @@ pub struct Jailed {
     pub attempts: u32,
     pub progress: u32,
     pub record: Option<crate::items::DownedProgram>,
+}
+
+/// A tamed program on its way to, or paused at, a Breeding Bay —
+/// `Game::breed`'s one door, removed by `step_breeding_visits` on completion
+/// and by `cancel_breeding_visit`.
+///
+/// **Shaped like `UnderStudy`**: arrival is derived from the body's position
+/// beside the bay, never stored, and `Game::program_role` reads this marker
+/// as `ProgramRole::Visiting`. A body pulled into the party, a sortie or an
+/// outpost reads as that role instead while still carrying this marker, and
+/// that mismatch is how the visit learns to cancel.
+///
+/// `bay` is the structure `Entity`; `slot` the reserved `Incubator` slot.
+/// Saved as the bay's tile and the slot, `UnderStudy`'s reason.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BreedingVisit {
+    pub bay: Entity,
+    pub slot: usize,
 }
 
 /// A tamed program held in a Power Siphon — the grid's supply from that

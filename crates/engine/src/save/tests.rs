@@ -305,6 +305,7 @@ fn sample_creature() -> CreatureSave {
         nest_position: None,
         patrol_position: None,
         study_station: None,
+        breeding_visit: None,
         outpost: None,
         siphon: None,
         jailed: None,

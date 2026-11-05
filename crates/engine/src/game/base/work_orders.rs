@@ -1111,6 +1111,9 @@ impl Game {
         // can be handed a *job*, which a subject never can.
         let mut walkers = staff.clone();
         walkers.extend(self.under_study_bodies());
+        // A parent on a breeding visit is not `Staff` either, for the same
+        // reason, and has the same walk to make.
+        walkers.extend(self.visiting_bodies());
         // A subject pinned at a base with no other staff still has to walk
         // to its pen — the case the wider `walkers` list exists for, and the
         // reason an empty `staff` does not skip the drift too.
@@ -2747,6 +2750,17 @@ impl Game {
             // else may free a subject but `Game::unpin_subject`.
             if !sharing && on_floor && self.world.get::<components::UnderStudy>(worker).is_some() {
                 let _ = self.step_to_study(worker);
+                if let Some(p) = self.world.get::<Position>(worker) {
+                    beat.held.insert((p.x, p.y));
+                }
+                continue;
+            }
+            // Beside the subject's arm and for its reason: `Err` is dropped, a
+            // parent that cannot route holds where it stands, and the visit
+            // simply does not start its pause.
+            if !sharing && on_floor && self.world.get::<components::BreedingVisit>(worker).is_some()
+            {
+                let _ = self.step_to_bay(worker);
                 if let Some(p) = self.world.get::<Position>(worker) {
                     beat.held.insert((p.x, p.y));
                 }

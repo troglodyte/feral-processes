@@ -39,6 +39,9 @@ pub const BREEDING_COOLDOWN_TICKS: u64 = SORTIE_BOARD_ROTATION_TICKS;
 /// How long a child incubates, for the same reason.
 pub const INCUBATION_TICKS: u64 = SORTIE_BOARD_ROTATION_TICKS;
 
+/// How long both parents stay at the bay once they have arrived (30 seconds).
+pub const BREEDING_VISIT_PAUSE_TICKS: u64 = 60;
+
 /// Offers on a board.
 pub const SORTIE_BOARD_SLOTS: usize = 3;
 

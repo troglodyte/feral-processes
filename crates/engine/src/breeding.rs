@@ -37,6 +37,17 @@ pub struct Incubation {
     pub attributes: BTreeMap<AttributeId, i32>,
     pub generation: u32,
     pub due: u64,
+    /// `Some` while the parents are still on their visit to the bay: the slot
+    /// is reserved, `due` means nothing yet, and `hatch_incubations` skips it.
+    /// Completing the visit sets `due` and clears this.
+    #[serde(default)]
+    pub visit: Option<VisitPause>,
+}
+
+/// The pause both parents spend together at the bay once they have arrived.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct VisitPause {
+    pub pause_left: u64,
 }
 
 /// Why a breeding is refused. Every variant is checked before anything is
@@ -51,6 +62,14 @@ pub enum BreedRefusal {
     NoSeed,
     UnknownKind,
     Boss,
+    /// In the party, wielded, on a sortie or posted at an outpost.
+    AwayFromBase,
+    /// Pinned for study, jailed, held in a siphon or hosting the base AI.
+    Held,
+    /// Already walking to, or paused at, a bay.
+    OnVisit,
+    /// Benched for repairs.
+    Recovering,
 }
 
 impl BreedRefusal {
@@ -65,6 +84,10 @@ impl BreedRefusal {
             BreedRefusal::NoSeed => "no breeding seed",
             BreedRefusal::UnknownKind => "unknown kind",
             BreedRefusal::Boss => "can't breed",
+            BreedRefusal::AwayFromBase => "away from base",
+            BreedRefusal::Held => "held",
+            BreedRefusal::OnVisit => "with the bay",
+            BreedRefusal::Recovering => "recovering",
         }
     }
 }

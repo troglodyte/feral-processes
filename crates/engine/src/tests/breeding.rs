@@ -251,6 +251,8 @@ fn seed() -> ItemId {
 fn bay_game(a: &str, b: &str, seeds: u32) -> (Game, Entity, Entity, Entity) {
     let mut game = Game::new(5150, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
+    // The walk is `drift_idle_staff`'s, which a base with no Home never runs.
+    spawn_machine_at(&mut game, crate::HOME_STRUCTURE_ID, -6, 2);
     let bay = spawn_machine_at(&mut game, "breeding_bay", 3, 3);
     let pa = game.adopt_program(a, 0, 0, 1.0).unwrap();
     let pb = game.adopt_program(b, 0, 0, 1.0).unwrap();
@@ -329,10 +331,15 @@ fn a_built_bay_carries_one_empty_slot() {
 #[test]
 fn breeding_spends_a_seed_rests_both_parents_and_fills_the_slot() {
     let (mut game, a, b, bay) = bay_game("worm", "virus", 2);
-    let started = now(&game);
     game.breed(a, b, bay).unwrap();
-
     assert_eq!(seeds_in_pack(&game), 1);
+    finish_visit(&mut game, bay);
+    // The visit ends mid-tick, so the child's clock starts where `due` says.
+    let started = game.world.get::<Incubator>(bay).unwrap().slots[0]
+        .as_ref()
+        .unwrap()
+        .due
+        - INCUBATION_TICKS;
     for parent in [a, b] {
         assert_eq!(
             game.world.get::<BreedReadyAt>(parent).unwrap().0,
@@ -432,6 +439,7 @@ fn a_parent_on_cooldown_is_refused_until_it_has_rested() {
     let (mut game, a, b, bay) = bay_game("worm", "worm", 3);
     let c = game.adopt_program("worm", 0, 0, 1.0).unwrap();
     game.breed(a, b, bay).unwrap();
+    finish_visit(&mut game, bay);
     // Free the slot by hand so only the cooldown is in the way.
     game.world.get_mut::<Incubator>(bay).unwrap().slots[0] = None;
 
@@ -515,7 +523,23 @@ use crate::components::{ProgramBase, ProgramId, Routines};
 fn incubating_game() -> (Game, Entity, Entity, Entity) {
     let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
     game.breed(a, b, bay).unwrap();
+    finish_visit(&mut game, bay);
     (game, a, b, bay)
+}
+
+/// Ticks the game until the parents have walked to the bay and finished
+/// their pause — the child exists only after that.
+fn finish_visit(game: &mut Game, bay: Entity) {
+    for _ in 0..600 {
+        if game.world.get::<Incubator>(bay).unwrap().slots[0]
+            .as_ref()
+            .is_none_or(|c| c.visit.is_none())
+        {
+            return;
+        }
+        game.tick();
+    }
+    panic!("the visit never finished");
 }
 
 fn make_due(game: &mut Game) {
@@ -534,7 +558,11 @@ fn fill_the_roster(game: &mut Game) {
 fn a_child_stays_in_the_bay_until_it_is_due() {
     let (mut game, _, _, bay) = incubating_game();
     let before = game.pet_count();
-    game.world.resource_mut::<GameClock>().tick += INCUBATION_TICKS - 1;
+    let due = game.world.get::<Incubator>(bay).unwrap().slots[0]
+        .as_ref()
+        .unwrap()
+        .due;
+    game.world.resource_mut::<GameClock>().tick = due - 1;
     game.hatch_incubations();
     assert_eq!(game.pet_count(), before);
     assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_some());

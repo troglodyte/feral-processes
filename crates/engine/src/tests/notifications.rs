@@ -295,7 +295,9 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::BaseAiAwakening => "Game::announce_awakening",
             NotificationKind::BaseAiFused => "Game::announce_fusion",
             NotificationKind::BaseAiLevelUp => "Game::base_ai_level_up",
-            NotificationKind::BaseStaffDowned => "Game::notify_base_staff_downed, from run_raid and the siege-board reap",
+            NotificationKind::BaseStaffDowned => {
+                "Game::notify_base_staff_downed, from run_raid and the siege-board reap"
+            }
             NotificationKind::OutpostTierReached => "Game::tick_one_outpost, a rise in tier",
             NotificationKind::OutpostStale => "Game::announce_outpost_trend",
             NotificationKind::OutpostDeclining => "Game::announce_outpost_trend",

@@ -1156,9 +1156,7 @@ mod rereview_findings {
     #[test]
     fn a_staff_body_lost_on_the_board_under_permadeath_has_no_notice() {
         let (mut game, _) = staff_dies_on_the_board(DifficultyMode::Permadeath);
-        assert!(
-            !std::iter::from_fn(|| game.take_notification()).any(|n| n.title == "Staff Down")
-        );
+        assert!(!std::iter::from_fn(|| game.take_notification()).any(|n| n.title == "Staff Down"));
     }
 
     #[test]

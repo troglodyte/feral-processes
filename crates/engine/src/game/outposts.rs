@@ -295,7 +295,7 @@ impl Game {
         let outpost = self.world.resource::<Outposts>().0[&tile].clone();
         let reason = trend.reason(&outpost, crew, tier);
         let subject = format!("outpost@{},{}", tile.0, tile.1);
-        let text = format!("Outpost at ({}, {}): {reason}", tile.0, tile.1);
+        let text = crate::outposts::trend_notice_text(tile, &reason);
         self.notify_with(
             notice,
             NotifyArgs {

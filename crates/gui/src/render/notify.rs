@@ -862,8 +862,20 @@ mod tests {
             for dock in [Dock::Left, Dock::Right] {
                 let panel = docked_panel_rect(1280.0, 720.0, dock);
                 let columns = body_columns(p, panel, m.font_size);
+                // `{text}` notices carry the longest line their site can
+                // build, wide coordinates and a long program name included.
+                let widest = feral_processes_engine::outposts::widest_notice_texts(
+                    "Maximally Long Program Name",
+                );
                 for (kind, def) in shipped() {
-                    let (lines, _) = wrapped(def.body, None, columns);
+                    let filled = widest
+                        .iter()
+                        .find(|(k, _)| k.to_string() == kind)
+                        .map_or_else(
+                            || def.body.to_string(),
+                            |(_, t)| def.body.replace("{text}", t),
+                        );
+                    let (lines, _) = wrapped(&filled, None, columns);
                     let block = block_height(
                         p,
                         &m,
@@ -927,7 +939,10 @@ mod tests {
         let l_mid = (lp.x + lp.w + pane.x + pane.w) / 2.0;
         assert!((rx - r_mid).abs() <= tile, "right dock: {rx} vs {r_mid}");
         assert!((lx - l_mid).abs() <= tile, "left dock: {lx} vs {l_mid}");
-        assert!(lx < pane.x + pane.w, "left-docked subject under the HUD: {lx}");
+        assert!(
+            lx < pane.x + pane.w,
+            "left-docked subject under the HUD: {lx}"
+        );
     }
 
     #[test]

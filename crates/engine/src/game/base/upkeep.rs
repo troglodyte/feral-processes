@@ -640,13 +640,8 @@ impl Game {
         };
         // The first by `ProgramId` — `outpost_crew`'s own sort, deterministic
         // and spending no extra `GameRng` draw.
-        let line = match crew.first() {
-            Some(&member) => {
-                let name = self.bench_or_dissolve(member);
-                format!("Raiders hit the outpost, downing {name}.")
-            }
-            None => "Raiders hit the outpost.".to_string(),
-        };
+        let downed = crew.first().map(|&member| self.bench_or_dissolve(member));
+        let line = crate::outposts::raid_line(downed.as_deref());
         self.log_base_kind(MessageKind::Raid, line.clone());
         self.notify_with(
             NotificationKind::OutpostRaided,
@@ -663,7 +658,7 @@ impl Game {
             for member in self.outpost_crew(tile) {
                 let _ = self.recall_from_outpost(member);
             }
-            let text = "The outpost has gone dark and needs repair.".to_string();
+            let text = crate::outposts::DARK_LINE.to_string();
             self.log_base_kind(MessageKind::Raid, text.clone());
             self.notify_with(
                 NotificationKind::OutpostDark,

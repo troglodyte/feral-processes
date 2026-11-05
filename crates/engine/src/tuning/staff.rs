@@ -473,12 +473,13 @@ const _: () = assert!(TANTRUM_FLEE_LINGER_TICKS > TANTRUM_TICKS_MAX as u64);
 ///
 /// The page has no scroll, so this is a layout constraint rather than a
 /// preference: a modded item set must degrade to the most-produced rows
-/// rather than overflowing the screen. Five is what two sections of it, the
-/// four rows `Game::attention` can hold at once and the page's own chrome
-/// leave room for in a `PopupSize::Large` at the smallest window the
-/// renderer sweeps — `the_tallest_base_output_page_fits_its_popup` is the
-/// gate, and raising this means giving the page a scroll first.
-pub const BASE_OUTPUT_MAX_ROWS: usize = 5;
+/// rather than overflowing the screen. Three is what two sections of it —
+/// each item two lines, its figures and what used it — the four rows
+/// `Game::attention` can hold at once and the page's own chrome leave room
+/// for at the smallest window the renderer sweeps;
+/// `the_tallest_base_output_page_fits_its_content_rect` is the gate, and
+/// raising this means giving the page a scroll first.
+pub const BASE_OUTPUT_MAX_ROWS: usize = 3;
 
 /// How many buckets a row's sparkline draws. Cells are cheap on this page;
 /// rows are what is scarce, so the spark rides the row it belongs to.

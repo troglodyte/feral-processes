@@ -628,6 +628,90 @@ fn no_warden_means_no_progress() {
     assert_eq!((j.attempts, j.progress), (0, 0));
 }
 
+/// A lit cell and one idle body on the roster, nobody posted by hand.
+fn a_lit_cell_with_a_spare_body(prisoner: bool) -> (Game, Entity, Entity) {
+    let (mut game, cell) = base_with_a_cell();
+    if prisoner {
+        game.jail_program(0).unwrap();
+    }
+    stand_ample_grid_supply(&mut game);
+    let body = spawn_tamed(&mut game, 10, 3);
+    (game, cell, body)
+}
+
+fn post_of(game: &Game, body: Entity) -> Option<(Entity, TaskKind)> {
+    game.world.get::<Task>(body).map(|t| (t.target, t.kind))
+}
+
+#[test]
+fn an_occupied_cell_is_warded_with_no_standing_job() {
+    let (mut game, cell, body) = a_lit_cell_with_a_spare_body(true);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), Some((cell, TaskKind::GatherResource)));
+}
+
+#[test]
+fn an_empty_cell_is_not_warded() {
+    let (mut game, _cell, body) = a_lit_cell_with_a_spare_body(false);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
+/// The whole loop with nobody posted by hand: the scheduler wards the cell
+/// and the warden's clock reaches a decompile attempt.
+#[test]
+fn a_prisoner_gets_an_attempt_with_nobody_posted_by_hand() {
+    let (mut game, cell, _body) = a_lit_cell_with_a_spare_body(true);
+    let prisoner = the_prisoner(&game, cell);
+
+    for _ in 0..(ATTEMPT_TICKS * 3) {
+        game.tick();
+        if game.cell_prisoner(cell) != Some(prisoner) {
+            return; // decompiled on an attempt
+        }
+    }
+
+    assert!(
+        jailed(&game, prisoner).attempts > 0,
+        "no attempt in {} beats",
+        ATTEMPT_TICKS * 3
+    );
+}
+
+#[test]
+fn a_dark_cell_is_not_warded() {
+    let (mut game, _cell) = base_with_a_cell();
+    game.jail_program(0).unwrap();
+    let body = spawn_tamed(&mut game, 10, 3);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
+#[test]
+fn a_spent_prisoner_with_no_output_room_frees_its_warden() {
+    let (mut game, cell, body) = a_lit_cell_with_a_spare_body(true);
+    let prisoner = the_prisoner(&game, cell);
+    game.world.get_mut::<Jailed>(prisoner).unwrap().attempts = JAIL_MAX_ATTEMPTS;
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+    }
+
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, body), None, "no room: nothing to ward");
+
+    game.world.get_mut::<Stock>(cell).unwrap().output.clear();
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, body), Some((cell, TaskKind::GatherResource)));
+}
+
 #[test]
 fn a_warden_advances_progress_one_per_beat() {
     let (mut game, _cell, body) = a_warded_cell(7301);

@@ -277,7 +277,7 @@ impl Game {
     /// Every standing Holding Cell, in tile order — `teardown_rigs`' reason:
     /// bevy's iteration order is not stable and two cells finishing in a
     /// different order between runs would reorder their log lines.
-    fn holding_cells(&self) -> Vec<Entity> {
+    pub(crate) fn holding_cells(&self) -> Vec<Entity> {
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
             .iter_entities()
@@ -538,6 +538,35 @@ impl Game {
         Some(rebuilt)
     }
 
+    /// Whether `cell` has room for the worst payout `prisoner` could break
+    /// down into. Reads `Jailed::record` as stored rather than through
+    /// `prisoner_record`, which rebuilds a missing one and rolls a condition:
+    /// the scheduler asks this every pass and must draw nothing. A prisoner
+    /// with no record (a pre-`record` save) pays nothing worth room, so fits.
+    fn breakdown_fits(&self, cell: Entity, prisoner: Entity) -> bool {
+        let Some(program) = self
+            .world
+            .get::<components::Jailed>(prisoner)
+            .and_then(|j| j.record.as_ref())
+        else {
+            return true;
+        };
+        let worst = self.breakdown_worst_case(program);
+        self.world
+            .get::<Stock>(cell)
+            .is_some_and(|s| s.fits_payout(worst))
+    }
+
+    /// Whether `cell` should hold a warden: a prisoner with an attempt left,
+    /// or a spent one whose breakdown the output has room to pay. The
+    /// scheduler's `can_progress` for a cell, so a clogged cell lets its body
+    /// go.
+    pub(crate) fn cell_wants_a_warden(&self, cell: Entity) -> bool {
+        self.cell_prisoner(cell).is_some_and(|prisoner| {
+            !self.prisoner_is_spent(prisoner) || self.breakdown_fits(cell, prisoner)
+        })
+    }
+
     /// The prisoner's last failed attempt: the body despawns and a reduced
     /// extraction-style yield lands in the cell's `Stock::output`.
     ///
@@ -547,17 +576,10 @@ impl Game {
     /// prisoner stays. Two `GameRng` draws when it goes ahead: the tool,
     /// then the band.
     fn break_down_prisoner(&mut self, cell: Entity, prisoner: Entity) -> bool {
-        let program = self.prisoner_record(prisoner);
-        if let Some(program) = program.as_ref() {
-            let worst = self.breakdown_worst_case(program);
-            if !self
-                .world
-                .get::<Stock>(cell)
-                .is_some_and(|s| s.fits_payout(worst))
-            {
-                return false;
-            }
+        if !self.breakdown_fits(cell, prisoner) {
+            return false;
         }
+        let program = self.prisoner_record(prisoner);
         let label = self.creature_label(prisoner);
         let granted = match (program.as_ref(), self.breakdown_tool()) {
             (Some(program), Some(tool)) => {

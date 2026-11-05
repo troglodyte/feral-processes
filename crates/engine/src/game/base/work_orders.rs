@@ -1212,6 +1212,18 @@ impl Game {
                 wanted.push((rig, TaskKind::GatherResource));
             }
         }
+        // **A Holding Cell staffs itself too**, at the rig's priority and for
+        // its reason: the prisoner is the instruction. No standing job can be
+        // set on a cell, so without this want nobody was ever posted and no
+        // decompile attempt ever ran. `cell_wants_a_warden` is the cell's
+        // `can_progress`: it lets the body go when a spent prisoner's
+        // breakdown has no room in the output. The `dark` filter below drops
+        // an unpowered cell.
+        for cell in self.holding_cells() {
+            if !wanted.iter().any(|&(e, _)| e == cell) && self.cell_wants_a_warden(cell) {
+                wanted.push((cell, TaskKind::GatherResource));
+            }
+        }
         // Dig jobs, appended after the standing jobs and therefore last of
         // all — **the priority is the position in this list**, since the
         // matching below fills wants in list order. A spare body

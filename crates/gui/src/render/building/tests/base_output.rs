@@ -26,8 +26,8 @@ fn tallest_base_output_page() -> Vec<Row> {
             "burnt as fuel",
             "sabotaged",
             "installed",
-            "crew jobs",
-            "repairs",
+            "base use",
+            "mending",
         ]
         .iter()
         .map(|l| (l.to_string(), 999_999))
@@ -271,4 +271,16 @@ fn a_long_breakdown_is_cut_rather_than_wrapped() {
     let line = base_output_used_line(&row_named("X", 1, &refs)).expect("used");
     assert!(line.ends_with('…'), "{line}");
     assert_eq!(line.chars().count(), OUTPUT_LINE_CHARS);
+}
+
+/// A save written before the tally existed has `used` but no breakdown;
+/// the figure still draws, the line does not, rather than a bare arrow.
+#[test]
+fn spending_older_than_the_tally_draws_no_bare_arrow() {
+    assert_eq!(base_output_used_line(&row_named("X", 5, &[])), None);
+    assert!(base_output_used_line(&row_named("X", 5, &[("built", 5)])).is_some());
+    assert_eq!(
+        base_output_used_line(&row_named("X", 0, &[("built", 5)])),
+        None
+    );
 }

@@ -313,14 +313,14 @@ impl ConsumeSource {
         match self {
             ConsumeSource::Fuel => "burnt as fuel",
             ConsumeSource::Build => "built",
-            ConsumeSource::Base => "crew jobs",
+            ConsumeSource::Base => "base use",
             ConsumeSource::Craft => "crafted",
             ConsumeSource::Refit => "refit",
             ConsumeSource::Install => "installed",
             ConsumeSource::Breach => "lost in breach",
             ConsumeSource::Sabotage => "sabotaged",
             ConsumeSource::Defence => "defence",
-            ConsumeSource::Heal => "repairs",
+            ConsumeSource::Heal => "mending",
         }
     }
 }

@@ -347,7 +347,7 @@ pub(super) fn assignee_vitals(a: &Assignee) -> String {
 }
 
 /// How wide the item column is. A name longer than this is cut rather than
-/// allowed to push the four figures out of their columns: the page is read
+/// allowed to push the five figures out of their columns: the page is read
 /// down a column, and one modded name would otherwise skew every row under
 /// it.
 pub(super) const OUTPUT_NAME_COLUMN: usize = 22;
@@ -378,7 +378,7 @@ pub(crate) fn base_output_rows(report: &BaseOutputReport) -> Vec<Row> {
             ),
             TEXT_DIM,
         ));
-        // Both sections carry the same four figures rather than the sector/run
+        // Both sections carry the same five figures rather than the sector/run
         // pair the design sketch gave MINED alone. An item sits in one
         // section on *dominant* provenance, so a Power Cell a machine makes
         // more of than the player does lands under MINED — and dropping the
@@ -420,7 +420,7 @@ pub(crate) fn base_output_rows(report: &BaseOutputReport) -> Vec<Row> {
     rows
 }
 
-/// One item's line: the name, the four figures, and the shape of the last
+/// One item's line: the name, the five figures, and the shape of the last
 /// few windows.
 pub(super) fn base_output_line(row: &BaseOutputRow) -> String {
     let name = if row.name.chars().count() > OUTPUT_NAME_COLUMN {

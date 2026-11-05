@@ -72,6 +72,8 @@
   work, which is the whole of B2. It follows recorded provenance instead, one
   row per item on the dominant one, with the machine/hand columns carrying
   the breakdown. The page has no scroll, so `BASE_OUTPUT_MAX_ROWS` is bounded
-  by `the_tallest_base_output_page_fits_its_popup`: 21 rows at 600px less ten
-  of chrome. Both sections carry all four figures — dropping the hand column
+  by `the_tallest_base_output_page_fits_its_content_rect`: 22 rows at 600px
+  less ten of chrome, and every item costs two lines — its figures and the
+  one-line "what used it" breakdown, cut with `…` and never wrapped — so the
+  cap is 3. Both sections carry all five figures — dropping the hand column
   under MINED hides exactly the units the instrument exists to count.

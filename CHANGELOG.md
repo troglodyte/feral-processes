@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.21.48
 
 **A notice about one thing on the map now points at it instead of covering it.** When a program starts going wrong, fuses with the Research Station, joins you from a Holding Cell, or is knocked out at the base, and when "Your Base" is explained, the notice docks to one side, the camera brings the subject into the clear half, and pulsing brackets with a line mark it. If the subject is off the map you are viewing, the notice is centred as before. For a program, [W] Watch closes the notice and follows it; Esc stops following.
 

@@ -12,6 +12,8 @@ use crate::components::{
     ProgramId, Tamed, Task,
 };
 use crate::game::base::transfer::{Moved, TransferBasket};
+use crate::game::notify::NotifyArgs;
+use crate::notifications::{NotificationKind, NotificationSubject};
 use crate::outposts::{Outpost, OutpostDb};
 use crate::perks::Perk;
 use crate::resources::{GameRng, Outposts};
@@ -279,16 +281,62 @@ impl Game {
             let mut outposts = self.world.resource_mut::<Outposts>();
             outposts.0.get_mut(&tile).unwrap().announced = Some(trend);
         }
-        let kind = match trend {
-            crate::outposts::Trend::Stale => crate::alerts::AlertKind::OutpostStale,
-            crate::outposts::Trend::Declining => crate::alerts::AlertKind::OutpostDeclining,
+        let (kind, notice) = match trend {
+            crate::outposts::Trend::Stale => (
+                crate::alerts::AlertKind::OutpostStale,
+                NotificationKind::OutpostStale,
+            ),
+            crate::outposts::Trend::Declining => (
+                crate::alerts::AlertKind::OutpostDeclining,
+                NotificationKind::OutpostDeclining,
+            ),
             crate::outposts::Trend::Growing | crate::outposts::Trend::Stable => return,
         };
         let outpost = self.world.resource::<Outposts>().0[&tile].clone();
         let reason = trend.reason(&outpost, crew, tier);
         let subject = format!("outpost@{},{}", tile.0, tile.1);
         let text = format!("Outpost at ({}, {}): {reason}", tile.0, tile.1);
+        self.notify_with(
+            notice,
+            NotifyArgs {
+                fills: &[("text", &text)],
+                subject: Some(NotificationSubject::Tile(tile)),
+                ..Default::default()
+            },
+        );
         self.post_alert(kind, subject, text);
+    }
+
+    /// Fires `OutpostTierReached` on a rise above `Outpost::announced_tier`,
+    /// a high-water mark: crew leaving drops `tier` without touching growth,
+    /// and getting them back must not announce a tier the player has seen.
+    /// The first sight of an outpost seeds the latch without firing, so
+    /// founding is silent.
+    fn announce_outpost_tier(&mut self, tile: (i32, i32), tier: usize) {
+        let tier = tier as u32;
+        let latched = {
+            let mut outposts = self.world.resource_mut::<Outposts>();
+            let outpost = outposts.0.get_mut(&tile).unwrap();
+            let before = outpost.announced_tier;
+            outpost.announced_tier = Some(before.map_or(tier, |was| was.max(tier)));
+            before
+        };
+        if latched.is_none_or(|was| tier <= was) {
+            return;
+        }
+        let (x, y) = (tile.0.to_string(), tile.1.to_string());
+        self.notify_with(
+            NotificationKind::OutpostTierReached,
+            NotifyArgs {
+                fills: &[
+                    ("x", &x),
+                    ("y", &y),
+                    ("label", crate::outposts::tier_label(tier as usize)),
+                ],
+                subject: Some(NotificationSubject::Tile(tile)),
+                ..Default::default()
+            },
+        );
     }
 
     /// Re-seeds `Outpost::announced` to the trend it derives to right now —
@@ -312,6 +360,7 @@ impl Game {
             let tier = crate::outposts::tier(outpost, crew);
             let trend = crate::outposts::trend(outpost, crew, tier, OUTPOST_STOCK_CAP);
             outpost.announced = Some(trend);
+            outpost.announced_tier = Some(tier as u32);
         }
     }
 
@@ -392,6 +441,11 @@ impl Game {
             (tier, trend)
         };
         self.announce_outpost_trend(tile, trend_now, crew_count, tier_now);
+        let tier_after_growth = {
+            let outpost = &self.world.resource::<Outposts>().0[&tile];
+            crate::outposts::tier(outpost, crew_count)
+        };
+        self.announce_outpost_tier(tile, tier_after_growth);
 
         // Step 2: advance toward the next cycle. Nothing below runs — no
         // crew roll, no `GameRng` draw — until the cycle actually elapses,
@@ -1763,5 +1817,104 @@ mod tests {
             )),
             "a hand take must report through Game::grant_loot with LootSource::Outpost: {records:?}"
         );
+    }
+
+    fn tier_notices(game: &mut Game) -> Vec<crate::notifications::Notification> {
+        std::iter::from_fn(|| game.take_notification())
+            .filter(|n| n.title == "Outpost Grown")
+            .collect()
+    }
+
+    fn crew_of_three(game: &mut Game) -> Vec<Entity> {
+        (0..3).map(|_| game.world.spawn_empty().id()).collect()
+    }
+
+    fn set_growth(game: &mut Game, tile: (i32, i32), growth: u32) {
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .growth = growth;
+    }
+
+    #[test]
+    fn a_tier_rise_fires_once_and_founding_does_not() {
+        let mut game = game(60);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        let crew = crew_of_three(&mut game);
+        while game.take_notification().is_some() {}
+
+        game.tick_one_outpost(tile, &crew);
+        assert!(
+            tier_notices(&mut game).is_empty(),
+            "founding seeds the latch"
+        );
+
+        set_growth(&mut game, tile, crate::tuning::OUTPOST_TIER_GROWTH[1] - 1);
+        game.tick_one_outpost(tile, &crew);
+        let notes = tier_notices(&mut game);
+        assert_eq!(notes.len(), 1);
+        assert_eq!(
+            notes[0].subject,
+            Some(crate::notifications::NotificationSubject::Tile(tile))
+        );
+        assert!(notes[0].body.contains("Processed"), "{}", notes[0].body);
+
+        game.tick_one_outpost(tile, &crew);
+        assert!(tier_notices(&mut game).is_empty(), "once per rise");
+    }
+
+    #[test]
+    fn a_drop_in_tier_does_not_fire_nor_does_getting_it_back() {
+        let mut game = game(61);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        let crew = crew_of_three(&mut game);
+        set_growth(&mut game, tile, crate::tuning::OUTPOST_TIER_GROWTH[1]);
+        game.tick_one_outpost(tile, &crew);
+        while game.take_notification().is_some() {}
+
+        game.tick_one_outpost(tile, &crew[..1]);
+        game.tick_one_outpost(tile, &crew);
+        assert!(tier_notices(&mut game).is_empty());
+    }
+
+    #[test]
+    fn a_reload_does_not_re_announce_a_tier_already_reached() {
+        let mut game = game(62);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        set_growth(&mut game, tile, crate::tuning::OUTPOST_TIER_GROWTH[1] + 10);
+        for _ in 0..3 {
+            let member = staff(&mut game);
+            game.post_to_outpost(tile, member).unwrap();
+        }
+        // The latch is unsaved, so a load starts from `None`.
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .announced_tier = None;
+        game.reseed_outpost_announcements();
+        while game.take_notification().is_some() {}
+
+        let crew = game.outpost_crew(tile);
+        game.tick_one_outpost(tile, &crew);
+        assert!(tier_notices(&mut game).is_empty());
+    }
+
+    #[test]
+    fn a_stale_outpost_fires_a_focused_notice_beside_its_alert() {
+        let mut game = game(63);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        while game.take_notification().is_some() {}
+        game.announce_outpost_trend(tile, crate::outposts::Trend::Stale, 1, 0);
+        let note = game.take_notification().expect("a focused notice");
+        assert_eq!(note.title, "Outpost Full");
+        assert_eq!(
+            note.subject,
+            Some(crate::notifications::NotificationSubject::Tile(tile))
+        );
+        assert!(note.body.contains(&format!("({}, {})", tile.0, tile.1)));
     }
 }

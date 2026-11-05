@@ -148,6 +148,10 @@ pub struct Outpost {
     /// since trend reads crew count), which is what keeps a reload from
     /// posting again.
     pub announced: Option<Trend>,
+    /// The highest tier a notice has been fired for, `announced`'s rule: not
+    /// saved, re-seeded on load, and `None` until the first tick or reseed so
+    /// founding never fires one.
+    pub announced_tier: Option<u32>,
 }
 
 impl Outpost {
@@ -161,6 +165,7 @@ impl Outpost {
             stale_ticks: 0,
             cycle_progress: 0,
             announced: None,
+            announced_tier: None,
         }
     }
 }

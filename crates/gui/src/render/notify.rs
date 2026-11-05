@@ -279,6 +279,8 @@ mod tests {
             category: None,
             detail: None,
             ftue_key: None,
+            subject: None,
+            silence_key: None,
         };
         assert!(!hint_for(&note).contains("[D]"));
         note.ftue_key = Some("event:first_raid".into());
@@ -575,6 +577,8 @@ mod tests {
             category: None,
             detail: None,
             ftue_key: None,
+            subject: None,
+            silence_key: None,
         }
     }
 

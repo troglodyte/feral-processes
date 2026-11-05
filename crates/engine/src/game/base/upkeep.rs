@@ -5,6 +5,8 @@ use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
 use crate::game::base::breeding_visit::CancelReason;
 use crate::game::base::defences::patch_mend;
+use crate::game::notify::NotifyArgs;
+use crate::notifications::{NotificationKind, NotificationSubject};
 use crate::resources::Outposts;
 use crate::species::AffinityClass;
 use crate::tuning::{
@@ -646,6 +648,14 @@ impl Game {
             None => "Raiders hit the outpost.".to_string(),
         };
         self.log_base_kind(MessageKind::Raid, line.clone());
+        self.notify_with(
+            NotificationKind::OutpostRaided,
+            NotifyArgs {
+                fills: &[("text", &line)],
+                subject: Some(NotificationSubject::Tile(tile)),
+                ..Default::default()
+            },
+        );
         self.post_alert(AlertKind::OutpostRaided, subject.clone(), line);
         if dark {
             // Every remaining crew member is recalled — `bench_or_dissolve`
@@ -655,6 +665,14 @@ impl Game {
             }
             let text = "The outpost has gone dark and needs repair.".to_string();
             self.log_base_kind(MessageKind::Raid, text.clone());
+            self.notify_with(
+                NotificationKind::OutpostDark,
+                NotifyArgs {
+                    fills: &[("text", &text)],
+                    subject: Some(NotificationSubject::Tile(tile)),
+                    ..Default::default()
+                },
+            );
             self.post_alert(AlertKind::OutpostDark, subject, text);
         }
     }
@@ -907,6 +925,17 @@ impl Game {
             // the Extractor" directly beneath it.
             self.world.entity_mut(worker).remove::<Task>();
             self.bench_or_dissolve(worker);
+            // Only a benched body is left to mark; Permadeath despawned it.
+            if self.world.get::<Downed>(worker).is_some() {
+                self.notify_with(
+                    NotificationKind::BaseStaffDowned,
+                    NotifyArgs {
+                        fills: &[("name", &worker_label)],
+                        subject: Some(NotificationSubject::Entity(worker)),
+                        ..Default::default()
+                    },
+                );
+            }
         }
         true
     }

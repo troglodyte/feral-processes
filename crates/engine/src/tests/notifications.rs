@@ -295,6 +295,12 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::BaseAiAwakening => "Game::announce_awakening",
             NotificationKind::BaseAiFused => "Game::announce_fusion",
             NotificationKind::BaseAiLevelUp => "Game::base_ai_level_up",
+            NotificationKind::BaseStaffDowned => "Game::run_raid, a defender knocked out",
+            NotificationKind::OutpostTierReached => "Game::tick_one_outpost, a rise in tier",
+            NotificationKind::OutpostStale => "Game::announce_outpost_trend",
+            NotificationKind::OutpostDeclining => "Game::announce_outpost_trend",
+            NotificationKind::OutpostRaided => "Game::raid_one_outpost",
+            NotificationKind::OutpostDark => "Game::raid_one_outpost, integrity at zero",
         }
     }
 

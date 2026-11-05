@@ -625,6 +625,44 @@ mod report {
     }
 
     #[test]
+    fn a_row_names_what_used_it_largest_first() {
+        let mut game = fed(4204);
+        game.world
+            .resource_mut::<crate::base_ledger::BaseLedger>()
+            .fold(
+                1,
+                1,
+                &Event::Consume {
+                    item: item(ids::CORE_FRAGMENT),
+                    qty: 5,
+                    source: ConsumeSource::Build,
+                },
+            );
+        let cell = game
+            .world
+            .resource::<crate::items_db::ItemDb>()
+            .get(ids::POWER_CELL)
+            .expect("Power Cell is in the fixture")
+            .name
+            .clone();
+        let report = game.base_output_report();
+        let row = report
+            .mined
+            .iter()
+            .find(|r| r.item == item(ids::CORE_FRAGMENT))
+            .expect("the mined item has a row");
+
+        assert_eq!(row.used, 7);
+        assert_eq!(
+            row.used_by,
+            vec![
+                (ConsumeSource::Build.player_label().to_string(), 5),
+                (format!("into {cell}"), 2),
+            ]
+        );
+    }
+
+    #[test]
     fn the_sector_column_reads_only_this_sector() {
         let mut game = game(4203);
         {

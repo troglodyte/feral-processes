@@ -306,6 +306,23 @@ impl ConsumeSource {
             ConsumeSource::Heal => "heal",
         }
     }
+
+    /// The base output page's word for this sink. `as_str` is the
+    /// telemetry tag and stays stable for analysis; this one is copy.
+    pub fn player_label(self) -> &'static str {
+        match self {
+            ConsumeSource::Fuel => "burnt as fuel",
+            ConsumeSource::Build => "built",
+            ConsumeSource::Base => "crew jobs",
+            ConsumeSource::Craft => "crafted",
+            ConsumeSource::Refit => "refit",
+            ConsumeSource::Install => "installed",
+            ConsumeSource::Breach => "lost in breach",
+            ConsumeSource::Sabotage => "sabotaged",
+            ConsumeSource::Defence => "defence",
+            ConsumeSource::Heal => "repairs",
+        }
+    }
 }
 
 /// The bucketed counters, saved with the run.

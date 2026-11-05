@@ -496,5 +496,6 @@
   may count a waited visit as served. `Game::note_amenity_visit` is the one
   door for the tally and the `AmenityBlocked` alert (latched per need on
   `AlertBoard`, unsaved), so the two cannot drift.
+- **A breeding visit is the `Visiting` `ProgramRole`, and `cancel_breeding_visit` is the one door for every ending but completion, called (as `cancel_breeding_visits_at`) from both `remove_structure` and `damage_structure`.** The cancel is detected from the gathered state (fewer than two parents, a role other than `Visiting`, `Downed`), so a new exit path is covered without touching the module; destruction must cancel before the bay entity goes, since the slot and the refunded Breeding Seed live on its `Incubator`; `BreedingVisit::stuck` is unsaved; the cooldown and the `bred_with` memory are written in `complete_breeding_visit`, not at confirm; needs hold because `needs_drain_system` filters `== Staff`.
 
 ## Instrumentation

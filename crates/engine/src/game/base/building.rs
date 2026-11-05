@@ -319,9 +319,10 @@ impl Game {
             // once-only, and a second `if first_time` here would put the
             // policy in two places.
             self.ftue_by_key(&crate::ftue::built_key(&def.id));
-            self.ftue(crate::ftue::FtueTrigger::Event(
-                crate::ftue::FtueEvent::BaseFounding,
-            ));
+            self.ftue_about(
+                crate::ftue::FtueTrigger::Event(crate::ftue::FtueEvent::BaseFounding),
+                crate::notifications::NotificationSubject::Tile((x, y)),
+            );
             self.tick();
             return Ok(());
         }

@@ -215,6 +215,25 @@ fn founding_the_home_queues_its_tutorial_once() {
     );
 }
 
+/// "Your Base" points at the anchor it just settled on, and keeps its own
+/// D/T rather than the milestone opt-out.
+#[test]
+fn the_founding_tutorial_points_at_the_anchor() {
+    let mut game = fresh();
+    drain(&mut game);
+    place_home(&mut game);
+    let note = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.title == "Your Base")
+        .unwrap();
+    let anchor = game.field_pos().unwrap();
+    assert_eq!(
+        note.subject,
+        Some(crate::notifications::NotificationSubject::Tile(anchor))
+    );
+    assert_eq!(note.silence_key, None);
+    assert!(note.ftue_key.is_some());
+}
+
 /// An achievement's notification quotes the achievement's own prose. A
 /// second `.ron` file repeating it is the pattern this test exists to stop.
 #[test]

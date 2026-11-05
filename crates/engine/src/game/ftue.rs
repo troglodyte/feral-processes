@@ -5,7 +5,7 @@ use crate::achievements::Profile;
 use crate::ftue::{
     ENTRIES, FtueDecision, FtuePlayed, FtueTrigger, PendingCrafted, crafted_key, decide,
 };
-use crate::notifications::Notification;
+use crate::notifications::{Notification, NotificationSubject};
 use crate::resources::{Notifications, PendingProfileWrites};
 
 impl Game {
@@ -21,6 +21,20 @@ impl Game {
     /// an entry by it. Latches even with no entry, so every hook is
     /// observable through `ftue_shown` without a shipped message.
     pub(crate) fn ftue_by_key(&mut self, key: &str) -> bool {
+        self.ftue_by_key_about(key, None)
+    }
+
+    /// `ftue`, for a message about one place on the map. The subject rides
+    /// the popup only; guidance keeps its own D/T and gets no `silence_key`.
+    pub(crate) fn ftue_about(
+        &mut self,
+        trigger: FtueTrigger,
+        subject: NotificationSubject,
+    ) -> bool {
+        self.ftue_by_key_about(&trigger.key(), Some(subject))
+    }
+
+    fn ftue_by_key_about(&mut self, key: &str, subject: Option<NotificationSubject>) -> bool {
         let decision = decide(
             key,
             &self.world.resource::<FtuePlayed>().0,
@@ -39,6 +53,7 @@ impl Game {
         };
         let mut notification = Notification::from(entry.def()).filled(&[], None);
         notification.ftue_key = Some(key.to_string());
+        notification.subject = subject;
         self.world
             .resource_mut::<Notifications>()
             .push(notification);

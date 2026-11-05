@@ -3,6 +3,7 @@
 
 use crate::base_grid::BaseGrid;
 use crate::components::FarmJob;
+use crate::game::base::breeding_visit::CancelReason;
 use crate::game::base::floor::nearest_free_cells;
 use crate::game::base::hauling;
 use crate::game::base::hauling::Touch;
@@ -1777,6 +1778,7 @@ impl Game {
             // The first of the two destruction paths for a subject pinned in
             // this structure's pen — see `Game::release_study_station`.
             self.release_study_station(target);
+            self.cancel_breeding_visits_at(target, CancelReason::BayLost);
             self.release_prisoner(target);
             self.release_siphon_at(target);
             self.announce_lost_shelf(target);

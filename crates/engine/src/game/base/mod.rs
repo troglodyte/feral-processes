@@ -14,6 +14,7 @@
 //! `game/combat/` is its own decision, not a precedent set here.
 
 pub(crate) mod assignment;
+pub(crate) mod breeding_visit;
 pub(crate) mod building;
 pub(crate) mod clearing;
 pub(crate) mod collect;

@@ -299,7 +299,12 @@ impl Game {
         // A prisoner is the same case: spawned on its pen and never moved.
         if matches!(
             self.program_role(entity),
-            Some(ProgramRole::UnderStudy | ProgramRole::Jailed | ProgramRole::BaseAi)
+            Some(
+                ProgramRole::UnderStudy
+                    | ProgramRole::Jailed
+                    | ProgramRole::BaseAi
+                    | ProgramRole::Visiting
+            )
         ) {
             return true;
         }
@@ -1390,7 +1395,10 @@ impl Game {
                     look,
                     form,
                     is_tamed,
-                    on_staff: self.program_role(entity) == Some(ProgramRole::Staff),
+                    on_staff: matches!(
+                        self.program_role(entity),
+                        Some(ProgramRole::Staff | ProgramRole::Visiting)
+                    ),
                     is_companion,
                     is_hostile,
                     is_structure,

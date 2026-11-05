@@ -15,6 +15,9 @@ const MEMORY_TRIGGERS: &[(&str, crate::memories::MemorySubjectKind)] = {
         ("mauled_by", K::Species),
         // `Game::form_victory_memories`, off `end_battle`.
         ("bonded_in_battle", K::Program),
+        // `Game::breed`, about the other parent, once the visit to the bay
+        // is paid.
+        ("bred_with", K::Program),
         ("hard_won", K::Nothing),
         // `Game::note_strandings`, off `tick_inner`.
         ("stranded_at", K::BaseTile),

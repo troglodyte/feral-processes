@@ -1,7 +1,7 @@
 (
     id: "breeding_bay",
     name: "Breeding Bay",
-    description: "Grows a child program from two of yours. Spend a Breeding Seed and it hatches in about ten minutes.",
+    description: "Grows a child program from two of yours. Needs the Bloodlines research. Spend a Breeding Seed from your pack, and both parents visit the bay; ten minutes after they are done, the child hatches.",
     glyph: 'N',
     color: Green,
     build_cost: [("core_fragment", 14), ("bytecode_block", 2)],

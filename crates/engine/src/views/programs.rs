@@ -448,6 +448,18 @@ pub struct IncubatingChild {
     pub ticks_left: u64,
     /// Due, but the roster is full, so it waits in the bay.
     pub held: bool,
+    /// `Some` while the parents have yet to finish their visit to the bay;
+    /// the child does not exist until they do.
+    pub visit: Option<VisitStage>,
+}
+
+/// How far a breeding visit has got, in the two states a player can see.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum VisitStage {
+    /// At least one parent is still walking.
+    OnTheWay,
+    /// Both parents have arrived and the pause has begun.
+    AtTheBay,
 }
 
 impl IncubatingChild {
@@ -457,6 +469,8 @@ impl IncubatingChild {
     pub fn when(&self) -> &'static str {
         let span = crate::tuning::INCUBATION_TICKS;
         match self.ticks_left {
+            _ if self.visit == Some(VisitStage::OnTheWay) => "parents on their way",
+            _ if self.visit == Some(VisitStage::AtTheBay) => "parents at the bay",
             _ if self.held => "roster full, waiting",
             0 => "ready",
             t if t * 3 <= span => "ready soon",

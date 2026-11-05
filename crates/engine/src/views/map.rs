@@ -52,8 +52,9 @@ pub struct EntityView {
     /// player, `look`'s own shape.
     pub form: Option<FormLook>,
     pub is_tamed: bool,
-    /// Whether this program is base staff — `ProgramRole::Staff`, so `true`
-    /// for a subset of `is_tamed`. The map names staff always and a program
+    /// Whether this program is base staff — `ProgramRole::Staff`, or a
+    /// parent on a breeding visit (`Visiting`), still walking the base — so
+    /// `true` for a subset of `is_tamed`. The map names staff always and a program
     /// held rather than worked (under study, jailed) only under Alt, and the
     /// two are drawn alike otherwise.
     pub on_staff: bool,

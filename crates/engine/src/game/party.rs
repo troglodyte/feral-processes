@@ -81,6 +81,13 @@ pub enum ProgramRole {
     /// good, so it ranks with the held roles. Ahead of `Staff` in `role_of`
     /// so nothing that reads `== Staff` can post it.
     BaseAi,
+    /// On a breeding visit — `components::BreedingVisit`. Just above `Staff`:
+    /// out of the labour pool, so the scheduler never posts it and
+    /// `needs_drain_system` (which filters `== Staff`) holds its needs, but
+    /// still walking the base floor to the bay. The party, a sortie and an
+    /// outpost outrank it; a pulled-away parent therefore reads as another
+    /// role while still marked, and the visit cancels.
+    Visiting,
     /// Everything else you own: the base's labour pool, posted and unposted
     /// by `game::base::work_orders`'s scheduler and by nothing else.
     Staff,
@@ -144,7 +151,8 @@ impl ProgramRole {
             ProgramRole::Jailed => 5,
             ProgramRole::Siphoned => 6,
             ProgramRole::BaseAi => 7,
-            ProgramRole::Staff => 8,
+            ProgramRole::Visiting => 8,
+            ProgramRole::Staff => 9,
         }
     }
 }
@@ -159,6 +167,7 @@ pub(crate) struct RoleMarkers {
     pub jailed: bool,
     pub siphoned: bool,
     pub base_ai: bool,
+    pub visiting: bool,
 }
 
 /// The role rule itself, over values rather than a `Game`.
@@ -202,6 +211,9 @@ pub(crate) fn role_of(
     if markers.base_ai {
         return Some(ProgramRole::BaseAi);
     }
+    if markers.visiting {
+        return Some(ProgramRole::Visiting);
+    }
     Some(ProgramRole::Staff)
 }
 
@@ -234,7 +246,12 @@ pub(crate) fn role_of(
 pub(crate) fn walks_the_base(role: Option<ProgramRole>, task: Option<TaskKind>) -> bool {
     matches!(
         role,
-        Some(ProgramRole::UnderStudy | ProgramRole::Jailed | ProgramRole::BaseAi)
+        Some(
+            ProgramRole::UnderStudy
+                | ProgramRole::Jailed
+                | ProgramRole::BaseAi
+                | ProgramRole::Visiting
+        )
     ) || (role == Some(ProgramRole::Staff) && task != Some(TaskKind::Guard))
 }
 
@@ -262,6 +279,7 @@ pub struct Roles<'w, 's> {
     jailed: Query<'w, 's, (), With<crate::components::Jailed>>,
     siphoned: Query<'w, 's, (), With<crate::components::Siphoned>>,
     base_ai: Query<'w, 's, (), With<crate::components::BaseAiHost>>,
+    visiting: Query<'w, 's, (), With<crate::components::BreedingVisit>>,
 }
 
 impl Roles<'_, '_> {
@@ -279,6 +297,7 @@ impl Roles<'_, '_> {
                 jailed: self.jailed.contains(creature),
                 siphoned: self.siphoned.contains(creature),
                 base_ai: self.base_ai.contains(creature),
+                visiting: self.visiting.contains(creature),
             },
         )
     }
@@ -1244,6 +1263,10 @@ impl Game {
                     .world
                     .get::<crate::components::BaseAiHost>(creature)
                     .is_some(),
+                visiting: self
+                    .world
+                    .get::<crate::components::BreedingVisit>(creature)
+                    .is_some(),
             },
         )
     }
@@ -2135,6 +2158,7 @@ impl Game {
             pending_study,
             pending_outpost_crew,
             pending_siphon,
+            pending_visits,
             pending_jailed,
             pending_siege_members,
             pending_nemesis_band,
@@ -2220,6 +2244,8 @@ impl Game {
         // a snapshot never carries `siphon`, and re-holding it here would
         // skip the checks `siphon_program` runs — revalidated by hand.
         drop(pending_siphon);
+        // A visitor is not `Staff`, so no snapshot is taken of one.
+        drop(pending_visits);
         // And a prisoner: `commit_program` refuses one, so a snapshot never
         // carries `jailed`, and a body re-confined here would skip the
         // checks `jail_program` runs.

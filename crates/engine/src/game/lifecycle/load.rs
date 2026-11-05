@@ -88,6 +88,7 @@ struct StructureLinks {
     pending_cronjobs: Vec<(Entity, save::CronjobSave)>,
     pending_study: Vec<(Entity, (i32, i32))>,
     pending_siphon: Vec<(Entity, (i32, i32))>,
+    pending_visits: Vec<(Entity, (i32, i32), usize)>,
     pending_jailed: Vec<(Entity, save::JailedSave)>,
     pending_siege_members: Vec<(u32, Entity, (i32, i32))>,
     pending_nemesis_band: Vec<(u32, Entity, bool)>,
@@ -812,6 +813,7 @@ fn restore_creatures(
         pending_study,
         pending_outpost_crew,
         pending_siphon,
+        pending_visits,
         pending_jailed,
         pending_siege_members,
         pending_nemesis_band,
@@ -844,6 +846,7 @@ fn restore_creatures(
             pending_cronjobs,
             pending_study,
             pending_siphon,
+            pending_visits,
             pending_jailed,
             pending_siege_members,
             pending_nemesis_band,
@@ -887,6 +890,7 @@ fn restore_base(
         pending_cronjobs,
         pending_study,
         pending_siphon,
+        pending_visits,
         pending_jailed,
         pending_siege_members,
         pending_nemesis_band,
@@ -901,6 +905,7 @@ fn restore_base(
     game.attach_cronjobs(pending_cronjobs, &structure_positions);
     game.attach_pinned_subjects(pending_study, &structure_positions);
     game.attach_siphoned(pending_siphon, &structure_positions);
+    game.attach_breeding_visits(pending_visits, &structure_positions);
     game.attach_jailed(pending_jailed, &structure_positions);
     game.attach_stolen_from(pending_stolen_from, &structure_positions);
     game.link_nemesis_bands(pending_nemesis_band);

@@ -129,3 +129,20 @@ fn the_map_view_says_which_owned_programs_are_on_staff() {
     let player = game.player_entity();
     assert!(!view_of(&mut game, player).on_staff);
 }
+
+#[test]
+fn a_visiting_parent_reads_as_on_staff_on_the_map() {
+    let mut game = fresh_game();
+    let bodies = staff_of(&mut game, 1);
+    let station = game.world.spawn_empty().id();
+    game.world
+        .entity_mut(bodies[0])
+        .insert(crate::components::BreedingVisit {
+            bay: station,
+            slot: 0,
+            stuck: 0,
+            waited: 0,
+        });
+    assert_eq!(game.program_role(bodies[0]), Some(ProgramRole::Visiting));
+    assert!(view_of(&mut game, bodies[0]).on_staff);
+}

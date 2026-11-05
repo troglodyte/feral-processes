@@ -111,6 +111,11 @@ impl Game {
             .map(|s| s.siphon)
             .and_then(|siphon| self.world.get::<Position>(siphon))
             .map(|pos| (pos.x, pos.y));
+        let breeding_visit = self
+            .world
+            .get::<crate::components::BreedingVisit>(e)
+            .and_then(|v| Some((self.world.get::<Position>(v.bay)?, v.slot)))
+            .map(|(pos, slot)| ((pos.x, pos.y), slot));
         // The cell's tile, `study_station`'s reason.
         let jailed = self
             .world
@@ -227,6 +232,7 @@ impl Game {
             nest_position,
             patrol_position,
             study_station,
+            breeding_visit,
             outpost: self
                 .world
                 .get::<crate::components::PostedAt>(e)

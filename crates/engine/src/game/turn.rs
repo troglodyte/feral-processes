@@ -345,6 +345,9 @@ impl Game {
         // `roster_parts` and names it through `creature_label`, `&mut Game`
         // work no bevy system can express. See `Game::hatch_incubations`.
         self.hatch_incubations();
+        // Beside the hatch and under the same gate: a visit ends in memories
+        // and a log line, `&mut Game` work. See `Game::step_breeding_visits`.
+        self.step_breeding_visits();
         // Beside the two crews and the Bays, and for `run_dig_crew`'s second
         // reason: an off-screen battle names programs through
         // `creature_label`, damages through `apply_damage` and logs, none of

@@ -336,8 +336,8 @@ fn every_zone_gated_base_node_requires_a_subject_and_only_the_bootstrap_five_are
         "the ungated set moved — a node was gated or ungated without this census being told"
     );
     assert_eq!(
-        checked, 39,
-        "expected the shipped base tree's 39 nodes; a count that moved means a node was \
+        checked, 40,
+        "expected the shipped base tree's 40 nodes; a count that moved means a node was \
          added, removed, or reclassified without this census being told"
     );
 }
@@ -603,6 +603,7 @@ fn exactly_the_named_research_nodes_are_discoverable() {
             "affix:of_deflection",
             "affix:of_introspection",
             "armor_bench",
+            "bloodlines",
             "cache_coherence",
             "capacitance",
             "charge_density",

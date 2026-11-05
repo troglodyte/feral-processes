@@ -389,6 +389,8 @@ fn a_rich_program_writes_every_field_it_was_given() {
         study_station: _,
         outpost: _,
         siphon: _,
+        // Asserted by `tests::breeding_visit`, which saves a mid-walk visit.
+        breeding_visit: _,
         jailed: _,
         pursuing: _,
         carrying: _,

@@ -77,6 +77,8 @@ pub(crate) struct CreatureRestore {
     /// Programs held in a Power Siphon, with the tile it stands on —
     /// `pending_study`'s deferral, since a siphon is a structure.
     pub(crate) pending_siphon: Vec<(Entity, (i32, i32))>,
+    /// `(parent, bay tile, slot)` — `pending_study`'s deferral.
+    pub(crate) pending_visits: Vec<(Entity, (i32, i32), usize)>,
     /// Prisoners with the tile of the Holding Cell they fill —
     /// `pending_siphon`'s deferral, since a cell is a structure.
     pub(crate) pending_jailed: Vec<(Entity, save::JailedSave)>,
@@ -132,6 +134,7 @@ impl CreatureRestore {
             pending_study: Vec::new(),
             pending_outpost_crew: Vec::new(),
             pending_siphon: Vec::new(),
+            pending_visits: Vec::new(),
             pending_jailed: Vec::new(),
             pending_siege_members: Vec::new(),
             pending_nemesis_band: Vec::new(),
@@ -683,6 +686,11 @@ impl Game {
             }
             if let (Some(order), Some(cell)) = (c.siege_order, c.siege_cell) {
                 ctx.pending_siege_members.push((order, creature_id, cell));
+            }
+            // Independent of the tethers below: a visitor has no `Task`, and
+            // a party slot outranks the marker by role anyway.
+            if let Some((tile, slot)) = c.breeding_visit {
+                ctx.pending_visits.push((creature_id, tile, slot));
             }
             if let Some(slot) = party_slot {
                 ctx.party_slots.push((slot, creature_id));

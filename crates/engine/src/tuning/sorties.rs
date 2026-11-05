@@ -39,6 +39,20 @@ pub const BREEDING_COOLDOWN_TICKS: u64 = SORTIE_BOARD_ROTATION_TICKS;
 /// How long a child incubates, for the same reason.
 pub const INCUBATION_TICKS: u64 = SORTIE_BOARD_ROTATION_TICKS;
 
+/// How long both parents stay at the bay once they have arrived (30 seconds).
+pub const BREEDING_VISIT_PAUSE_TICKS: u64 = 60;
+
+/// How many beats in a row a parent may neither arrive nor step before the
+/// visit is called off. 60 beats is 30 seconds: a body crossing a side clears
+/// in a few, and a short wait for the other parent's side is well inside it.
+pub const BREEDING_VISIT_STUCK_TICKS: u32 = 60;
+
+/// How many beats in a row a parent may neither arrive nor step with only a
+/// body in the way before the visit is called off. 600 beats is 5 minutes: a
+/// player reading the roster or a worker on a shared face clears well inside
+/// it, and a blocker that never leaves still ends the visit.
+pub const BREEDING_VISIT_BODY_WAIT_TICKS: u32 = 600;
+
 /// Offers on a board.
 pub const SORTIE_BOARD_SLOTS: usize = 3;
 

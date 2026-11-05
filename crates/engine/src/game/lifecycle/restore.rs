@@ -590,6 +590,37 @@ impl Game {
         }
     }
 
+    /// Reattaches `components::BreedingVisit` now that structures are
+    /// restored — `attach_pinned_subjects`' shape. A tile naming no bay drops
+    /// the marker silently; the pending slot it belonged to, if it is still
+    /// there, is refunded by the next `step_breeding_visits`.
+    pub(super) fn attach_breeding_visits(
+        &mut self,
+        pending: Vec<(Entity, (i32, i32), usize)>,
+        structure_positions: &HashMap<(i32, i32), Entity>,
+    ) {
+        for (program, tile, slot) in pending {
+            let Some(&bay) = structure_positions.get(&tile) else {
+                continue;
+            };
+            if self
+                .world
+                .get::<crate::components::Incubator>(bay)
+                .is_none()
+            {
+                continue;
+            }
+            self.world
+                .entity_mut(program)
+                .insert(crate::components::BreedingVisit {
+                    bay,
+                    slot,
+                    stuck: 0,
+                    waited: 0,
+                });
+        }
+    }
+
     /// Reattaches `components::Siphoned` now that structures are restored —
     /// `attach_pinned_subjects`' shape. **A tile naming no structure, one that
     /// no longer declares `siphons`, or a siphon an earlier claimant already

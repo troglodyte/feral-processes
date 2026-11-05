@@ -1,0 +1,10 @@
+// Formed about the other parent when a pair raises a child at the bay.
+(
+    id: "bred_with",
+    name: "Raised a child with",
+    blurb: "We made something new together, and it is still ours.",
+    valence: 4.0,
+    half_life: 4000,
+    subject: Program,
+    strike_cap: 5,
+)

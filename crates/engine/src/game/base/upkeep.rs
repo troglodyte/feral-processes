@@ -3,6 +3,7 @@
 
 use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
+use crate::game::base::breeding_visit::CancelReason;
 use crate::game::base::defences::patch_mend;
 use crate::resources::Outposts;
 use crate::species::AffinityClass;
@@ -1132,6 +1133,9 @@ impl Game {
             self.release_prisoner(structure);
             self.release_siphon_at(structure);
             self.announce_lost_shelf(structure);
+            // Before the announcement: a pending slot holds no child to lose,
+            // and the cancel clears it with the refund.
+            self.cancel_breeding_visits_at(structure, CancelReason::BayLost);
             self.announce_lost_children(structure);
             // Recorded here and not in `remove_structure`: a wreck is a loss
             // and a demolish is the player's choice. Before the despawn,

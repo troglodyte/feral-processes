@@ -1,0 +1,12 @@
+(
+    id: "bloodlines",
+    name: "Bloodlines",
+    description: "Learn how two of your programs can raise a child together. Opens the Breeding Bay.",
+    cost: 70,
+    materials: [("bytecode_block", 14), ("charge_coil", 8)],
+    min_zone: 2,
+    requires_subject: true,
+    discoverable: true,
+    requires: [],
+    unlocks_structures: ["breeding_bay"],
+)

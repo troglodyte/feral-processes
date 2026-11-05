@@ -138,6 +138,7 @@ but not what makes a program remember.
 | id | | subject | formed by |
 |---|---|---|---|
 | `bonded_in_battle` | + | `Program` | surviving a won fight, about each other program that also survived |
+| `bred_with` | + | `Program` | paying for a breeding visit at the bay, about the other parent |
 | `idled_with` | + | `Program` | finishing a stretch at an amenity, about each other program in reach of it at that moment |
 | `hard_won` | + | `Nothing` | winning a fight the party was outmatched in |
 | `mauled_by` | − | `Species` | taking a single hit worth a large share of maximum Integrity |

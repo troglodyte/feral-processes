@@ -134,6 +134,7 @@ pub use game::creation::{
 pub use game::environment::TerrainRow;
 pub use game::gear_craft::FusionRefusal;
 pub use game::kit::EmulationOption;
+pub use game::notify::NotifyArgs;
 pub use game::party::ProgramRole;
 pub use game::route::{RouteDestination, RouteDestinationId, RouteRefusal, RouteReport};
 /// Every sentence the town page's aid rows can carry — exported so the

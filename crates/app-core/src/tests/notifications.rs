@@ -223,11 +223,11 @@ mod ftue_keys {
     }
 
     #[test]
-    fn a_milestone_notification_ignores_d_and_t() {
+    fn a_once_per_run_notification_ignores_d_and_t() {
         let mut app = test_app(9113);
         queue(
             &mut app,
-            feral_processes_engine::notifications::NotificationKind::Breach,
+            feral_processes_engine::notifications::NotificationKind::SweepsBegin,
         );
         app.handle_key(GameKey::Char('.'));
         assert_eq!(app.mode, Mode::Notification);
@@ -235,5 +235,92 @@ mod ftue_keys {
         app.handle_key(GameKey::Char('t'));
         assert_eq!(app.mode, Mode::Notification);
         assert!(app.game.as_ref().unwrap().guidance_enabled());
+    }
+}
+
+mod focused {
+    use super::*;
+    use feral_processes_engine::NotifyArgs;
+    use feral_processes_engine::notifications::{NotificationKind, NotificationSubject};
+
+    /// A base with one staff member, standing in it, with a `ProgramDecompiled`
+    /// notice about that staff member on screen (or without a subject).
+    fn on_a_notice(seed: u32, with_subject: bool) -> (App, Entity) {
+        let mut app = app_owning_distant_programs(seed, 1);
+        found_the_base(&mut app);
+        stand_in_base(&mut app);
+        for _ in 0..4 {
+            app.handle_key(GameKey::Char('.'));
+        }
+        let staff = app.game.as_ref().unwrap().base_staff()[0];
+        let game = app.game.as_mut().unwrap();
+        assert!(game.notify_with(
+            NotificationKind::ProgramDecompiled,
+            NotifyArgs {
+                fills: &[("name", "Pip")],
+                subject: with_subject.then_some(NotificationSubject::Entity(staff)),
+                ..NotifyArgs::default()
+            },
+        ));
+        app.handle_key(GameKey::Char('.'));
+        assert_eq!(app.mode, Mode::Notification);
+        (app, staff)
+    }
+
+    #[test]
+    fn w_on_an_entity_subject_starts_the_watch_and_dismisses() {
+        let (mut app, staff) = on_a_notice(9201, true);
+        assert!(
+            app.notification_focus().is_some(),
+            "fixture must be placeable"
+        );
+        app.handle_key(GameKey::Char('w'));
+        assert_eq!(app.watching, Some(staff));
+        assert_eq!(app.mode, Mode::Playing);
+        assert_eq!(app.notification_focus(), None, "nothing pending, no focus");
+    }
+
+    #[test]
+    fn w_with_no_subject_is_inert() {
+        let (mut app, _) = on_a_notice(9202, false);
+        assert_eq!(app.notification_focus(), None);
+        app.handle_key(GameKey::Char('W'));
+        assert_eq!(app.watching, None);
+        assert_eq!(app.mode, Mode::Notification);
+    }
+
+    #[test]
+    fn d_silences_a_repeating_kind_and_it_does_not_queue_again() {
+        let (mut app, _) = on_a_notice(9203, true);
+        app.handle_key(GameKey::Char('D'));
+        assert_eq!(app.mode, Mode::Playing);
+        let (disk, _) = feral_processes_engine::achievements::Profile::load(&app.profile_path);
+        assert_eq!(disk.notifications_never, ["milestone_program_decompiled"]);
+        assert!(
+            !app.game
+                .as_mut()
+                .unwrap()
+                .notify(NotificationKind::ProgramDecompiled)
+        );
+    }
+
+    #[test]
+    fn d_on_a_guidance_popup_still_goes_to_the_ftue_path() {
+        // Covered in full by `ftue_keys`; this pins that it files no kind.
+        let mut app = test_app(9204);
+        let game = app.game.as_mut().unwrap();
+        assert!(game.ftue(feral_processes_engine::ftue::FtueTrigger::Event(
+            feral_processes_engine::ftue::FtueEvent::FirstRaid
+        )));
+        app.handle_key(GameKey::Char('.'));
+        app.handle_key(GameKey::Char('d'));
+        assert!(
+            app.game
+                .as_ref()
+                .unwrap()
+                .profile()
+                .notifications_never
+                .is_empty()
+        );
     }
 }

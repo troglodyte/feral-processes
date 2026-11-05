@@ -129,8 +129,9 @@ pub struct PrisonerState {
     pub name: String,
     pub attempts: u32,
     pub max_attempts: u32,
-    pub progress: u32,
-    pub attempt_ticks: u32,
+    /// How far the warden's clock is into the current attempt, 0..1; 0 once
+    /// every attempt is spent.
+    pub progress_fraction: f32,
     pub odds_percent: u32,
 }
 

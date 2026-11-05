@@ -277,7 +277,7 @@ impl Game {
     /// Every standing Holding Cell, in tile order — `teardown_rigs`' reason:
     /// bevy's iteration order is not stable and two cells finishing in a
     /// different order between runs would reorder their log lines.
-    fn holding_cells(&self) -> Vec<Entity> {
+    pub(crate) fn holding_cells(&self) -> Vec<Entity> {
         let mut found: Vec<(i32, i32, Entity)> = self
             .world
             .iter_entities()
@@ -329,8 +329,11 @@ impl Game {
                 name: self.creature_label(body),
                 attempts: jailed.attempts,
                 max_attempts: JAIL_MAX_ATTEMPTS,
-                progress: jailed.progress,
-                attempt_ticks,
+                progress_fraction: if jailed.attempts >= JAIL_MAX_ATTEMPTS {
+                    0.0
+                } else {
+                    jailed.progress as f32 / attempt_ticks.max(1) as f32
+                },
                 odds_percent: (self.jail_odds(body)? * 100.0).round() as u32,
             })
         });
@@ -538,6 +541,37 @@ impl Game {
         Some(rebuilt)
     }
 
+    /// Whether `cell` has room for the worst payout `prisoner` could break
+    /// down into. Reads `Jailed::record` as stored rather than through
+    /// `prisoner_record`, which needs `&mut self` and writes the rebuilt
+    /// record back; the scheduler asks this from a read-only pass. A prisoner
+    /// with no record yet (a pre-`record` save) reads as fitting, so its warden
+    /// is posted; its first breakdown attempt rebuilds and stores the record,
+    /// and from then on this check is exact.
+    fn breakdown_fits(&self, cell: Entity, prisoner: Entity) -> bool {
+        let Some(program) = self
+            .world
+            .get::<components::Jailed>(prisoner)
+            .and_then(|j| j.record.as_ref())
+        else {
+            return true;
+        };
+        let worst = self.breakdown_worst_case(program);
+        self.world
+            .get::<Stock>(cell)
+            .is_some_and(|s| s.fits_payout(worst))
+    }
+
+    /// Whether `cell` should hold a warden: a prisoner with an attempt left,
+    /// or a spent one whose breakdown the output has room to pay. The
+    /// scheduler's `can_progress` for a cell, so a clogged cell lets its body
+    /// go.
+    pub(crate) fn cell_wants_a_warden(&self, cell: Entity) -> bool {
+        self.cell_prisoner(cell).is_some_and(|prisoner| {
+            !self.prisoner_is_spent(prisoner) || self.breakdown_fits(cell, prisoner)
+        })
+    }
+
     /// The prisoner's last failed attempt: the body despawns and a reduced
     /// extraction-style yield lands in the cell's `Stock::output`.
     ///
@@ -547,16 +581,11 @@ impl Game {
     /// prisoner stays. Two `GameRng` draws when it goes ahead: the tool,
     /// then the band.
     fn break_down_prisoner(&mut self, cell: Entity, prisoner: Entity) -> bool {
+        // Rebuild a missing record first, so the room check prices it rather
+        // than reading "no record" as "fits".
         let program = self.prisoner_record(prisoner);
-        if let Some(program) = program.as_ref() {
-            let worst = self.breakdown_worst_case(program);
-            if !self
-                .world
-                .get::<Stock>(cell)
-                .is_some_and(|s| s.fits_payout(worst))
-            {
-                return false;
-            }
+        if !self.breakdown_fits(cell, prisoner) {
+            return false;
         }
         let label = self.creature_label(prisoner);
         let granted = match (program.as_ref(), self.breakdown_tool()) {

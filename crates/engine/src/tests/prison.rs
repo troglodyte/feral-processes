@@ -336,9 +336,17 @@ fn a_prisoner_is_never_handed_a_task_and_never_moves() {
         .unwrap();
 
     let mut crew_worked = false;
-    for _ in 0..60 {
+    for tick in 0..60 {
         game.tick();
         crew_worked |= crew.iter().any(|c| game.world.get::<Task>(*c).is_some());
+        // The cell now wards itself, so a decompile can land inside the
+        // window; the claim is about a prisoner, and a decompiled body is
+        // ordinary staff. An attempt takes `ATTEMPT_TICKS`, so the claim must
+        // have held at least that long.
+        if game.world.get::<Jailed>(body).is_none() {
+            assert!(tick + 1 >= ATTEMPT_TICKS, "released on tick {tick}");
+            break;
+        }
         assert!(game.world.get::<Task>(body).is_none());
         assert_eq!(*game.world.get::<Position>(body).unwrap(), start);
         assert_eq!(game.program_role(body), Some(ProgramRole::Jailed));
@@ -606,6 +614,9 @@ fn jailed(game: &Game, body: Entity) -> Jailed {
 #[test]
 fn a_cell_takes_a_warden_through_the_ordinary_cronjob_door() {
     let (mut game, cell) = base_with_a_cell();
+    // A cell with nobody to ward lets its body go, so give it a prisoner.
+    game.jail_program(0).unwrap();
+    stand_ample_grid_supply(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
     assert!(game.accepts_a_program(cell));
@@ -628,6 +639,111 @@ fn no_warden_means_no_progress() {
     assert_eq!((j.attempts, j.progress), (0, 0));
 }
 
+/// A lit cell and one idle body on the roster, nobody posted by hand.
+fn a_lit_cell_with_a_spare_body(prisoner: bool) -> (Game, Entity, Entity) {
+    let (mut game, cell) = base_with_a_cell();
+    if prisoner {
+        game.jail_program(0).unwrap();
+    }
+    stand_ample_grid_supply(&mut game);
+    let body = spawn_tamed(&mut game, 10, 3);
+    (game, cell, body)
+}
+
+fn post_of(game: &Game, body: Entity) -> Option<(Entity, TaskKind)> {
+    game.world.get::<Task>(body).map(|t| (t.target, t.kind))
+}
+
+#[test]
+fn an_occupied_cell_is_warded_with_no_standing_job() {
+    let (mut game, cell, body) = a_lit_cell_with_a_spare_body(true);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), Some((cell, TaskKind::GatherResource)));
+}
+
+#[test]
+fn an_empty_cell_is_not_warded() {
+    let (mut game, _cell, body) = a_lit_cell_with_a_spare_body(false);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
+/// The whole loop with nobody posted by hand: the scheduler wards the cell
+/// and the warden's clock reaches a decompile attempt.
+#[test]
+fn a_prisoner_gets_an_attempt_with_nobody_posted_by_hand() {
+    let (mut game, cell, _body) = a_lit_cell_with_a_spare_body(true);
+    let prisoner = the_prisoner(&game, cell);
+
+    for _ in 0..(ATTEMPT_TICKS * 3) {
+        game.tick();
+        if game.cell_prisoner(cell) != Some(prisoner) {
+            return; // decompiled on an attempt
+        }
+    }
+
+    assert!(
+        jailed(&game, prisoner).attempts > 0,
+        "no attempt in {} beats",
+        ATTEMPT_TICKS * 3
+    );
+}
+
+#[test]
+fn a_dark_cell_is_not_warded() {
+    let (mut game, _cell) = base_with_a_cell();
+    game.jail_program(0).unwrap();
+    let body = spawn_tamed(&mut game, 10, 3);
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
+#[test]
+fn a_spent_prisoner_with_no_output_room_frees_its_warden() {
+    let (mut game, cell, body) = a_lit_cell_with_a_spare_body(true);
+    let prisoner = the_prisoner(&game, cell);
+    game.world.get_mut::<Jailed>(prisoner).unwrap().attempts = JAIL_MAX_ATTEMPTS;
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+    }
+
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, body), None, "no room: nothing to ward");
+
+    game.world.get_mut::<Stock>(cell).unwrap().output.clear();
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, body), Some((cell, TaskKind::GatherResource)));
+}
+
+/// A seated warden is let go when its cell stops wanting one, with nothing
+/// else queued: `assign_base_labour`'s empty-queue guard would otherwise
+/// return before the free loop and leave the body posted for good.
+#[test]
+fn a_seated_warden_is_released_when_the_cell_clogs() {
+    let (mut game, cell, body) = a_lit_cell_with_a_spare_body(true);
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, body), Some((cell, TaskKind::GatherResource)));
+    let prisoner = the_prisoner(&game, cell);
+    game.world.get_mut::<Jailed>(prisoner).unwrap().attempts = JAIL_MAX_ATTEMPTS;
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+    }
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
 #[test]
 fn a_warden_advances_progress_one_per_beat() {
     let (mut game, _cell, body) = a_warded_cell(7301);
@@ -635,6 +751,24 @@ fn a_warden_advances_progress_one_per_beat() {
         game.tick();
     }
     assert_eq!(jailed(&game, body).progress, 5);
+}
+
+#[test]
+fn the_sheet_reads_the_clock_as_a_fraction_of_the_attempt() {
+    let (mut game, cell, _body) = a_warded_cell(7301);
+    let fraction = |g: &Game| {
+        g.prison_state(cell)
+            .unwrap()
+            .prisoner
+            .unwrap()
+            .progress_fraction
+    };
+    assert_eq!(fraction(&game), 0.0);
+    for _ in 0..5 {
+        game.tick();
+    }
+    let f = fraction(&game);
+    assert!(f > 0.0 && f < 1.0, "{f}");
 }
 
 #[test]
@@ -933,6 +1067,30 @@ fn a_breakdown_is_priced_without_the_bench_bonus() {
         rows
     };
     assert_eq!(paid(None), paid(Some(6)), "a cell is not a bench's work");
+}
+
+/// A prisoner from a save that predates `Jailed::record` defers on a full
+/// output exactly as one with a record does: the record is rebuilt before the
+/// room check, so its worst case is priced rather than read as "fits".
+#[test]
+fn a_recordless_prisoner_waits_for_room_too() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    game.world.get_mut::<Jailed>(body).unwrap().record = None;
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+    }
+    game.world.get_mut::<Jailed>(body).unwrap().attempts = JAIL_MAX_ATTEMPTS - 1;
+
+    game.settle_jail_attempt(cell, body, false);
+
+    assert_eq!(game.cell_prisoner(cell), Some(body), "the prisoner waits");
+    assert_eq!(game.world.get::<Stock>(cell).unwrap().output_room(), 0);
+    assert!(
+        !game.cell_wants_a_warden(cell),
+        "the rebuilt record frees the warden"
+    );
 }
 
 #[test]

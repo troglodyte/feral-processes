@@ -321,8 +321,8 @@ impl NotificationKind {
             },
             NotificationKind::ProgramDecompiled => NotificationDef {
                 title: "Program Decompiled",
-                body: "{name} accepts its new parameters and joins your roster.\n\nA warden \
-                       kept at the Holding Cell until the decompile took.",
+                body: "{name} accepts its new parameters and joins your roster.\n\nIts warden \
+                       kept at it in the Holding Cell until the decompile took.",
                 sprite: None,
                 // The Holding Cell's own glyph and hue, `ResearchComplete`'s
                 // reason: the screen and the machine that did the work agree.

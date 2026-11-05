@@ -1212,6 +1212,18 @@ impl Game {
                 wanted.push((rig, TaskKind::GatherResource));
             }
         }
+        // **A Holding Cell staffs itself too**, at the rig's priority and for
+        // its reason: the prisoner is the instruction. No standing job can be
+        // set on a cell, so without this want nobody was ever posted and no
+        // decompile attempt ever ran. `cell_wants_a_warden` is the cell's
+        // `can_progress`: it lets the body go when a spent prisoner's
+        // breakdown has no room in the output. The `dark` filter below drops
+        // an unpowered cell.
+        for cell in self.holding_cells() {
+            if !wanted.iter().any(|&(e, _)| e == cell) && self.cell_wants_a_warden(cell) {
+                wanted.push((cell, TaskKind::GatherResource));
+            }
+        }
         // Dig jobs, appended after the standing jobs and therefore last of
         // all — **the priority is the position in this list**, since the
         // matching below fills wants in list order. A spare body
@@ -1625,11 +1637,17 @@ impl Game {
                     .get::<crate::components::Hopper>(target)
                     .is_some()
         });
+        // **And a body on a Holding Cell**, the same reason again: the cell's
+        // want vanishes when it empties or clogs.
+        let a_cell_holds_a_body = posted.iter().any(|&(target, kind)| {
+            kind == TaskKind::GatherResource && self.prison_pen(target).is_some()
+        });
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
             && !any_dig_marked
             && !a_burner_holds_a_body
-            && !a_rig_holds_a_body;
+            && !a_rig_holds_a_body
+            && !a_cell_holds_a_body;
         // **A body standing at a post it is no longer allowed to hold is
         // work to do**, even when the queue is empty and every want is
         // already covered. Without this term the pass returns above the free

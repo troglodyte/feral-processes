@@ -5,6 +5,7 @@ use crate::alerts::AlertKind;
 use crate::base_grid::BaseGrid;
 use crate::components::{BaseAiHost, Downed, MachineRecipe, ProgramId, Task};
 use crate::game::base::hauling::{self, Step, Touch};
+use crate::game::notify::NotifyArgs;
 use crate::storyline::{
     BaseAi, FusedAi, HostCandidate, StationSpot, StepInput, StepOutcome, Storyline, TrainingTarget,
     analysis_cap, pace, practise, step, training_cost, trigger_count,
@@ -543,15 +544,32 @@ impl Game {
         let name = self
             .program_entity(host)
             .map_or_else(|| "a program".to_string(), |e| self.creature_label(e));
-        self.notify_filled(
+        let subject = self
+            .program_entity(host)
+            .map(crate::notifications::NotificationSubject::Entity);
+        self.notify_with(
             crate::notifications::NotificationKind::BaseAiAwakening,
-            &[("name", &name)],
-            None,
+            NotifyArgs {
+                fills: &[("name", &name)],
+                subject,
+                ..Default::default()
+            },
         );
     }
 
+    /// The host is seated on the station by now, so marking it marks the
+    /// station.
     fn announce_fusion(&mut self) {
-        self.notify(crate::notifications::NotificationKind::BaseAiFused);
+        let subject = self
+            .base_ai_host()
+            .map(crate::notifications::NotificationSubject::Entity);
+        self.notify_with(
+            crate::notifications::NotificationKind::BaseAiFused,
+            NotifyArgs {
+                subject,
+                ..Default::default()
+            },
+        );
     }
 
     /// Marks `host`, drops what it was doing, and frees every program posted

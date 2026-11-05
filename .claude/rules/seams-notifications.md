@@ -42,7 +42,17 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `draw_popup`**, so height is a layout constraint measured against the
   *panel* through the renderer's own `block_height`
   (`the_tallest_shipped_notification_fits_its_screen`, verified by mutation)
-  and it belongs in `needs_status_banner` and `ALL_MODES`.
+  and it belongs in `needs_status_banner` and `ALL_MODES`. A notice whose
+  subject resolves on the viewed map docks to a second, narrower panel, and
+  every shipped notice is measured against that too
+  (`every_shipped_notification_fits_the_docked_panel`).
+- **A subject is resolved at show time through `Game::subject_position`**,
+  never stored as a position, and `None` means the centred panel.
+- **A milestone opt-out is `Profile::notifications_never`, separate from
+  the guidance "never"**, offered only where `NotificationKind::repeats`
+  (an exhaustive match), and it silences the screen alone.
+- **`BaseStaffDowned` is `DownedProgram`'s at-base twin**: it fires where a
+  staff member is left `Downed` at the base, never from `bench_or_dissolve`.
 - **`alerts::post` is the one door onto the alert board, a free function
   because `set_machine_status` has no `Game`, and collapse identity is kind
   plus subject.**

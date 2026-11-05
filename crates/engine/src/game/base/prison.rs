@@ -11,6 +11,7 @@ use crate::base_grid::BaseGrid;
 use crate::game::base::collect::ORTHOGONAL;
 use crate::game::base::study::pen_corner;
 use crate::game::extraction::extraction_band_with_bench;
+use crate::game::notify::NotifyArgs;
 use crate::game::spawning::SpawnPins;
 use crate::items::DownedProgram;
 use crate::resources::{GameRng, MessageKind, PowerGrid};
@@ -445,10 +446,13 @@ impl Game {
                 MessageKind::Outcome,
                 format!("{label} accepts its new parameters and joins your roster."),
             );
-            self.notify_filled(
+            self.notify_with(
                 crate::notifications::NotificationKind::ProgramDecompiled,
-                &[("name", &label)],
-                None,
+                NotifyArgs {
+                    fills: &[("name", &label)],
+                    subject: Some(crate::notifications::NotificationSubject::Entity(prisoner)),
+                    ..Default::default()
+                },
             );
             self.note_compiled();
             return;

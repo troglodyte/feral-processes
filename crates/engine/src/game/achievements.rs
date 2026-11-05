@@ -129,6 +129,8 @@ pub fn achievement_system(
             category: None,
             detail: None,
             ftue_key: None,
+            subject: None,
+            silence_key: None,
         });
         // `Outcome` rather than `Info` deliberately: a rung can be crossed
         // mid-fight, and `MessageLog::retain_outcomes_since_battle` prunes

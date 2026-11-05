@@ -5260,3 +5260,15 @@ fn the_light_seed_differs_across_depths_and_entrances() {
     first.enter_stack(pos.x, pos.y);
     assert_ne!(light_seed(&first), light_seed(&other));
 }
+
+/// A tile subject is on the displayed map only while the party is on the
+/// surface; underground the Stack draws no field to mark.
+#[test]
+fn a_tile_subject_has_no_position_underground() {
+    use crate::notifications::NotificationSubject;
+    let mut game = game();
+    let subject = NotificationSubject::Tile((3, 4));
+    assert_eq!(game.subject_position(&subject), Some((3, 4)));
+    descend(&mut game);
+    assert_eq!(game.subject_position(&subject), None);
+}

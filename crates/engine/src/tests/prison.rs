@@ -841,6 +841,23 @@ fn a_landed_decompile_joins_the_roster_and_is_a_deed() {
 }
 
 #[test]
+fn the_decompile_notice_points_at_the_prisoner_who_joined() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    while game.take_notification().is_some() {}
+
+    game.settle_jail_attempt(cell, body, true);
+
+    let note = game
+        .take_notification()
+        .expect("the decompile is announced");
+    assert_eq!(
+        note.subject,
+        Some(crate::notifications::NotificationSubject::Entity(body))
+    );
+    assert_eq!(note.silence_key, Some("milestone_program_decompiled"));
+}
+
+#[test]
 fn the_last_failure_breaks_the_prisoner_down_into_the_cells_output() {
     let (mut game, cell, body) = a_warded_cell(7301);
     let pets = game.pet_count();

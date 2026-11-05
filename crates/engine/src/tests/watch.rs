@@ -261,3 +261,28 @@ fn the_centred_views_are_centred_where_they_are_told() {
          arrived at"
     );
 }
+
+/// The marker and Watch share one position source: an entity subject
+/// resolves through `watch_position`, and a tile on the surface is its own
+/// position.
+#[test]
+fn a_subject_resolves_where_the_party_can_see_it() {
+    use crate::notifications::NotificationSubject;
+    let mut game = base(1);
+    let origin = game.field_pos().unwrap();
+    let staff = staffer(&mut game, 2, -1);
+    assert_eq!(
+        game.subject_position(&NotificationSubject::Entity(staff)),
+        game.watch_position(staff)
+    );
+    assert_eq!(
+        game.subject_position(&NotificationSubject::Tile((origin.0 + 5, origin.1))),
+        Some((origin.0 + 5, origin.1))
+    );
+    game.world.despawn(staff);
+    assert_eq!(
+        game.subject_position(&NotificationSubject::Entity(staff)),
+        None,
+        "a subject that died while the notice waited falls back"
+    );
+}

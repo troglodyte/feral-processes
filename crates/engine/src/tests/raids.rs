@@ -1937,6 +1937,28 @@ fn a_raid_defender_brought_to_zero_under_forgiving_is_benched() {
     );
 }
 
+/// The at-base twin of the alert-board "is down" entry: a staff member
+/// knocked out defending a machine gets a focused notice naming it.
+#[test]
+fn a_downed_defender_queues_a_staff_down_notice_naming_it() {
+    let (mut game, worker) = a_defender_raided_to_death(DifficultyMode::Forgiving);
+    let note = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.title == "Staff Down")
+        .expect("the knock-out is announced");
+    assert_eq!(
+        note.subject,
+        Some(crate::notifications::NotificationSubject::Entity(worker))
+    );
+    assert_eq!(note.silence_key, Some("milestone_base_staff_downed"));
+    assert!(note.body.starts_with(&game.creature_label(worker)));
+}
+
+#[test]
+fn a_destroyed_defender_leaves_no_body_to_mark_so_no_notice() {
+    let (mut game, _) = a_defender_raided_to_death(DifficultyMode::Permadeath);
+    assert!(!std::iter::from_fn(|| game.take_notification()).any(|n| n.title == "Staff Down"));
+}
+
 #[test]
 fn a_raid_defender_brought_to_zero_under_permadeath_is_destroyed() {
     let (game, worker) = a_defender_raided_to_death(DifficultyMode::Permadeath);
@@ -2899,6 +2921,13 @@ fn a_raid_hit_damages_steals_stock_and_benches_the_first_crew_member() {
         assert!(
             game.world.get::<Downed>(higher_id).is_none(),
             "the surviving crew member is untouched"
+        );
+        let note = std::iter::from_fn(|| game.take_notification())
+            .find(|n| n.title == "Outpost Raided")
+            .expect("a hit also takes the focused screen");
+        assert_eq!(
+            note.subject,
+            Some(crate::notifications::NotificationSubject::Tile(tile))
         );
         true
     });

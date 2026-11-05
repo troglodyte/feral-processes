@@ -78,6 +78,9 @@ pub(crate) fn draw_playing_base(
     // the party, or the party left base space".
     let watch = app.watch_center();
     let watching = app.watching;
+    // Likewise before the borrow, and likewise resolved per frame: where the
+    // open notice's subject is, if it has one on this map.
+    let notice_focus = app.notification_focus();
     // After `watch_center`, which is what releases a camera that stopped
     // answering: the bar reads `watching` as it stands.
     let map_keybar = app.map_keybar();
@@ -203,6 +206,7 @@ pub(crate) fn draw_playing_base(
     // rather than a click inheriting a layout from the screen the player
     // has since left.
     fx.set_map_click(None);
+    fx.set_notice_dock(crate::render::Dock::Centre);
     if let Some(view) = board {
         let washes = tactical::draw_tactical_map(
             &view,
@@ -268,6 +272,26 @@ pub(crate) fn draw_playing_base(
             m,
         );
     } else {
+        let base_centre = watch.unwrap_or(status.position);
+        let camera = match notice_focus {
+            Some(subject) => {
+                let pane = regions.map_pane;
+                let subject_px_x = pane.x
+                    + pane.w / 2.0
+                    + (subject.0 - base_centre.0) as f32 * tile_px
+                    + tile_px / 2.0;
+                let dock = crate::render::notify::dock_side(subject_px_x, pane);
+                fx.set_notice_dock(dock);
+                crate::render::notify::docked_camera_centre(
+                    subject,
+                    dock,
+                    painter.screen_w(),
+                    pane,
+                    tile_px,
+                )
+            }
+            None => base_centre,
+        };
         let entities = draw_surface_map(
             game,
             fx,
@@ -278,8 +302,10 @@ pub(crate) fn draw_playing_base(
             &status,
             plan,
             travel,
-            // The party's own cell unless the camera has been sent somewhere.
-            watch.unwrap_or(status.position),
+            // The party's own cell unless the camera has been sent somewhere,
+            // or a focused notice has docked its panel to one side and
+            // moved the subject into the half that leaves clear.
+            camera,
             reveal,
         );
         reach_circle::draw_reach_circles(fx, painter, &reach_circles, false);

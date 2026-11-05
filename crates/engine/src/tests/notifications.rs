@@ -215,6 +215,25 @@ fn founding_the_home_queues_its_tutorial_once() {
     );
 }
 
+/// "Your Base" points at the anchor it just settled on, and keeps its own
+/// D/T rather than the milestone opt-out.
+#[test]
+fn the_founding_tutorial_points_at_the_anchor() {
+    let mut game = fresh();
+    drain(&mut game);
+    place_home(&mut game);
+    let note = std::iter::from_fn(|| game.take_notification())
+        .find(|n| n.title == "Your Base")
+        .unwrap();
+    let anchor = game.field_pos().unwrap();
+    assert_eq!(
+        note.subject,
+        Some(crate::notifications::NotificationSubject::Tile(anchor))
+    );
+    assert_eq!(note.silence_key, None);
+    assert!(note.ftue_key.is_some());
+}
+
 /// An achievement's notification quotes the achievement's own prose. A
 /// second `.ron` file repeating it is the pattern this test exists to stop.
 #[test]
@@ -276,6 +295,14 @@ fn every_notification_kind_is_fired_by_a_named_site() {
             NotificationKind::BaseAiAwakening => "Game::announce_awakening",
             NotificationKind::BaseAiFused => "Game::announce_fusion",
             NotificationKind::BaseAiLevelUp => "Game::base_ai_level_up",
+            NotificationKind::BaseStaffDowned => {
+                "Game::notify_base_staff_downed, from run_raid and the siege-board reap"
+            }
+            NotificationKind::OutpostTierReached => "Game::tick_one_outpost, a rise in tier",
+            NotificationKind::OutpostStale => "Game::announce_outpost_trend",
+            NotificationKind::OutpostDeclining => "Game::announce_outpost_trend",
+            NotificationKind::OutpostRaided => "Game::raid_one_outpost",
+            NotificationKind::OutpostDark => "Game::raid_one_outpost, integrity at zero",
         }
     }
 
@@ -690,4 +717,70 @@ fn stock_that_satisfies_a_work_order_is_not_a_craft() {
         .insert(ItemId::from(ids::CORE_FRAGMENT), 5);
     game.tick();
     assert!(!game.ftue_shown(&format!("crafted:{}", ids::CORE_FRAGMENT)));
+}
+
+/// "Don't show again" files a repeating kind under the profile and stops the
+/// door queueing it; a different kind still queues.
+#[test]
+fn a_silenced_kind_does_not_queue() {
+    let mut game = fresh();
+    drain(&mut game);
+    assert!(game.notify(NotificationKind::BaseAiLevelUp));
+    let note = game.take_notification().unwrap();
+    assert_eq!(note.silence_key, Some("storyline_base_ai_level_up"));
+
+    game.silence_notification(note.silence_key.unwrap());
+    assert!(!game.notify(NotificationKind::BaseAiLevelUp));
+    assert_eq!(game.notifications_pending(), 0);
+    assert!(
+        game.notify(NotificationKind::Breach),
+        "other kinds still queue"
+    );
+    assert!(game.take_pending_profile_writes(), "the opt-out is flushed");
+    assert_eq!(game.profile().notifications_never.len(), 1);
+    game.silence_notification("storyline_base_ai_level_up");
+    assert_eq!(game.profile().notifications_never.len(), 1, "no duplicates");
+}
+
+/// D reaches notices of that kind already waiting, not just the next ones.
+#[test]
+fn silencing_a_kind_drops_its_queued_notices_too() {
+    let mut game = fresh();
+    drain(&mut game);
+    assert!(game.notify(NotificationKind::BaseAiLevelUp));
+    assert!(game.notify(NotificationKind::BaseAiLevelUp));
+    assert!(game.notify(NotificationKind::Breach));
+    game.silence_notification("storyline_base_ai_level_up");
+    assert_eq!(game.notifications_pending(), 1);
+    assert_eq!(
+        game.take_notification().unwrap().title,
+        NotificationKind::Breach.def().title
+    );
+}
+
+#[test]
+fn a_once_a_run_kind_carries_no_silence_key() {
+    let mut game = fresh();
+    drain(&mut game);
+    assert!(game.notify(NotificationKind::BaseAiFused));
+    assert_eq!(game.take_notification().unwrap().silence_key, None);
+}
+
+/// The queue is not saved, but the opt-out is the profile's, and a skipped
+/// field is invisible to an in-memory clone: this goes through the file.
+#[test]
+fn the_notification_opt_out_survives_a_profile_save_and_load() {
+    let mut game = fresh();
+    game.silence_notification("milestone_breach");
+    let dir = scratch_assets_dir("notification_opt_out");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("profile.ron");
+    game.profile().save(&path).unwrap();
+
+    let (loaded, warning) = Profile::load(&path);
+    assert_eq!(warning, None);
+    assert_eq!(loaded.notifications_never, vec!["milestone_breach"]);
+    let mut next = fresh();
+    next.install_profile(loaded);
+    assert!(!next.notify(NotificationKind::Breach));
 }

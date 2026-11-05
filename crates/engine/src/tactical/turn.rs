@@ -2491,6 +2491,7 @@ impl Game {
                     .entity_mut(body)
                     .remove::<crate::components::Task>();
                 self.bench_or_dissolve(body);
+                self.notify_base_staff_downed(body, &label);
             }
         }
         self.settle_tactical(wild);

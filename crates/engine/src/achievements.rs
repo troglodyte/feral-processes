@@ -216,6 +216,13 @@ pub struct Profile {
     /// authoritative during a run (not in `keep_settings_from`).
     #[serde(default)]
     pub ftue: crate::ftue::FtueGuidance,
+    /// Slugs of repeating `NotificationKind`s the player chose not to see
+    /// again. Strings for `ftue`'s reason: a retired kind is inert rather
+    /// than a parse failure that would cost the whole profile. Not in
+    /// `keep_settings_from`, `ftue`'s rule: the engine's copy is authoritative
+    /// during a run (`Game::silence_notification`).
+    #[serde(default)]
+    pub notifications_never: Vec<String>,
     /// The last map avatar the player drew, cross-run — see
     /// `components::PlayerIdentity::icon`.
     ///

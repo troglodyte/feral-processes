@@ -34,6 +34,7 @@ pub(super) fn a_founded_outpost() -> Outpost {
         stale_ticks: 5,
         cycle_progress: 11,
         announced: None,
+        announced_tier: None,
     }
 }
 

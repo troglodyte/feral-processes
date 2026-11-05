@@ -148,6 +148,10 @@ pub struct Outpost {
     /// since trend reads crew count), which is what keeps a reload from
     /// posting again.
     pub announced: Option<Trend>,
+    /// The highest tier a notice has been fired for, `announced`'s rule: not
+    /// saved, re-seeded on load, and `None` until the first tick or reseed so
+    /// founding never fires one.
+    pub announced_tier: Option<u32>,
 }
 
 impl Outpost {
@@ -161,6 +165,7 @@ impl Outpost {
             stale_ticks: 0,
             cycle_progress: 0,
             announced: None,
+            announced_tier: None,
         }
     }
 }
@@ -209,6 +214,53 @@ impl Trend {
             Trend::Growing => format!("Growing (+ with {crew} crew)"),
         }
     }
+}
+
+/// The body of an `OutpostStale` / `OutpostDeclining` notice and its alert:
+/// one function so the two cannot word it differently.
+pub fn trend_notice_text(tile: (i32, i32), reason: &str) -> String {
+    format!("Outpost at ({}, {}): {reason}", tile.0, tile.1)
+}
+
+/// The line a landed outpost raid logs, posts and shows; `downed` names the
+/// crew member it benched, if any.
+pub fn raid_line(downed: Option<&str>) -> String {
+    match downed {
+        Some(name) => format!("Raiders hit the outpost, downing {name}."),
+        None => "Raiders hit the outpost.".to_string(),
+    }
+}
+
+/// The line when a raid takes integrity to zero.
+pub const DARK_LINE: &str = "The outpost has gone dark and needs repair.";
+
+/// The widest text each `{text}` outpost notice can carry, for a layout
+/// census to measure: every site's own formatting, called with the longest
+/// reason it can produce, a wide coordinate and a `program` name.
+pub fn widest_notice_texts(program: &str) -> Vec<(crate::notifications::NotificationKind, String)> {
+    use crate::notifications::NotificationKind as K;
+    let tile = (-1234, -1234);
+    let widest = |reasons: Vec<String>| {
+        reasons
+            .into_iter()
+            .map(|r| trend_notice_text(tile, &r))
+            .max_by_key(|t| t.chars().count())
+            .expect("a trend always has a reason")
+    };
+    let healthy = Outpost::new(Biome::DataVoid, OUTPOST_MAX_INTEGRITY);
+    let damaged = Outpost::new(Biome::DataVoid, 0);
+    let declining = (0..=OUTPOST_TIER_CREW.len())
+        .flat_map(|crew| [&healthy, &damaged].map(|o| Trend::Declining.reason(o, crew, 0)))
+        .collect();
+    vec![
+        (
+            K::OutpostStale,
+            widest(vec![Trend::Stale.reason(&healthy, 0, 0)]),
+        ),
+        (K::OutpostDeclining, widest(declining)),
+        (K::OutpostRaided, raid_line(Some(program))),
+        (K::OutpostDark, DARK_LINE.to_string()),
+    ]
 }
 
 /// The highest tier this outpost's stored `growth` **and** its current

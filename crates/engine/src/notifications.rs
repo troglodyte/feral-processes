@@ -22,6 +22,7 @@
 //! nothing fires — was paid to make seven strings editable.
 
 use crate::components::GlyphColor;
+use bevy_ecs::entity::Entity;
 
 /// Every milestone notification the game can raise: news about a moment,
 /// fired every time its site is reached.
@@ -135,6 +136,27 @@ pub enum NotificationKind {
     /// The base AI gained a level — `Game::base_ai_level_up`. Templated with
     /// the new `{level}`.
     BaseAiLevelUp,
+    /// A base staff member is knocked out at the base —
+    /// `Game::notify_base_staff_downed`, from `Game::run_raid`'s defender and
+    /// the siege board's staff reap, the two paths that down staff on the
+    /// base map (a brawl's blows are clamped short of zero).
+    /// Templated with the program's `{name}`. The at-base twin of the
+    /// alert-board `ProgramDowned`: a down in a battle, a sortie or an
+    /// off-screen siege has no body on the map to mark and stays off this.
+    BaseStaffDowned,
+    /// An outpost has grown a tier — `Game::tick_one_outpost`, on a rise
+    /// above `Outpost::announced_tier`. Templated with `{x}`, `{y}` and the
+    /// tier's `{label}`.
+    OutpostTierReached,
+    /// An outpost's stock is full and it has stopped growing —
+    /// `Game::announce_outpost_trend`. `{text}` is the alert board's own line.
+    OutpostStale,
+    /// An outpost is losing ground — `Game::announce_outpost_trend`.
+    OutpostDeclining,
+    /// Raiders hit an outpost — `Game::raid_one_outpost`. `{text}` is the log line.
+    OutpostRaided,
+    /// An outpost has gone dark — `Game::raid_one_outpost`. `{text}` is the log line.
+    OutpostDark,
 }
 
 /// A heading drawn above a notification's title, naming a thread of news
@@ -183,7 +205,7 @@ impl NotificationKind {
     /// scroll to forgive. `Perk::all`'s shape and its reason: a walk over
     /// the whole enum is what makes a census non-vacuous, and the array
     /// length fails to compile when a variant is added without being listed.
-    pub fn all() -> [NotificationKind; 14] {
+    pub fn all() -> [NotificationKind; 20] {
         [
             NotificationKind::Breach,
             NotificationKind::SweepsBegin,
@@ -199,6 +221,12 @@ impl NotificationKind {
             NotificationKind::BaseAiAwakening,
             NotificationKind::BaseAiFused,
             NotificationKind::BaseAiLevelUp,
+            NotificationKind::BaseStaffDowned,
+            NotificationKind::OutpostTierReached,
+            NotificationKind::OutpostStale,
+            NotificationKind::OutpostDeclining,
+            NotificationKind::OutpostRaided,
+            NotificationKind::OutpostDark,
         ]
     }
 
@@ -359,6 +387,83 @@ impl NotificationKind {
                 color: GlyphColor::Magenta,
                 category: Some(NotificationCategory::Storyline),
             },
+            NotificationKind::BaseStaffDowned => NotificationDef {
+                title: "Staff Down",
+                body: "{name} was knocked out at the base and is out of action. A downed program needs a Repair Bay to get back on its feet.",
+                sprite: None,
+                glyph: '!',
+                color: GlyphColor::Red,
+                category: None,
+            },
+            NotificationKind::OutpostTierReached => NotificationDef {
+                title: "Outpost Grown",
+                body: "Your outpost at ({x}, {y}) has grown into a {label} outpost, and its crew can work richer yields.",
+                sprite: None,
+                glyph: '^',
+                color: GlyphColor::Green,
+                category: None,
+            },
+            NotificationKind::OutpostStale => NotificationDef {
+                title: "Outpost Full",
+                body: "{text}",
+                sprite: None,
+                glyph: '!',
+                color: GlyphColor::Yellow,
+                category: None,
+            },
+            NotificationKind::OutpostDeclining => NotificationDef {
+                title: "Outpost Declining",
+                body: "{text}",
+                sprite: None,
+                glyph: '!',
+                color: GlyphColor::Orange,
+                category: None,
+            },
+            NotificationKind::OutpostRaided => NotificationDef {
+                title: "Outpost Raided",
+                body: "{text}",
+                sprite: None,
+                glyph: '!',
+                color: GlyphColor::Red,
+                category: None,
+            },
+            NotificationKind::OutpostDark => NotificationDef {
+                title: "Outpost Dark",
+                body: "{text}",
+                sprite: None,
+                glyph: '!',
+                color: GlyphColor::Red,
+                category: None,
+            },
+        }
+    }
+
+    /// Whether this kind can fire more than once in a run, and so offers
+    /// "don't show again". **Exhaustive by construction**, `def`'s reason: a
+    /// new kind must be classified before it compiles, where a default of
+    /// `true` would offer [D] on a once-only story beat.
+    pub fn repeats(self) -> bool {
+        match self {
+            NotificationKind::BaseAiAwakening
+            | NotificationKind::BaseAiFused
+            | NotificationKind::SweepsBegin => false,
+            NotificationKind::Breach
+            | NotificationKind::ContractClosed
+            | NotificationKind::OnboardingComplete
+            | NotificationKind::OnboardingMission
+            | NotificationKind::SettlementGrown
+            | NotificationKind::LevelCapReached
+            | NotificationKind::ResearchComplete
+            | NotificationKind::ResearchDiscovered
+            | NotificationKind::PhaseKeyFound
+            | NotificationKind::ProgramDecompiled
+            | NotificationKind::BaseAiLevelUp
+            | NotificationKind::BaseStaffDowned
+            | NotificationKind::OutpostTierReached
+            | NotificationKind::OutpostStale
+            | NotificationKind::OutpostDeclining
+            | NotificationKind::OutpostRaided
+            | NotificationKind::OutpostDark => true,
         }
     }
 
@@ -379,6 +484,12 @@ impl NotificationKind {
             NotificationKind::BaseAiAwakening => "storyline_base_ai_awakening",
             NotificationKind::BaseAiFused => "storyline_base_ai_fused",
             NotificationKind::BaseAiLevelUp => "storyline_base_ai_level_up",
+            NotificationKind::BaseStaffDowned => "milestone_base_staff_downed",
+            NotificationKind::OutpostTierReached => "milestone_outpost_tier",
+            NotificationKind::OutpostStale => "milestone_outpost_stale",
+            NotificationKind::OutpostDeclining => "milestone_outpost_declining",
+            NotificationKind::OutpostRaided => "milestone_outpost_raided",
+            NotificationKind::OutpostDark => "milestone_outpost_dark",
         }
     }
 }
@@ -417,6 +528,25 @@ pub struct Notification {
     /// The FTUE key this popup was raised for, so app-core knows to offer
     /// "don't show again". `None` for every milestone.
     pub ftue_key: Option<String>,
+    /// What on the map this notice is about, named when it is queued and
+    /// **resolved when it is drawn** (`Game::subject_position`): the queue
+    /// waits on the player, and a program can move or die in the meantime.
+    pub subject: Option<NotificationSubject>,
+    /// The kind's slug, `Some` only when the kind can fire more than once in
+    /// a run (`NotificationKind::repeats`) — what "don't show again" files
+    /// under in `Profile::notifications_never`. `None` offers no [D].
+    pub silence_key: Option<&'static str>,
+}
+
+/// The thing on the map a notice points at.
+///
+/// Plain data, so the frontend never touches the `World`: an entity is turned
+/// into a position by `Game::subject_position`, the same source `Watch` uses.
+/// A tile is for things that are not entities — an outpost, the base anchor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotificationSubject {
+    Entity(Entity),
+    Tile((i32, i32)),
 }
 
 impl From<NotificationDef> for Notification {
@@ -430,6 +560,8 @@ impl From<NotificationDef> for Notification {
             category: def.category,
             detail: None,
             ftue_key: None,
+            subject: None,
+            silence_key: None,
         }
     }
 }
@@ -495,6 +627,18 @@ mod tests {
             assert_eq!(kind.def().category, want, "{kind}");
         }
         assert_eq!(NotificationCategory::Storyline.label(), "Storyline");
+    }
+
+    #[test]
+    fn a_repeating_kind_is_silenceable_and_a_one_off_is_not() {
+        let once: Vec<_> = NotificationKind::all()
+            .into_iter()
+            .filter(|k| !k.repeats())
+            .collect();
+        assert!(once.contains(&NotificationKind::BaseAiAwakening));
+        assert!(once.contains(&NotificationKind::BaseAiFused));
+        assert!(once.contains(&NotificationKind::SweepsBegin));
+        assert!(NotificationKind::BaseAiLevelUp.repeats());
     }
 
     #[test]

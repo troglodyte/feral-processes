@@ -1,6 +1,7 @@
 //! Starting, saving, loading and ending a session.
 
 use crate::*;
+use feral_processes_engine::notifications::NotificationSubject;
 
 impl App {
     /// Where the game's content tree was resolved to, for a frontend that
@@ -554,30 +555,19 @@ impl App {
     /// waiting a tick for `after_tick`, a tick that does not come until the
     /// player acts.
     pub(crate) fn handle_notification_key(&mut self, key: GameKey) {
-        let opt_out = match key {
-            GameKey::Esc | GameKey::Enter => false,
-            GameKey::Char(c) if matches!(c.to_ascii_lowercase(), 'd' | 't') => true,
-            _ => return,
-        };
-        if opt_out {
-            // Only a guidance popup carries a key; D and T on a milestone
-            // notice are no keys at all, like any other that is not Esc or
-            // Enter.
-            let ftue_key = self
-                .pending_notification
-                .as_ref()
-                .and_then(|n| n.ftue_key.clone());
-            let (Some(game), Some(ftue_key)) = (self.game.as_mut(), ftue_key) else {
-                return;
-            };
-            if matches!(key, GameKey::Char('d' | 'D')) {
-                game.ftue_never(&ftue_key);
-            } else {
-                game.set_guidance(false);
+        match key {
+            GameKey::Esc | GameKey::Enter => {}
+            GameKey::Char(c) if c.eq_ignore_ascii_case(&'w') => {
+                if !self.watch_notification_subject() {
+                    return;
+                }
             }
-            // Now rather than at the next tick: nothing about dismissing a
-            // popup is guaranteed to reach `after_tick`.
-            self.flush_profile_writes();
+            GameKey::Char(c) if matches!(c.to_ascii_lowercase(), 'd' | 't') => {
+                if !self.opt_out_of_notification(c.eq_ignore_ascii_case(&'d')) {
+                    return;
+                }
+            }
+            _ => return,
         }
         self.pending_notification = None;
         self.mode = Mode::Playing;
@@ -586,6 +576,74 @@ impl App {
             self.pending_notification = Some(next);
             self.mode = Mode::Notification;
         }
+    }
+
+    /// Where the map's camera should centre while a notice with a subject is
+    /// up, or `None` for the ordinary centred panel. Resolved every call,
+    /// `watch_center`'s way: the queue waits on the player, and a program can
+    /// move or vanish meanwhile.
+    pub fn notification_focus(&self) -> Option<(i32, i32)> {
+        let subject = self.pending_notification.as_ref()?.subject.as_ref()?;
+        self.game.as_ref()?.subject_position(subject)
+    }
+
+    /// The program `W` would follow, if the open notice names one the engine
+    /// can place — the same gate the manifest's `W` uses. The one definition
+    /// both the key and the hint line ask, so the hint offers `W` exactly
+    /// when the key does something.
+    fn notification_watch_target(&self) -> Option<Entity> {
+        let NotificationSubject::Entity(entity) =
+            *self.pending_notification.as_ref()?.subject.as_ref()?
+        else {
+            return None;
+        };
+        self.game.as_ref()?.watch_position(entity)?;
+        Some(entity)
+    }
+
+    /// Whether the open notice offers `[W] Watch`.
+    pub fn notification_watchable(&self) -> bool {
+        self.notification_watch_target().is_some()
+    }
+
+    /// `W` on a notice: follow its program once the notice closes. Inert,
+    /// `false`, when `notification_watch_target` has nothing.
+    fn watch_notification_subject(&mut self) -> bool {
+        let Some(entity) = self.notification_watch_target() else {
+            return false;
+        };
+        self.watching = Some(entity);
+        true
+    }
+
+    /// `D` ("don't show again") or `T` (guidance off) on a notice. `false`
+    /// when the notice offers neither. A guidance popup's own key goes first
+    /// and unchanged; a repeating milestone's `silence_key` is the second
+    /// route, `D` only.
+    fn opt_out_of_notification(&mut self, is_d: bool) -> bool {
+        let Some(note) = self.pending_notification.as_ref() else {
+            return false;
+        };
+        let ftue_key = note.ftue_key.clone();
+        let silence_key = note.silence_key;
+        let Some(game) = self.game.as_mut() else {
+            return false;
+        };
+        if let Some(ftue_key) = ftue_key {
+            if is_d {
+                game.ftue_never(&ftue_key);
+            } else {
+                game.set_guidance(false);
+            }
+        } else if let (true, Some(slug)) = (is_d, silence_key) {
+            game.silence_notification(slug);
+        } else {
+            return false;
+        }
+        // Now rather than at the next tick: nothing about dismissing a
+        // popup is guaranteed to reach `after_tick`.
+        self.flush_profile_writes();
+        true
     }
 
     /// The one door a `Game` becomes the live run through — a new game, a

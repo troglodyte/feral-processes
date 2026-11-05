@@ -1117,6 +1117,48 @@ mod rereview_findings {
         );
     }
 
+    /// Staff knocked out on the board are left `Downed` on the base map, so
+    /// they get the at-base notice a raid defender gets.
+    fn staff_dies_on_the_board(mode: DifficultyMode) -> (Game, bevy_ecs::entity::Entity) {
+        let mut game = Game::new(210_008, mode, &test_assets_dir()).unwrap();
+        place_home(&mut game);
+        let staff = spawn_tamed(&mut game, 10, 3);
+        {
+            let mut pos = game.world.get_mut::<Position>(staff).unwrap();
+            pos.x = 2;
+            pos.y = 0;
+        }
+        stand_in_base_at(&mut game, 3, 0);
+        set_zone(&mut game, 2);
+        assert!(game.open_siege());
+        game.world.get_mut::<Stats>(staff).unwrap().hp = 0;
+        let player = game.player_entity();
+        game.world
+            .resource_mut::<TacticalBattle>()
+            .set_initiative(vec![player]);
+        game.tactical_end_turn();
+        (game, staff)
+    }
+
+    #[test]
+    fn staff_downed_on_the_siege_board_get_a_staff_down_notice() {
+        let (mut game, staff) = staff_dies_on_the_board(DifficultyMode::Forgiving);
+        assert!(game.world.get::<crate::components::Downed>(staff).is_some());
+        let note = std::iter::from_fn(|| game.take_notification())
+            .find(|n| n.title == "Staff Down")
+            .expect("the knock-out is announced");
+        assert_eq!(
+            note.subject,
+            Some(crate::notifications::NotificationSubject::Entity(staff))
+        );
+    }
+
+    #[test]
+    fn a_staff_body_lost_on_the_board_under_permadeath_has_no_notice() {
+        let (mut game, _) = staff_dies_on_the_board(DifficultyMode::Permadeath);
+        assert!(!std::iter::from_fn(|| game.take_notification()).any(|n| n.title == "Staff Down"));
+    }
+
     #[test]
     fn a_jailed_prisoner_is_not_seated_on_the_siege_board() {
         let mut game = Game::new(210_007, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();

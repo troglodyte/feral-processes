@@ -331,6 +331,31 @@ mod in_a_game {
         );
     }
 
+    /// The awakening and the fusion both point at the host, so the player
+    /// sees the program the notice is about and can follow it.
+    #[test]
+    fn the_awakening_and_the_fusion_name_the_host_as_their_subject() {
+        use crate::notifications::NotificationSubject;
+        let mut f = fixture();
+        while f.game.take_notification().is_some() {}
+        set_researched(&mut f.game, 25);
+        tick_until(&mut f.game, 400, is_fused);
+        let notes: Vec<_> = std::iter::from_fn(|| f.game.take_notification()).collect();
+        let host = f.staff[1];
+        for title in ["Something Is Wrong", "It Has Fused"] {
+            let note = notes
+                .iter()
+                .find(|n| n.title == title)
+                .unwrap_or_else(|| panic!("{title} was not queued"));
+            assert_eq!(
+                note.subject,
+                Some(NotificationSubject::Entity(host)),
+                "{title}"
+            );
+            assert_eq!(note.silence_key, None, "{title} fires once a run");
+        }
+    }
+
     #[test]
     fn a_held_storyline_stays_dormant_past_the_trigger() {
         let mut f = fixture();

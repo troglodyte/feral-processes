@@ -1474,6 +1474,12 @@ impl Notifications {
         self.pending.pop_front()
     }
 
+    /// Drops every queued notice filed under `slug` — "don't show again"
+    /// reaches the ones already waiting, not only the next queue-in.
+    pub fn retain_unsilenced(&mut self, slug: &str) {
+        self.pending.retain(|n| n.silence_key != Some(slug));
+    }
+
     pub fn len(&self) -> usize {
         self.pending.len()
     }

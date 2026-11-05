@@ -341,6 +341,7 @@ impl Game {
                         stale_ticks: o.stale_ticks,
                         cycle_progress: o.cycle_progress,
                         announced: None,
+                        announced_tier: None,
                     },
                 )
             })

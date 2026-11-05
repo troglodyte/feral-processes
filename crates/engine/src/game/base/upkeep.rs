@@ -5,6 +5,8 @@ use crate::alerts::AlertKind;
 use crate::components::{Downed, MemorySubject};
 use crate::game::base::breeding_visit::CancelReason;
 use crate::game::base::defences::patch_mend;
+use crate::game::notify::NotifyArgs;
+use crate::notifications::{NotificationKind, NotificationSubject};
 use crate::resources::Outposts;
 use crate::species::AffinityClass;
 use crate::tuning::{
@@ -638,14 +640,17 @@ impl Game {
         };
         // The first by `ProgramId` — `outpost_crew`'s own sort, deterministic
         // and spending no extra `GameRng` draw.
-        let line = match crew.first() {
-            Some(&member) => {
-                let name = self.bench_or_dissolve(member);
-                format!("Raiders hit the outpost, downing {name}.")
-            }
-            None => "Raiders hit the outpost.".to_string(),
-        };
+        let downed = crew.first().map(|&member| self.bench_or_dissolve(member));
+        let line = crate::outposts::raid_line(downed.as_deref());
         self.log_base_kind(MessageKind::Raid, line.clone());
+        self.notify_with(
+            NotificationKind::OutpostRaided,
+            NotifyArgs {
+                fills: &[("text", &line)],
+                subject: Some(NotificationSubject::Tile(tile)),
+                ..Default::default()
+            },
+        );
         self.post_alert(AlertKind::OutpostRaided, subject.clone(), line);
         if dark {
             // Every remaining crew member is recalled — `bench_or_dissolve`
@@ -653,8 +658,16 @@ impl Game {
             for member in self.outpost_crew(tile) {
                 let _ = self.recall_from_outpost(member);
             }
-            let text = "The outpost has gone dark and needs repair.".to_string();
+            let text = crate::outposts::DARK_LINE.to_string();
             self.log_base_kind(MessageKind::Raid, text.clone());
+            self.notify_with(
+                NotificationKind::OutpostDark,
+                NotifyArgs {
+                    fills: &[("text", &text)],
+                    subject: Some(NotificationSubject::Tile(tile)),
+                    ..Default::default()
+                },
+            );
             self.post_alert(AlertKind::OutpostDark, subject, text);
         }
     }
@@ -907,8 +920,27 @@ impl Game {
             // the Extractor" directly beneath it.
             self.world.entity_mut(worker).remove::<Task>();
             self.bench_or_dissolve(worker);
+            self.notify_base_staff_downed(worker, &worker_label);
         }
         true
+    }
+
+    /// The at-base "Staff Down" notice, for a staff body just run through
+    /// `bench_or_dissolve`. Only a benched body is left to mark; Permadeath
+    /// despawned it. Fired by the two at-base reaps (`run_raid`'s defender and
+    /// the siege board's), never from `bench_or_dissolve` itself, which a
+    /// battle, a sortie or an off-screen siege also go through.
+    pub(crate) fn notify_base_staff_downed(&mut self, staff: Entity, label: &str) {
+        if self.world.get::<Downed>(staff).is_some() {
+            self.notify_with(
+                NotificationKind::BaseStaffDowned,
+                NotifyArgs {
+                    fills: &[("name", label)],
+                    subject: Some(NotificationSubject::Entity(staff)),
+                    ..Default::default()
+                },
+            );
+        }
     }
 
     /// Everything a town raid *is*, once it has been decided one happens.

@@ -213,7 +213,6 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
         sorted,
         vec![
             "assembler".to_string(),
-            "breeding_bay".to_string(),
             "contract_broker".to_string(),
             "data_cache".to_string(),
             "defrag_bay".to_string(),
@@ -239,6 +238,19 @@ fn a_structure_named_by_no_research_file_is_buildable_from_the_start() {
         ],
         "exactly the structures named by no research file start available"
     );
+}
+
+#[test]
+fn the_breeding_bay_is_buildable_only_once_bloodlines_is_researched() {
+    let mut game = Game::new(72, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let buildable = |game: &Game| {
+        game.buildable_structure_defs()
+            .into_iter()
+            .any(|d| d.id == "breeding_bay")
+    };
+    assert!(!buildable(&game));
+    unlock_research_chain(&mut game, "bloodlines");
+    assert!(buildable(&game));
 }
 
 #[test]

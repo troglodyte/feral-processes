@@ -107,6 +107,9 @@ impl Game {
             .notifications_never
             .push(slug.to_string());
         self.world.resource_mut::<PendingProfileWrites>().ftue = true;
+        self.world
+            .resource_mut::<Notifications>()
+            .retain_unsilenced(slug);
     }
 
     /// Where a notice's subject is on the map the player is viewing, or

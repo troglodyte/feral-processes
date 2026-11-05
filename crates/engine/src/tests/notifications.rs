@@ -742,6 +742,22 @@ fn a_silenced_kind_does_not_queue() {
     assert_eq!(game.profile().notifications_never.len(), 1, "no duplicates");
 }
 
+/// D reaches notices of that kind already waiting, not just the next ones.
+#[test]
+fn silencing_a_kind_drops_its_queued_notices_too() {
+    let mut game = fresh();
+    drain(&mut game);
+    assert!(game.notify(NotificationKind::BaseAiLevelUp));
+    assert!(game.notify(NotificationKind::BaseAiLevelUp));
+    assert!(game.notify(NotificationKind::Breach));
+    game.silence_notification("storyline_base_ai_level_up");
+    assert_eq!(game.notifications_pending(), 1);
+    assert_eq!(
+        game.take_notification().unwrap().title,
+        NotificationKind::Breach.def().title
+    );
+}
+
 #[test]
 fn a_once_a_run_kind_carries_no_silence_key() {
     let mut game = fresh();

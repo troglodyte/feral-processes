@@ -139,10 +139,15 @@ These would make the feature a failure even if it technically works:
   for `remove_structure`'s "a program is incubating" refusal. Demolishing the
   bay mid-visit cancels the visit through the refund path above. A destroyed
   bay works the same way.
-- **The child matches the confirm-time preview.** At confirm, store what the
-  child roll needs in the visit state: both parents' species, rolls and
-  generation. Draw the child from that snapshot at the end of the visit. The
-  snapshot is saved with the visit.
+- **The child matches the confirm-time preview.** The child is rolled at
+  confirm, the same as today, and stored in the reserved slot as a pending
+  `Incubation` that does not tick until the visit ends.
+  - **Amended at planning:** this replaces an earlier idea of storing a
+    snapshot of both parents and rolling the child at the end of the visit.
+    Rolling at confirm keeps the RNG draw order unchanged and needs no
+    snapshot.
+  - The child still only exists once the visit finishes: a cancelled visit
+    discards the pending record.
 - **Visiting refuses double-booking.** A parent already on a visit refuses
   with its own reason, such as "already with the bay", and cannot be picked
   for a second pairing.
@@ -190,11 +195,9 @@ Not in scope: the "Any key back" hint on every structure's Info page in the
     should not be, because old saves have no visits.
   - Add a save→load test, not only a RON round trip (see memory
     `ron-round-trip-cannot-catch-a-skipped-field`).
-- The RNG draw order inside `breed` moves. The child's species and roll draws
-  now happen at the end of the visit, not on confirm. Draws must still not
-  depend on query order: sort by a stable id. Then check
-  `cargo test -p feral-processes-engine balance_sim` and the breeding tests.
-  The breeding tests may need their expectations re-derived.
+- The RNG draw order inside `breed` is unchanged: the child is still rolled at
+  confirm (see the amendment above). Any per-tick loop over visits sorts by a
+  stable id.
 - Existing tests to update:
   - `crates/engine/src/tests/research/gating.rs:201-216` asserts the bay is
     buildable on a fresh game. Flip it to assert the gate.

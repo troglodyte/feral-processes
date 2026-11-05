@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.44
+
+**The base AI now stands on its Research Station instead of the tile beside it.** Once it fuses, the AI's glyph sits inside the station's outline. A save where the AI already fused beside the station moves it onto the station when the save loads. Saves load unchanged.
+
 ## 0.21.43
 
 **A timed field routine, such as Regen or Recharge, can now rerun itself when its buff runs out: press A on the routine list to turn auto-recast on, and the row shows `[auto]`.** The rerun costs the same Power as running it by hand, happens once for a whole-party routine, and also fires during a battle. If the target has left the party the buff fades and auto-recast stays on; if the holder is short of Power, the buff fades and auto-recast turns itself off. A program that is knocked out doesn't rerun anything.

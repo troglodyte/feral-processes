@@ -435,6 +435,31 @@ mod in_a_game {
         assert!(!f.game.base_staff().contains(&host));
     }
 
+    fn anchor_of(game: &Game, e: Entity) -> Position {
+        *game.world.get::<Position>(e).unwrap()
+    }
+
+    #[test]
+    fn the_fused_host_stands_on_its_station() {
+        let (f, host) = fused_fixture();
+        assert_eq!(anchor_of(&f.game, host), anchor_of(&f.game, f.station));
+    }
+
+    #[test]
+    fn a_save_with_the_host_beside_its_station_loads_it_onto_the_station() {
+        let (mut f, host) = fused_fixture();
+        let beside = anchor_of(&f.game, f.station);
+        *f.game.world.get_mut::<Position>(host).unwrap() = Position {
+            x: beside.x - 1,
+            ..beside
+        };
+        let id = program_id(&f.game, host);
+        let loaded = round_trip(&mut f.game, "host_beside");
+        let host = loaded.program_entity(id).unwrap();
+        let station = loaded.base_ai_station().unwrap();
+        assert_eq!(anchor_of(&loaded, host), anchor_of(&loaded, station));
+    }
+
     #[test]
     fn a_host_downed_mid_walk_abandons_and_the_next_claim_does_not_re_announce() {
         let mut f = fixture();

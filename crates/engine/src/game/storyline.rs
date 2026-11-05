@@ -33,10 +33,31 @@ impl Game {
     }
 
     /// Re-marks the host after a load: only the arc is saved, the marker
-    /// is derived from it.
+    /// is derived from it. A save written while a fused host stood beside
+    /// its station is seated here too.
     pub(crate) fn restore_base_ai_host(&mut self) {
         if let Some(host) = self.base_ai_host() {
             self.world.entity_mut(host).insert(BaseAiHost);
+        }
+        self.seat_fused_host();
+    }
+
+    /// Puts a fused host on its station's anchor tile. The anchor already
+    /// blocks every walker, so standing there changes no route, and the map
+    /// gives an actor the tile's glyph over a structure, which is what
+    /// draws the AI inside its station.
+    fn seat_fused_host(&mut self) {
+        if !matches!(self.storyline.base_ai, BaseAi::Fused(_)) {
+            return;
+        }
+        let (Some(host), Some(station)) = (self.base_ai_host(), self.base_ai_station()) else {
+            return;
+        };
+        let Some(anchor) = self.world.get::<Position>(station).copied() else {
+            return;
+        };
+        if let Some(mut pos) = self.world.get_mut::<Position>(host) {
+            *pos = anchor;
         }
     }
 
@@ -235,6 +256,7 @@ impl Game {
         let cap = analysis_cap(&fused);
         self.world.entity_mut(host).insert(BaseAiHost);
         self.storyline.base_ai = BaseAi::Fused(fused);
+        self.seat_fused_host();
         if stalled && let Some(mut attributes) = self.world.get_mut::<components::Attributes>(host)
         {
             attributes.set(&crate::attributes::AttributeId::from("analysis"), cap);
@@ -493,6 +515,7 @@ impl Game {
             }
             StepOutcome::Fuse(fused) => {
                 self.storyline.base_ai = BaseAi::Fused(fused);
+                self.seat_fused_host();
                 self.release_subjects_outside_ai_station();
                 self.announce_fusion();
             }

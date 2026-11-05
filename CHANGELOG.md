@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**A notice about one thing on the map now points at it instead of covering it.** When a program starts going wrong, fuses with the Research Station, joins you from a Holding Cell, or is knocked out at the base, and when "Your Base" is explained, the notice docks to one side, the camera brings the subject into the clear half, and pulsing brackets with a line mark it. If the subject is off the map you are viewing, the notice is centred as before. For a program, [W] Watch closes the notice and follows it; Esc stops following.
+
+**Notices that repeat can be turned off.** [D] Don't show again on a repeating notice stops its screen for good; the alert board entry and log line still appear. Guidance popups keep their own D and T.
+
+**Your outposts now announce themselves.** An outpost growing to a new tier, filling up, declining, being raided or going dark opens a notice that marks it on the map, alongside the alert board entry it already posted. Saves load unchanged.
+
 ## 0.21.47
 
 **A Holding Cell now gets a warden on its own, so a prisoner is actually decompiled.** Before, no worker could ever be sent to a cell, so a prisoner sat in it forever and no decompile attempt was ever made. Now, while the cell has power and a prisoner, a free worker comes over and works at it, and goes back to other work once the cell is empty or has no room left for a breakdown's salvage. The cell's sheet shows a progress bar for the current attempt and says when it is waiting for a free worker, and the cell's help, description and research text no longer tell you to post a warden. Saves load unchanged.

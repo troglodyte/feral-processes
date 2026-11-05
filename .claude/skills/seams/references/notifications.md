@@ -77,6 +77,29 @@
   `"repair_bay"` (`dispatches_sorties`' rule), and its copy has to keep step
   with `Game::add_to_party`'s refusal, the other place the game says a downed
   program needs a Bay.
+- **`BaseStaffDowned` is the at-base twin of `DownedProgram`, and it is
+  not fired from `bench_or_dissolve`.** That door is for battle, sortie and
+  off-screen siege downs, where there is no body on the base map to mark.
+  The one at-base path today is the raid defender left `Downed` in
+  `run_raid`; a tantrum's blow is clamped to 1 HP so a brawl can't down
+  anyone, and `admit_the_badly_hurt` breaks off for repair rather than
+  downing. A new at-base downing path fires it at the site.
+- **A focused notice carries a subject, not a position.** Notices queue, so
+  an entity can move or die before it is shown: `Game::subject_position`
+  resolves it each frame (entities through `watch_position`, tiles only
+  while `field_pos` is `Some`), and `None` falls back to the centred panel
+  rather than marking an empty spot. The docked panel is a second shape,
+  so the fits census measures every shipped notice against it as well
+  (`every_shipped_notification_fits_the_docked_panel`), and the gui stores
+  the dock side in `Fx::notice_dock` so the camera offset and the panel
+  cannot disagree.
+- **Milestone "don't show again" is `Profile::notifications_never`, not
+  `Profile::ftue`.** Silencing staff-down must not silence the "Program
+  Down" guidance or the reverse. It goes through `Game::silence_notification`
+  and `flush_profile_writes` for the same reason guidance D/T does, it
+  skips the screen only (board and log still post), and it is offered only
+  where `NotificationKind::repeats` — an exhaustive match, so a new
+  once-per-run kind isn't handed a pointless [D].
 - **`alerts::post` is the one door onto the alert board, and collapse
   identity is kind plus subject.** It is a free function because
   `set_machine_status` has no `Game`, and it posts only on entering a stall

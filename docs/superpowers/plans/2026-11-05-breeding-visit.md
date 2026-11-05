@@ -246,7 +246,7 @@ Gate:
 
   If a renderer test covers the hint strings, update it, and check the popup
   width headlessly (memory `popup-row-width-is-testable-headlessly`).
-- **gui** `role_heading` gets the `Visiting` heading ("At the bay").
+- **gui** `role_heading` gets the `Visiting` heading ("Visiting the bay").
 - **Copy** (spec "Copy" section):
   - `assets/help/46-breeding.md`: the gate (discovered by study once you
     reach zone 2), base-only parents, the walk and pause, the child starting

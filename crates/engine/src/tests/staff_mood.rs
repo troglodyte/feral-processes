@@ -141,6 +141,7 @@ fn a_visiting_parent_reads_as_on_staff_on_the_map() {
             bay: station,
             slot: 0,
             stuck: 0,
+            waited: 0,
         });
     assert_eq!(game.program_role(bodies[0]), Some(ProgramRole::Visiting));
     assert!(view_of(&mut game, bodies[0]).on_staff);

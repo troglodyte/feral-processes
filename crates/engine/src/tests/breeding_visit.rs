@@ -252,11 +252,61 @@ fn a_parent_never_picks_the_side_the_player_stands_on() {
         };
         game.breed(a, b, bay).unwrap();
         until_paused(&mut game, bay);
-        for p in [a, b] {
-            let at = *game.world.get::<Position>(p).unwrap();
-            assert_ne!((at.x, at.y), side, "a parent stands on the player's side");
+        let spots: Vec<(i32, i32)> = [a, b]
+            .iter()
+            .map(|&p| {
+                let at = *game.world.get::<Position>(p).unwrap();
+                (at.x, at.y)
+            })
+            .collect();
+        for &(x, y) in &spots {
+            assert_eq!((x - 3).abs() + (y - 3).abs(), 1, "beside the bay");
+            assert_ne!((x, y), side, "a parent stands on the player's side");
+        }
+        assert_ne!(spots[0], spots[1], "each parent reached its own side");
+    }
+}
+
+/// Two sides walled off and the player on one of the others, so the second
+/// parent waits behind the first and the player, never behind a wall.
+fn player_on_one_of_two_free_sides() -> (Game, Entity, Entity, Entity) {
+    let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
+    spawn_machine_at(&mut game, "depot", 3, 2);
+    spawn_machine_at(&mut game, "depot", 3, 4);
+    let player = game.player_entity();
+    *game.world.get_mut::<Position>(player).unwrap() = Position { x: 2, y: 3 };
+    game.breed(a, b, bay).unwrap();
+    (game, a, b, bay)
+}
+
+#[test]
+fn a_player_standing_beside_the_bay_does_not_call_the_visit_off() {
+    let (mut game, a, b, bay) = player_on_one_of_two_free_sides();
+    for _ in 0..(BREEDING_VISIT_STUCK_TICKS * 3) {
+        game.tick();
+    }
+    assert_eq!(marked(&mut game), 2, "still on the visit");
+    assert!(pause_left(&game, bay).is_some());
+
+    let player = game.player_entity();
+    *game.world.get_mut::<Position>(player).unwrap() = Position { x: 10, y: 10 };
+    until_paused(&mut game, bay);
+    finish_visit(&mut game, bay);
+    assert_eq!(game.program_role(a), Some(ProgramRole::Staff));
+    assert_eq!(game.program_role(b), Some(ProgramRole::Staff));
+    assert!(game.world.get::<Incubator>(bay).unwrap().slots[0].is_some());
+}
+
+#[test]
+fn a_body_that_never_leaves_a_side_calls_the_visit_off_in_the_end() {
+    let (mut game, a, b, bay) = player_on_one_of_two_free_sides();
+    for _ in 0..(BREEDING_VISIT_BODY_WAIT_TICKS * 2) {
+        game.tick();
+        if marked(&mut game) == 0 {
+            break;
         }
     }
+    assert_called_off(&mut game, Some(bay), &[a, b], 1);
 }
 
 // ---- cancels ----

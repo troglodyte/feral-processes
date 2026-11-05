@@ -616,6 +616,7 @@ impl Game {
                     bay,
                     slot,
                     stuck: 0,
+                    waited: 0,
                 });
         }
     }

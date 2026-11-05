@@ -19,7 +19,7 @@ use crate::game::breeding::BREEDING_SEED;
 use crate::game::party::ProgramRole;
 use crate::items::ItemId;
 use crate::resources::GameClock;
-use crate::tuning::BREEDING_VISIT_STUCK_TICKS;
+use crate::tuning::{BREEDING_VISIT_BODY_WAIT_TICKS, BREEDING_VISIT_STUCK_TICKS};
 use bevy_ecs::prelude::Entity;
 
 /// Why a visit was called off.
@@ -53,11 +53,13 @@ impl CancelReason {
 
 /// What one beat of the walk did.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Progress {
+enum Beat {
     /// Arrived, or took a step toward arriving.
     Moved,
-    /// Neither: waiting on a side, or the final step was refused.
-    Stalled,
+    /// Neither, and walls and structures alone leave no way in.
+    WallBlocked,
+    /// Neither, and only a body (the player's, another worker's) is in the way.
+    BodyBlocked,
 }
 
 /// What the decide step sees of one parent.
@@ -66,7 +68,8 @@ pub(crate) struct ParentState {
     pub role: Option<ProgramRole>,
     pub downed: bool,
     pub arrived: bool,
-    /// No arrival and no step for `BREEDING_VISIT_STUCK_TICKS` beats running.
+    /// No arrival and no step for `BREEDING_VISIT_STUCK_TICKS` beats running
+    /// behind walls, or `BREEDING_VISIT_BODY_WAIT_TICKS` behind bodies.
     pub unreachable: bool,
 }
 
@@ -137,57 +140,95 @@ impl Game {
     /// One step of `worker` toward a side of its bay. `Ok` on arrival and
     /// when it must wait for a free side; `Err` only when there is no bay or
     /// no route, which the drift drops, holding the body where it stands.
-    /// Every beat that neither arrives nor takes a step — `NoRoute`,
-    /// `BoxedIn` or a refused final step — is counted on the marker, and the
-    /// gather reads a long run as the parent being unreachable.
+    /// A beat that neither arrives nor steps is counted on the marker by
+    /// cause: walls and structures alone leave no way in (`stuck`, a short
+    /// limit), or only a body in the way does (`waited`, a long one). The
+    /// gather reads either limit as the parent being unreachable.
     pub(crate) fn step_to_bay(&mut self, worker: Entity) -> Result<(), NoPost> {
-        let result = self.walk_to_bay(worker);
+        let (beat, result) = self.walk_to_bay(worker);
         if let Some(mut visit) = self.world.get_mut::<BreedingVisit>(worker) {
-            visit.stuck = match result {
-                Ok(Progress::Moved) => 0,
-                _ => visit.stuck.saturating_add(1),
-            };
+            match beat {
+                Beat::Moved => {
+                    visit.stuck = 0;
+                    visit.waited = 0;
+                }
+                Beat::WallBlocked => visit.stuck = visit.stuck.saturating_add(1),
+                Beat::BodyBlocked => visit.waited = visit.waited.saturating_add(1),
+            }
         }
-        result.map(|_| ())
+        result
     }
 
-    fn walk_to_bay(&mut self, worker: Entity) -> Result<Progress, NoPost> {
-        let visit = *self
-            .world
-            .get::<BreedingVisit>(worker)
-            .ok_or(NoPost::NoRoute)?;
-        let bay = self
-            .world
-            .get::<Position>(visit.bay)
-            .copied()
-            .ok_or(NoPost::NoRoute)?;
-        let here = self
-            .world
-            .get::<Position>(worker)
-            .copied()
-            .ok_or(NoPost::NoRoute)?;
+    fn visit_positions(&self, worker: Entity) -> Option<(BreedingVisit, Position, Position)> {
+        let visit = self.world.get::<BreedingVisit>(worker).copied()?;
+        let bay = self.world.get::<Position>(visit.bay).copied()?;
+        let here = self.world.get::<Position>(worker).copied()?;
+        Some((visit, bay, here))
+    }
+
+    fn walk_to_bay(&mut self, worker: Entity) -> (Beat, Result<(), NoPost>) {
+        let Some((visit, bay, here)) = self.visit_positions(worker) else {
+            return (Beat::WallBlocked, Err(NoPost::NoRoute));
+        };
         if at_station(here, bay, 1, Touch::Sides) {
-            return Ok(Progress::Moved);
+            return (Beat::Moved, Ok(()));
         }
         // The player's tile is taken for the choice of side: `blocked_tiles`
         // leaves it out, and a side picked under the player refuses the
         // final step. Claimed before `rigid`, which folds bodies into walls
-        // (`step_to_repair`'s reason for `rigid` at all).
-        let mut blocked = self.blocked_tiles();
+        // (`step_to_repair`'s reason for `rigid` at all), so for the path the
+        // player's tile is a wall too.
+        let mut occupied = self.blocked_tiles();
         if let Some(player_at) = self.field_pos() {
-            blocked.claim(player_at);
+            occupied.claim(player_at);
         }
-        let blocked = blocked.rigid();
+        let blocked = occupied.rigid();
         let grid = self.world.resource::<BaseGrid>();
-        let step = step_to_post(grid, here, bay, 1, &blocked, grid.radius(), Touch::Sides)?;
+        let step = match step_to_post(grid, here, bay, 1, &blocked, grid.radius(), Touch::Sides) {
+            Ok(step) => step,
+            Err(err) => {
+                let beat = if self.walled_off(worker, visit, here, bay) {
+                    Beat::WallBlocked
+                } else {
+                    Beat::BodyBlocked
+                };
+                return (beat, Err(err));
+            }
+        };
         if let Some(Step { to, .. }) = step
             && self.field_pos() != Some((to.x, to.y))
             && let Some(mut pos) = self.world.get_mut::<Position>(worker)
         {
             *pos = to;
-            return Ok(Progress::Moved);
+            return (Beat::Moved, Ok(()));
         }
-        Ok(Progress::Stalled)
+        (Beat::BodyBlocked, Ok(()))
+    }
+
+    /// Whether `worker` could reach a side of the bay with every body but
+    /// its sibling parents stepped aside, the player included. A sibling
+    /// counts as a wall because it is part of the visit: with one free side,
+    /// the second parent waits on the first for good.
+    fn walled_off(
+        &mut self,
+        worker: Entity,
+        visit: BreedingVisit,
+        here: Position,
+        bay: Position,
+    ) -> bool {
+        let siblings: Vec<(i32, i32)> = self
+            .visit_parents(visit.bay, visit.slot)
+            .into_iter()
+            .filter(|&p| p != worker)
+            .filter_map(|p| self.world.get::<Position>(p).map(|p| (p.x, p.y)))
+            .collect();
+        let mut walls = self.blocked_tiles().walls_only();
+        for cell in siblings {
+            walls.claim(cell);
+        }
+        let walls = walls.rigid();
+        let grid = self.world.resource::<BaseGrid>();
+        step_to_post(grid, here, bay, 1, &walls, grid.radius(), Touch::Sides).is_err()
     }
 
     /// The marked parents of one reserved slot, in entity order.
@@ -238,10 +279,10 @@ impl Game {
                     .map(|p| ParentState {
                         role: self.program_role(p),
                         downed: self.world.get::<Downed>(p).is_some(),
-                        unreachable: self
-                            .world
-                            .get::<BreedingVisit>(p)
-                            .is_some_and(|v| v.stuck >= BREEDING_VISIT_STUCK_TICKS),
+                        unreachable: self.world.get::<BreedingVisit>(p).is_some_and(|v| {
+                            v.stuck >= BREEDING_VISIT_STUCK_TICKS
+                                || v.waited >= BREEDING_VISIT_BODY_WAIT_TICKS
+                        }),
                         arrived: matches!(
                             (self.world.get::<Position>(p).copied(), bay_at),
                             (Some(here), Some(at)) if at_station(here, at, 1, Touch::Sides)

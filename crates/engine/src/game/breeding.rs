@@ -201,6 +201,7 @@ impl Game {
                     bay,
                     slot,
                     stuck: 0,
+                    waited: 0,
                 })
                 .remove::<crate::components::Task>()
                 .remove::<crate::components::OffShift>();

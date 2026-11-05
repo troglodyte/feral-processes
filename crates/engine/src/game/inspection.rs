@@ -1710,6 +1710,8 @@ impl Game {
                 // Kept here rather than recomputed below: the section rule
                 // reads it and so does the column.
                 hand: totals.hand,
+                used: totals.consumed,
+                used_by: used_by_rows(&totals.used_by, items),
                 spark: ledger
                     .buckets
                     .iter()
@@ -2665,4 +2667,30 @@ pub(crate) fn difficulty_color(ratio: f64) -> GlyphColor {
 /// What the compass and the world map call a surface link: walked or not.
 pub(crate) fn link_compass_label(visited: bool) -> &'static str {
     if visited { "a walked link" } else { "a link" }
+}
+
+/// A ledger tally as the base output page names it, largest first.
+fn used_by_rows(
+    tally: &std::collections::BTreeMap<crate::base_ledger::UsedBy, u32>,
+    items: &crate::items_db::ItemDb,
+) -> Vec<(String, u32)> {
+    use crate::base_ledger::UsedBy;
+    let mut rows: Vec<(String, u32)> = tally
+        .iter()
+        .map(|(by, qty)| {
+            let label = match by {
+                UsedBy::Assembled(product) => format!(
+                    "into {}",
+                    items
+                        .get(product.as_str())
+                        .map(|d| d.name.as_str())
+                        .unwrap_or(product.as_str())
+                ),
+                UsedBy::Source(source) => source.player_label().to_string(),
+            };
+            (label, *qty)
+        })
+        .collect();
+    rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    rows
 }

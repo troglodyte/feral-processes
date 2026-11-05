@@ -501,6 +501,7 @@ impl Game {
                 crate::base_ledger::Event::Consume {
                     item: item.clone(),
                     qty,
+                    source: crate::base_ledger::ConsumeSource::Build,
                 },
                 move |tick, zone, _| crate::telemetry::Record::Consume {
                     tick,

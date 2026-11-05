@@ -347,7 +347,7 @@ pub(super) fn assignee_vitals(a: &Assignee) -> String {
 }
 
 /// How wide the item column is. A name longer than this is cut rather than
-/// allowed to push the four figures out of their columns: the page is read
+/// allowed to push the five figures out of their columns: the page is read
 /// down a column, and one modded name would otherwise skew every row under
 /// it.
 pub(super) const OUTPUT_NAME_COLUMN: usize = 22;
@@ -367,17 +367,18 @@ pub(crate) fn base_output_rows(report: &BaseOutputReport) -> Vec<Row> {
     } else {
         rows.push(Row::TextColored(
             format!(
-                "  {:<width$}{:>8}{:>9}{:>8}{:>8}",
+                "  {:<width$}{:>8}{:>9}{:>8}{:>8}{:>8}",
                 "",
                 "sector",
                 "machine",
                 "hand",
                 "run",
+                "used",
                 width = OUTPUT_NAME_COLUMN,
             ),
             TEXT_DIM,
         ));
-        // Both sections carry the same four figures rather than the sector/run
+        // Both sections carry the same five figures rather than the sector/run
         // pair the design sketch gave MINED alone. An item sits in one
         // section on *dominant* provenance, so a Power Cell a machine makes
         // more of than the player does lands under MINED — and dropping the
@@ -390,6 +391,9 @@ pub(crate) fn base_output_rows(report: &BaseOutputReport) -> Vec<Row> {
             rows.push(Row::TextColored(heading.to_string(), YELLOW));
             for row in section.iter() {
                 rows.push(text_row(base_output_line(row)));
+                if let Some(line) = base_output_used_line(row) {
+                    rows.push(Row::TextColored(line, TEXT_DIM));
+                }
             }
         }
     }
@@ -416,7 +420,7 @@ pub(crate) fn base_output_rows(report: &BaseOutputReport) -> Vec<Row> {
     rows
 }
 
-/// One item's line: the name, the four figures, and the shape of the last
+/// One item's line: the name, the five figures, and the shape of the last
 /// few windows.
 pub(super) fn base_output_line(row: &BaseOutputRow) -> String {
     let name = if row.name.chars().count() > OUTPUT_NAME_COLUMN {
@@ -427,15 +431,51 @@ pub(super) fn base_output_line(row: &BaseOutputRow) -> String {
         row.name.clone()
     };
     format!(
-        "  {:<width$}{:>8}{:>9}{:>8}{:>8}  {}",
+        "  {:<width$}{:>8}{:>9}{:>8}{:>8}{:>8}  {}",
         name,
         row.sector,
         row.machine,
         row.hand,
         row.run,
+        row.used,
         spark_line(&row.spark),
         width = OUTPUT_NAME_COLUMN,
     )
+}
+
+/// An item's line is the widest the page draws on purpose, and
+/// `no_base_output_row_overflows_its_content_rect` proves it fits; the
+/// usage line is cut to the same count rather than measured again.
+pub(super) const OUTPUT_LINE_CHARS: usize = 2
+    + OUTPUT_NAME_COLUMN
+    + 8
+    + 9
+    + 8
+    + 8
+    + 8
+    + 2
+    + feral_processes_engine::tuning::BASE_OUTPUT_SPARK_BUCKETS;
+
+/// What used an item, indented under it on one line — cut with `…`, never
+/// wrapped, because the row cap counts exactly one line per item. `None`
+/// for an item nothing has spent, or whose spending predates the tally (an
+/// old save), where a bare arrow would say nothing.
+pub(super) fn base_output_used_line(row: &BaseOutputRow) -> Option<String> {
+    if row.used == 0 || row.used_by.is_empty() {
+        return None;
+    }
+    let entries: Vec<String> = row
+        .used_by
+        .iter()
+        .map(|(label, qty)| format!("{label} {qty}"))
+        .collect();
+    let line = format!("    ← {}", entries.join(" · "));
+    if line.chars().count() <= OUTPUT_LINE_CHARS {
+        return Some(line);
+    }
+    let mut cut: String = line.chars().take(OUTPUT_LINE_CHARS - 1).collect();
+    cut.push('…');
+    Some(cut)
 }
 
 /// The eight block glyphs a sparkline is drawn from, shortest first.

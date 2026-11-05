@@ -590,6 +590,11 @@ pub struct BaseOutputRow {
     /// the question the whole instrument was built to answer.
     pub machine: u32,
     pub hand: u32,
+    /// Spent over the whole run, every sink — `ItemTotals::consumed`.
+    pub used: u32,
+    /// What spent it, as player words and a count, largest first. Sums to
+    /// less than `used` on a save written before the tally existed.
+    pub used_by: Vec<(String, u32)>,
     /// The most recent buckets' production, oldest first, for a sparkline.
     /// Empty for a run with no history yet.
     pub spark: Vec<u32>,

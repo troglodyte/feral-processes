@@ -1285,6 +1285,7 @@ fn burn_grid_upkeep(world: &mut World) {
             let burn = crate::base_ledger::Event::Consume {
                 item: cell.clone(),
                 qty: bought,
+                source: crate::base_ledger::ConsumeSource::Fuel,
             };
             let tick_now = world.resource::<GameClock>().tick;
             let zone_now = world.resource::<ZoneLevel>().0;

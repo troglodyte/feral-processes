@@ -17,6 +17,21 @@ fn tallest_base_output_page() -> Vec<Row> {
         run: 999_999,
         machine: 999_999,
         hand: 999_999,
+        used: 999_999,
+        // Every sink at once, the longest labels: the line must be cut,
+        // so the cut is what gets measured.
+        used_by: [
+            "into Singularity Matrix Mk4 Prototype",
+            "lost in breach",
+            "burnt as fuel",
+            "sabotaged",
+            "installed",
+            "base use",
+            "mending",
+        ]
+        .iter()
+        .map(|l| (l.to_string(), 999_999))
+        .collect(),
         spark: vec![999_999; BASE_OUTPUT_SPARK_BUCKETS],
     };
     let attention = |kind, text: &str, threat| AttentionRow {
@@ -121,6 +136,8 @@ fn a_long_name_is_cut_rather_than_moving_the_columns() {
         run: 2,
         machine: 2,
         hand: 0,
+        used: 0,
+        used_by: Vec::new(),
         spark: vec![1; BASE_OUTPUT_SPARK_BUCKETS],
     };
     let narrow = BaseOutputRow {
@@ -154,6 +171,8 @@ fn a_mined_row_still_says_what_the_player_made_by_hand() {
             run: 90,
             machine: 60,
             hand: 30,
+            used: 0,
+            used_by: Vec::new(),
             spark: Vec::new(),
         }],
         compiled: Vec::new(),
@@ -184,4 +203,84 @@ fn an_empty_ledger_draws_a_sentence_rather_than_a_blank_page() {
         Row::Text(t) | Row::TextColored(t, _) => t.contains("not made anything"),
         _ => false,
     }));
+}
+
+fn drawn(rows: &[Row]) -> Vec<&String> {
+    rows.iter()
+        .filter_map(|r| match r {
+            Row::Text(t) | Row::TextColored(t, _) => Some(t),
+            _ => None,
+        })
+        .collect()
+}
+
+fn row_named(
+    name: &str,
+    used: u32,
+    used_by: &[(&str, u32)],
+) -> feral_processes_engine::BaseOutputRow {
+    feral_processes_engine::BaseOutputRow {
+        item: ItemId(name.to_lowercase()),
+        name: name.to_string(),
+        sector: 1,
+        run: 9,
+        machine: 9,
+        hand: 0,
+        used,
+        used_by: used_by.iter().map(|(l, q)| (l.to_string(), *q)).collect(),
+        spark: Vec::new(),
+    }
+}
+
+/// The usage line sits directly under its own item, and an item nothing
+/// spent draws no line at all.
+#[test]
+fn a_used_item_draws_its_figure_and_what_used_it_beneath() {
+    let rows = base_output_rows(&BaseOutputReport {
+        zone: 1,
+        mined: vec![
+            row_named("Core Fragment", 7, &[("built", 5), ("into Power Cell", 2)]),
+            row_named("Copper", 0, &[]),
+        ],
+        compiled: Vec::new(),
+        attention: Vec::new(),
+    });
+    let lines = drawn(&rows);
+    let at = lines
+        .iter()
+        .position(|t| t.contains("Core Fragment"))
+        .expect("the item is drawn");
+    assert!(
+        lines[at].trim_end().ends_with(" 7"),
+        "the used figure closes the columns: {}",
+        lines[at]
+    );
+    assert_eq!(lines[at + 1].as_str(), "    ← built 5 · into Power Cell 2");
+    assert!(lines[at + 2].contains("Copper"), "{}", lines[at + 2]);
+    assert!(
+        !lines[at + 3].contains('←'),
+        "an unused item drew a usage line: {}",
+        lines[at + 3]
+    );
+}
+
+#[test]
+fn a_long_breakdown_is_cut_rather_than_wrapped() {
+    let pairs: Vec<(String, u32)> = (0..20).map(|i| (format!("into Thing {i}"), 99)).collect();
+    let refs: Vec<(&str, u32)> = pairs.iter().map(|(l, q)| (l.as_str(), *q)).collect();
+    let line = base_output_used_line(&row_named("X", 1, &refs)).expect("used");
+    assert!(line.ends_with('…'), "{line}");
+    assert_eq!(line.chars().count(), OUTPUT_LINE_CHARS);
+}
+
+/// A save written before the tally existed has `used` but no breakdown;
+/// the figure still draws, the line does not, rather than a bare arrow.
+#[test]
+fn spending_older_than_the_tally_draws_no_bare_arrow() {
+    assert_eq!(base_output_used_line(&row_named("X", 5, &[])), None);
+    assert!(base_output_used_line(&row_named("X", 5, &[("built", 5)])).is_some());
+    assert_eq!(
+        base_output_used_line(&row_named("X", 0, &[("built", 5)])),
+        None
+    );
 }

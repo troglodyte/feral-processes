@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**A Holding Cell now gets a warden on its own, so a prisoner is actually decompiled.** Before, no worker could ever be sent to a cell, so a prisoner sat in it forever and no decompile attempt was ever made. Now, while the cell has power and a prisoner, a free worker comes over and works at it, and goes back to other work once the cell is empty or has no room left for a breakdown's salvage. The cell's sheet shows a progress bar for the current attempt and says when it is waiting for a free worker, and the cell's help, description and research text no longer tell you to post a warden. Saves load unchanged.
+
 ## 0.21.46
 
 **Breeding now waits for the Bloodlines research, and the parents walk to the Breeding Bay before the child starts.** Before, the bay could be built from the start, and confirming a pair started the child at once, with nothing happening on the floor. Now Bloodlines, found by study once you reach zone 2, unlocks the bay. After you confirm, both parents walk over, spend about 30 seconds there, and then go back to work. Only then does the child start to incubate, and each parent remembers the other ("Raised a child with"). The visit is called off and the seed goes back to your pack if a parent joins your party, is downed or lost, can't reach the bay, or the bay is taken down. Parents must be at the base to be picked. A bay already standing in a save keeps working, and saves load unchanged.

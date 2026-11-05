@@ -518,6 +518,13 @@
   (`fetcher_load`): without it the trip that empties the last rack makes the
   rig wantless mid-carry, the fetcher is freed, and the program is sheltered
   straight back onto the rack.
+  **A Holding Cell is the same seam.** `base_wants` appends a cell after the
+  rigs, gated on `Game::cell_wants_a_warden` (its `can_progress`), and the
+  guard has `a_cell_holds_a_body`. The trap: from 0.18.10 the cell had no
+  want at all, so nobody was ever posted and no attempt ever ran in play —
+  and the suite never saw it, because every warded fixture hand-inserted the
+  warden's `Task` or used test-only `assign_cronjob`. Test a self-staffing
+  job through `schedule_base_labour` with a spare body, never a hand post.
 
 - **A rig holds its own tool and the player holds theirs.**
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool` and

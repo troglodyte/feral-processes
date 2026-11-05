@@ -300,7 +300,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   research never touches the player's pack.
 - **A Teardown Rig staffs itself — `can_progress` for a rig is
   `Game::rig_has_work`, which counts a fetcher's carried program, and the
-  empty-queue guard's `a_rig_holds_a_body` is what lets the body go.**
+  empty-queue guard's `a_rig_holds_a_body` is what lets the body go; a
+  Holding Cell staffs itself the same way, through
+  `Game::cell_wants_a_warden` and `a_cell_holds_a_body`.**
 - **A rig holds its own tool and the player holds theirs** —
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
   strip resolves against `ToolDb`, and a rig with nothing fitted runs on

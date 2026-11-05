@@ -339,6 +339,13 @@ fn a_prisoner_is_never_handed_a_task_and_never_moves() {
     for _ in 0..60 {
         game.tick();
         crew_worked |= crew.iter().any(|c| game.world.get::<Task>(*c).is_some());
+        // The cell now wards itself, so a decompile can land inside the
+        // window; the claim is about a prisoner, and a decompiled body is
+        // ordinary staff. An attempt takes `ATTEMPT_TICKS`, so the claim is
+        // still held for at least that long.
+        if game.world.get::<Jailed>(body).is_none() {
+            break;
+        }
         assert!(game.world.get::<Task>(body).is_none());
         assert_eq!(*game.world.get::<Position>(body).unwrap(), start);
         assert_eq!(game.program_role(body), Some(ProgramRole::Jailed));

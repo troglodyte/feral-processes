@@ -122,7 +122,7 @@ pub(super) fn draw_breed_second_menu(
         rows.push(text_row("(you have no other compiled programs)"));
     }
     push_parent_rows(&mut rows, game, &candidates, selected);
-    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
+    push_key_footer(&mut rows, &["Enter choose", "Esc back"]);
     draw_popup("Breed", PopupSize::Large, &rows, refusal, painter, m);
 }
 
@@ -148,7 +148,9 @@ pub(super) fn draw_breed_confirm_menu(
         rows.push(text_row(""));
     }
     rows.push(text_row(seed_line(game.breeding_seeds_held())));
-    rows.push(text_row("Both parents rest for a while afterwards."));
+    for line in CONFIRM_NOTES {
+        rows.push(text_row(line));
+    }
     rows.push(text_row(""));
     rows.push(text_row(key_hints(&["Enter breed", "Esc back"])));
     draw_popup("Breed", PopupSize::Small, &rows, refusal, painter, m);
@@ -159,6 +161,13 @@ pub(super) fn draw_breed_confirm_menu(
 fn breed_title(first: &str, second: &str) -> [String; 2] {
     [format!("Breed {first}"), format!("with {second}?")]
 }
+
+/// What confirming does, in the order it happens. One line each, so each
+/// fits the half-window popup.
+const CONFIRM_NOTES: [&str; 2] = [
+    "Both walk to the bay first; the child",
+    "starts once they are done. Both then rest.",
+];
 
 fn seed_line(held: u32) -> String {
     format!("Costs 1 Breeding Seed (you have {held}).")
@@ -281,7 +290,8 @@ mod tests {
             breed_title(&name, &name)[0].clone(),
             breed_title(&name, &name)[1].clone(),
             seed_line(99_999),
-            "Both parents rest for a while afterwards.".to_string(),
+            CONFIRM_NOTES[0].to_string(),
+            CONFIRM_NOTES[1].to_string(),
             key_hints(&["Enter breed", "Esc back"]),
             "Breed which program? Pick the first of two.".to_string(),
         ];

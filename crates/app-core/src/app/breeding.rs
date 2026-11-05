@@ -2,6 +2,8 @@
 //! confirm that spends a seed. Its first page is a hub page in two places —
 //! a bay's Breed page in the `[c]` hub, and the base report's Breed page
 //! once a bay stands — and a bay's sheet (`x`) opens the latter with `B`.
+//! Confirming reserves the slot and sends both parents to the bay; the child
+//! starts once they have been there together.
 
 use crate::*;
 use feral_processes_engine::breeding::BreedRefusal;
@@ -17,10 +19,11 @@ impl App {
         })
     }
 
-    /// Picks the first parent from the whole roster, as fusion does: nothing
-    /// in `Game::breed` asks the parents to be near the bay. A program still
-    /// resting is a row like any other and refuses with the engine's reason,
-    /// so the picker and `Game::breed` cannot disagree about who is ready.
+    /// Picks the first parent from the whole roster, as fusion does: the
+    /// rows are every program, near the bay or not. One that cannot be a
+    /// parent right now (resting, away from base, held) is a row like any
+    /// other and refuses with the engine's reason, so the picker and
+    /// `Game::breed` cannot disagree about who is ready.
     pub(crate) fn handle_breed_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.leave_breeding();

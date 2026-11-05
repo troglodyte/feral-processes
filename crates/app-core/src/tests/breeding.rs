@@ -120,7 +120,12 @@ fn confirming_breeds_and_consumes_the_seed() {
     );
     assert_eq!(seeds(&mut app), 0);
     let slots = app.game.as_mut().unwrap().incubations(bay);
-    assert!(slots[0].child.is_some(), "the child is incubating");
+    let child = slots[0].child.as_ref().expect("the slot is reserved");
+    assert_eq!(
+        child.when(),
+        "parents on their way",
+        "confirming starts a visit, not an incubation"
+    );
     assert_eq!(app.pending_breed_first, None);
 }
 

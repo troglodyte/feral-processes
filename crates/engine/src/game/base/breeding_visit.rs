@@ -19,6 +19,7 @@ use crate::game::breeding::BREEDING_SEED;
 use crate::game::party::ProgramRole;
 use crate::items::ItemId;
 use crate::resources::GameClock;
+use crate::tuning::BREEDING_VISIT_STUCK_TICKS;
 use bevy_ecs::prelude::Entity;
 
 /// Why a visit was called off.
@@ -32,6 +33,8 @@ pub(crate) enum CancelReason {
     Downed,
     /// The bay was demolished or destroyed.
     BayLost,
+    /// A parent found no route to the bay for too long.
+    Unreachable,
 }
 
 impl CancelReason {
@@ -41,6 +44,7 @@ impl CancelReason {
             CancelReason::LeftBase => "a parent was called away",
             CancelReason::Downed => "a parent is hurt",
             CancelReason::BayLost => "the bay is gone",
+            CancelReason::Unreachable => "a parent couldn't reach the bay",
         }
     }
 }
@@ -51,6 +55,8 @@ pub(crate) struct ParentState {
     pub role: Option<ProgramRole>,
     pub downed: bool,
     pub arrived: bool,
+    /// No route to the bay for `BREEDING_VISIT_STUCK_TICKS` steps running.
+    pub unreachable: bool,
 }
 
 /// One pending slot, gathered.
@@ -88,6 +94,9 @@ pub(crate) fn decide_visits(inputs: &[VisitInput]) -> Vec<VisitOutcome> {
             if visit.parents.iter().any(|p| p.downed) {
                 return VisitOutcome::Cancel(CancelReason::Downed);
             }
+            if visit.parents.iter().any(|p| p.unreachable) {
+                return VisitOutcome::Cancel(CancelReason::Unreachable);
+            }
             if !visit.parents.iter().all(|p| p.arrived) {
                 VisitOutcome::Wait
             } else if visit.pause_left == 0 {
@@ -117,7 +126,21 @@ impl Game {
     /// One step of `worker` toward a side of its bay. `Ok` on arrival and
     /// when it must wait for a free side; `Err` only when there is no bay or
     /// no route, which the drift drops, holding the body where it stands.
+    /// A run of `NoRoute` is counted on the marker, and the gather reads it
+    /// as the parent being unreachable; `BoxedIn` is a wait for a side and
+    /// resets the count.
     pub(crate) fn step_to_bay(&mut self, worker: Entity) -> Result<(), NoPost> {
+        let result = self.walk_to_bay(worker);
+        if let Some(mut visit) = self.world.get_mut::<BreedingVisit>(worker) {
+            visit.stuck = match result {
+                Err(NoPost::NoRoute) => visit.stuck.saturating_add(1),
+                _ => 0,
+            };
+        }
+        result
+    }
+
+    fn walk_to_bay(&mut self, worker: Entity) -> Result<(), NoPost> {
         let visit = *self
             .world
             .get::<BreedingVisit>(worker)
@@ -198,6 +221,10 @@ impl Game {
                     .map(|p| ParentState {
                         role: self.program_role(p),
                         downed: self.world.get::<Downed>(p).is_some(),
+                        unreachable: self
+                            .world
+                            .get::<BreedingVisit>(p)
+                            .is_some_and(|v| v.stuck >= BREEDING_VISIT_STUCK_TICKS),
                         arrived: matches!(
                             (self.world.get::<Position>(p).copied(), bay_at),
                             (Some(here), Some(at)) if at_station(here, at, 1, Touch::Sides)

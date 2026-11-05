@@ -347,6 +347,9 @@ pub struct Jailed {
 pub struct BreedingVisit {
     pub bay: Entity,
     pub slot: usize,
+    /// Consecutive steps `step_to_bay` found no route. Not saved: a load
+    /// starts the count over.
+    pub stuck: u32,
 }
 
 /// A tamed program held in a Power Siphon — the grid's supply from that

@@ -612,7 +612,11 @@ impl Game {
             }
             self.world
                 .entity_mut(program)
-                .insert(crate::components::BreedingVisit { bay, slot });
+                .insert(crate::components::BreedingVisit {
+                    bay,
+                    slot,
+                    stuck: 0,
+                });
         }
     }
 

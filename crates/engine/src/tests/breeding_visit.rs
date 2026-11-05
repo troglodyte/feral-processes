@@ -75,6 +75,7 @@ fn parent(role: Option<ProgramRole>, arrived: bool) -> ParentState {
         role,
         downed: false,
         arrived,
+        unreachable: false,
     }
 }
 
@@ -222,6 +223,40 @@ fn mid_visit() -> (Game, Entity, Entity, Entity) {
         game.tick();
     }
     (game, a, b, bay)
+}
+
+#[test]
+fn a_parent_that_cannot_route_to_the_bay_calls_the_visit_off() {
+    let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
+    // A laid cell with no floor joining it to the base: floor to stand on,
+    // and no walk from it.
+    game.world
+        .resource_mut::<crate::base_grid::BaseGrid>()
+        .lay_floor(-20, -20);
+    *game.world.get_mut::<Position>(a).unwrap() = Position { x: -20, y: -20 };
+    game.breed(a, b, bay).unwrap();
+    for _ in 0..(BREEDING_VISIT_STUCK_TICKS * 4) {
+        game.tick();
+        if marked(&mut game) == 0 {
+            break;
+        }
+    }
+    assert_called_off(&mut game, Some(bay), &[a, b], 1);
+    assert_eq!(game.program_role(a), Some(ProgramRole::Staff));
+    let said: Vec<String> = game.message_log(1000).into_iter().map(|l| l.text).collect();
+    assert!(
+        said.iter().any(|l| l.contains("couldn't reach the bay")),
+        "the log says why: {said:?}"
+    );
+}
+
+#[test]
+fn decide_cancels_for_a_parent_that_cannot_route() {
+    let v = Some(ProgramRole::Visiting);
+    let mut lost = parent(v, false);
+    lost.unreachable = true;
+    let out = decide_visits(&[input(vec![parent(v, true), lost], 10)]);
+    assert_eq!(out, vec![VisitOutcome::Cancel(CancelReason::Unreachable)]);
 }
 
 #[test]

@@ -197,7 +197,11 @@ impl Game {
             self.drop_load(parent);
             self.world
                 .entity_mut(parent)
-                .insert(BreedingVisit { bay, slot })
+                .insert(BreedingVisit {
+                    bay,
+                    slot,
+                    stuck: 0,
+                })
                 .remove::<crate::components::Task>();
         }
         self.world

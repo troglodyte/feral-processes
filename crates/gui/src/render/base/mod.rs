@@ -20,7 +20,7 @@ mod plan_overlays;
 mod playing;
 mod surface_map;
 
-pub(super) use click_layout::*;
+pub(crate) use click_layout::tile_origin_px;
 pub(crate) use click_layout::{MapClickLayout, tile_at_px};
 pub(super) use overlay_style::*;
 pub(crate) use overlay_style::{CUTTING_OUTLINE, floor_item_mark};

@@ -1011,6 +1011,7 @@ pub struct Fx {
     round_seen: Option<u32>,
     round_banner: Option<(u32, f64)>,
     map_click: Option<crate::render::MapClickLayout>,
+    notice_dock: crate::render::Dock,
 }
 
 /// Everything the engine queued for one frame, drained together so the
@@ -1069,6 +1070,7 @@ impl Fx {
             round_seen: None,
             round_banner: None,
             map_click: None,
+            notice_dock: crate::render::Dock::Centre,
         }
     }
 
@@ -1081,6 +1083,18 @@ impl Fx {
     /// `lib.rs::handle_map_pointer`.
     pub(crate) fn set_map_click(&mut self, layout: Option<crate::render::MapClickLayout>) {
         self.map_click = layout;
+    }
+
+    /// Which side the open focused notice docks to this frame, `Centre` when
+    /// the notice is not focused. Written by `draw_playing_base`, which is
+    /// what moved the camera, and read back by the notice so the panel and
+    /// the camera cannot disagree.
+    pub(crate) fn set_notice_dock(&mut self, dock: crate::render::Dock) {
+        self.notice_dock = dock;
+    }
+
+    pub(crate) fn notice_dock(&self) -> crate::render::Dock {
+        self.notice_dock
     }
 
     /// This frame's map pane layout, if the surface grid or a battle board

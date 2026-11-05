@@ -587,25 +587,31 @@ impl App {
         self.game.as_ref()?.subject_position(subject)
     }
 
-    /// `W` on a notice: follow its program once the notice closes. Inert,
-    /// `false`, unless the subject is an entity `Game::watch_position` can
-    /// place — the same gate the manifest's `W` uses.
-    fn watch_notification_subject(&mut self) -> bool {
-        let Some(NotificationSubject::Entity(entity)) = self
-            .pending_notification
-            .as_ref()
-            .and_then(|n| n.subject.as_ref())
-            .cloned()
+    /// The program `W` would follow, if the open notice names one the engine
+    /// can place — the same gate the manifest's `W` uses. The one definition
+    /// both the key and the hint line ask, so the hint offers `W` exactly
+    /// when the key does something.
+    fn notification_watch_target(&self) -> Option<Entity> {
+        let NotificationSubject::Entity(entity) =
+            *self.pending_notification.as_ref()?.subject.as_ref()?
         else {
+            return None;
+        };
+        self.game.as_ref()?.watch_position(entity)?;
+        Some(entity)
+    }
+
+    /// Whether the open notice offers `[W] Watch`.
+    pub fn notification_watchable(&self) -> bool {
+        self.notification_watch_target().is_some()
+    }
+
+    /// `W` on a notice: follow its program once the notice closes. Inert,
+    /// `false`, when `notification_watch_target` has nothing.
+    fn watch_notification_subject(&mut self) -> bool {
+        let Some(entity) = self.notification_watch_target() else {
             return false;
         };
-        if !self
-            .game
-            .as_ref()
-            .is_some_and(|g| g.watch_position(entity).is_some())
-        {
-            return false;
-        }
         self.watching = Some(entity);
         true
     }

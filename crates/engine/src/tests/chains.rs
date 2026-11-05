@@ -1603,7 +1603,7 @@ fn a_completed_assembly_reaches_the_ledger_with_its_inputs() {
     }
 
     let ledger = game.world.resource::<crate::base_ledger::BaseLedger>();
-    let product = ledger.lifetime[&ItemId::from(ids::POWER_CELL)];
+    let product = &ledger.lifetime[&ItemId::from(ids::POWER_CELL)];
     assert_eq!(
         product.compiled, 1,
         "the completed unit must reach the ledger as machine work"

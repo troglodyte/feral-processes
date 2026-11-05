@@ -7,7 +7,7 @@
 //! field that never reaches the disk — a `#[serde(skip)]` leaves it green.
 
 use super::support::*;
-use crate::base_ledger::{BaseLedger, Event};
+use crate::base_ledger::{BaseLedger, ConsumeSource, Event, UsedBy};
 use crate::items::ItemId;
 use crate::*;
 
@@ -40,6 +40,23 @@ fn what_the_base_produced_survives_a_real_save_and_load() {
             ok: true,
         },
     );
+    game.world.resource_mut::<BaseLedger>().fold(
+        1,
+        1,
+        &Event::Assemble {
+            product: item("power_cell"),
+            inputs: vec![(item("core_fragment"), 2)],
+        },
+    );
+    game.world.resource_mut::<BaseLedger>().fold(
+        2,
+        1,
+        &Event::Consume {
+            item: item("core_fragment"),
+            qty: 1,
+            source: ConsumeSource::Heal,
+        },
+    );
 
     let path = std::env::temp_dir().join(format!(
         "feral_processes_base_ledger_{}.bin",
@@ -49,9 +66,17 @@ fn what_the_base_produced_survives_a_real_save_and_load() {
     let loaded = Game::load(&path, &test_assets_dir()).unwrap();
     let _ = std::fs::remove_file(&path);
 
-    let totals = loaded.world.resource::<BaseLedger>().lifetime[&item("core_fragment")];
+    let totals = &loaded.world.resource::<BaseLedger>().lifetime[&item("core_fragment")];
     assert_eq!(totals.mined, 5, "the lifetime total came back");
     assert_eq!(totals.lost, 2, "and so did what the clog ate");
+    assert_eq!(
+        totals.used_by,
+        std::collections::BTreeMap::from([
+            (UsedBy::Assembled(item("power_cell")), 2),
+            (UsedBy::Source(ConsumeSource::Heal), 1),
+        ]),
+        "and what used it"
+    );
     assert_eq!(
         loaded.world.resource::<BaseLedger>().buckets.len(),
         1,
@@ -469,7 +494,7 @@ mod seams {
             .unwrap();
 
         let ledger = game.world.resource::<BaseLedger>();
-        let totals = ledger.lifetime[&ItemId::from(ids::ICE_BREAKER)];
+        let totals = &ledger.lifetime[&ItemId::from(ids::ICE_BREAKER)];
         assert_eq!(totals.hand, 1);
         assert_eq!(
             totals.compiled, 0,

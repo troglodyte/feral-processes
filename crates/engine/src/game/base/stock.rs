@@ -166,6 +166,7 @@ pub(crate) fn spend_from_base(
             crate::base_ledger::Event::Consume {
                 item: item.clone(),
                 qty: taken,
+                source: source,
             },
             move |tick, zone, _| crate::telemetry::Record::Consume {
                 tick,

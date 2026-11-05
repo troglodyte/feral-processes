@@ -40,7 +40,7 @@ pub const MAX_BUCKETS: usize = 64;
 /// because the player screen splits them and a combined figure would hide
 /// what hand-compiling is actually doing — see the `COMPILED machine hand`
 /// columns.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemTotals {
     /// Landed from an extractor — a structure declaring `work`.
     pub mined: u32,
@@ -52,6 +52,21 @@ pub struct ItemTotals {
     pub consumed: u32,
     /// Rolled by a machine but with nowhere to land: the clog loss.
     pub lost: u32,
+    /// `consumed`, split by what spent it. Sums to `consumed` for every
+    /// event folded since it existed; a save written before then reads
+    /// above its tally, and nothing invents the difference.
+    #[serde(default)]
+    pub used_by: BTreeMap<UsedBy, u32>,
+}
+
+/// What spent a unit: an assembler's product, or any other sink.
+///
+/// A `BTreeMap` key, so the save encoding is deterministic.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum UsedBy {
+    /// Drained as an input to this product.
+    Assembled(ItemId),
+    Source(ConsumeSource),
 }
 
 impl ItemTotals {
@@ -156,7 +171,11 @@ pub enum Event {
     /// consumption has no product — and without it the ledger's `produced`
     /// side is a stream with no sink, which is what makes an assembler's
     /// inputs look like the only thing the base ever spends.
-    Consume { item: ItemId, qty: u32 },
+    Consume {
+        item: ItemId,
+        qty: u32,
+        source: ConsumeSource,
+    },
     /// A program's `OffShift` errand for `need` ended, or was stranded.
     AmenityVisit { need: NeedId, outcome: VisitOutcome },
 }
@@ -236,7 +255,10 @@ impl LootSource {
 ///
 /// `LootSource`'s mirror, and its reason: "the ledger's produced side does
 /// not balance" is only actionable if the sinks are told apart.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// The serde names are save keys (`UsedBy::Source`): renaming a variant
+/// stops an old save's tally loading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ConsumeSource {
     /// Burnt to keep a supplier on the grid — `StructureDef::power_upkeep`.
     Fuel,
@@ -331,20 +353,14 @@ impl BaseLedger {
             Event::Assemble { product, inputs } => {
                 self.produce(product, 1, 0, |t| &mut t.compiled);
                 for (item, qty) in inputs {
-                    self.lifetime.entry(item.clone()).or_default().consumed += qty;
-                    if let Some(bucket) = self.buckets.back_mut() {
-                        *bucket.consumed.entry(item.clone()).or_default() += qty;
-                    }
+                    self.consume(item, *qty, UsedBy::Assembled(product.clone()));
                 }
             }
             Event::HandCraft { item, qty } => {
                 self.produce(item, *qty, 0, |t| &mut t.hand);
             }
-            Event::Consume { item, qty } => {
-                self.lifetime.entry(item.clone()).or_default().consumed += qty;
-                if let Some(bucket) = self.buckets.back_mut() {
-                    *bucket.consumed.entry(item.clone()).or_default() += qty;
-                }
+            Event::Consume { item, qty, source } => {
+                self.consume(item, *qty, UsedBy::Source(*source));
             }
             Event::AmenityVisit { need, outcome } => {
                 if let Some(bucket) = self.buckets.back_mut() {
@@ -391,6 +407,17 @@ impl BaseLedger {
         }
         if let Some(bucket) = self.buckets.back_mut() {
             *bucket.produced.entry(item.clone()).or_default() += landed;
+        }
+    }
+
+    /// `produce`'s sink twin: the lifetime total, its tally and the current
+    /// bucket together, so the tally cannot drift from `consumed`.
+    fn consume(&mut self, item: &ItemId, qty: u32, by: UsedBy) {
+        let totals = self.lifetime.entry(item.clone()).or_default();
+        totals.consumed += qty;
+        *totals.used_by.entry(by).or_default() += qty;
+        if let Some(bucket) = self.buckets.back_mut() {
+            *bucket.consumed.entry(item.clone()).or_default() += qty;
         }
     }
 
@@ -544,7 +571,7 @@ mod tests {
             },
         );
 
-        let totals = ledger.lifetime[&item("core_fragment")];
+        let totals = &ledger.lifetime[&item("core_fragment")];
         assert_eq!(totals.mined, 2);
         assert_eq!(totals.lost, 3);
     }
@@ -578,7 +605,7 @@ mod tests {
             },
         );
 
-        let totals = ledger.lifetime[&item("hardened_shell")];
+        let totals = &ledger.lifetime[&item("hardened_shell")];
         assert_eq!(totals.hand, 2);
         assert_eq!(totals.compiled, 0);
         assert_eq!(totals.produced(), 2);
@@ -689,6 +716,84 @@ mod tests {
         let old = "(start_tick: 0, zone: 1, produced: {}, consumed: {})";
         let bucket: Bucket = ron::from_str(old).unwrap();
         assert!(bucket.visits.is_empty());
+    }
+
+    #[test]
+    fn totals_saved_before_the_tally_existed_load() {
+        let old = "(mined: 0, compiled: 0, hand: 0, consumed: 4, lost: 0)";
+        let totals: ItemTotals = ron::from_str(old).unwrap();
+        assert_eq!(totals.consumed, 4);
+        assert!(totals.used_by.is_empty());
+    }
+
+    #[test]
+    fn an_assemble_attributes_each_input_to_its_product() {
+        let mut ledger = BaseLedger::default();
+        ledger.fold(
+            0,
+            1,
+            &Event::Assemble {
+                product: item("power_cell"),
+                inputs: vec![(item("core_fragment"), 2), (item("copper"), 1)],
+            },
+        );
+        let by = UsedBy::Assembled(item("power_cell"));
+        assert_eq!(ledger.lifetime[&item("core_fragment")].used_by[&by], 2);
+        assert_eq!(ledger.lifetime[&item("copper")].used_by[&by], 1);
+    }
+
+    #[test]
+    fn a_consume_attributes_to_its_source() {
+        let mut ledger = BaseLedger::default();
+        ledger.fold(
+            0,
+            1,
+            &Event::Consume {
+                item: item("power_cell"),
+                qty: 3,
+                source: ConsumeSource::Fuel,
+            },
+        );
+        let totals = &ledger.lifetime[&item("power_cell")];
+        assert_eq!(totals.used_by[&UsedBy::Source(ConsumeSource::Fuel)], 3);
+    }
+
+    #[test]
+    fn the_tally_sums_to_consumed() {
+        let mut ledger = BaseLedger::default();
+        let events = [
+            Event::Assemble {
+                product: item("power_cell"),
+                inputs: vec![(item("core_fragment"), 2)],
+            },
+            Event::Consume {
+                item: item("core_fragment"),
+                qty: 5,
+                source: ConsumeSource::Build,
+            },
+            Event::Assemble {
+                product: item("shell"),
+                inputs: vec![(item("core_fragment"), 1)],
+            },
+            Event::Consume {
+                item: item("core_fragment"),
+                qty: 1,
+                source: ConsumeSource::Build,
+            },
+            Event::Consume {
+                item: item("core_fragment"),
+                qty: 4,
+                source: ConsumeSource::Breach,
+            },
+        ];
+        for (tick, event) in events.iter().enumerate() {
+            ledger.fold(tick as u64 * 700, 1, event);
+        }
+        let totals = &ledger.lifetime[&item("core_fragment")];
+        assert_eq!(totals.consumed, 13);
+        assert_eq!(totals.used_by.values().sum::<u32>(), totals.consumed);
+        assert_eq!(totals.used_by[&UsedBy::Source(ConsumeSource::Build)], 6);
+        assert_eq!(totals.used_by.len(), 4);
     }
 
     fn extract() -> Event {

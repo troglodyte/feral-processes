@@ -39,12 +39,19 @@ fn until_paused(game: &mut Game, bay: Entity) {
 fn memory_defs(game: &Game, who: Entity) -> Vec<(String, MemorySubject)> {
     game.world
         .get::<Memories>(who)
-        .map(|m| m.0.iter().map(|m| (m.def.to_string(), m.subject.clone())).collect())
+        .map(|m| {
+            m.0.iter()
+                .map(|m| (m.def.to_string(), m.subject.clone()))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
 fn marked(game: &mut Game) -> usize {
-    game.world.query::<&BreedingVisit>().iter(&game.world).count()
+    game.world
+        .query::<&BreedingVisit>()
+        .iter(&game.world)
+        .count()
 }
 
 /// What every cancelled visit must leave behind.
@@ -147,7 +154,14 @@ fn a_visit_walks_to_the_bay_pauses_and_then_starts_the_child() {
     assert_eq!(game.program_role(b), Some(ProgramRole::Visiting));
     assert_eq!(seeds_in_pack(&game), 1);
     assert!(game.world.get::<BreedReadyAt>(a).is_none());
-    assert!(game.incubations(bay)[0].child.as_ref().unwrap().visit.is_some());
+    assert!(
+        game.incubations(bay)[0]
+            .child
+            .as_ref()
+            .unwrap()
+            .visit
+            .is_some()
+    );
 
     until_paused(&mut game, bay);
     // Paused means standing beside the bay, both of them, on different tiles.
@@ -181,7 +195,8 @@ fn a_visit_walks_to_the_bay_pauses_and_then_starts_the_child() {
         );
         let id = *game.world.get::<ProgramId>(other).unwrap();
         assert!(
-            memory_defs(&game, who).contains(&("bred_with".to_string(), MemorySubject::Program(id))),
+            memory_defs(&game, who)
+                .contains(&("bred_with".to_string(), MemorySubject::Program(id))),
             "{who:?} should remember the other parent"
         );
     }
@@ -261,11 +276,7 @@ fn a_destroyed_bay_mid_visit_refunds_the_seed() {
     game.damage_structure(bay, u32::MAX, "The Breeding Bay", "a siege");
     assert!(game.world.get::<Structure>(bay).is_none());
     assert_called_off(&mut game, None, &[a, b], 1);
-    let said: Vec<String> = game
-        .message_log(1000)
-        .into_iter()
-        .map(|l| l.text)
-        .collect();
+    let said: Vec<String> = game.message_log(1000).into_iter().map(|l| l.text).collect();
     assert!(
         !said.iter().any(|l| l.contains("lost with its bay")),
         "a pending slot holds no child to lose: {said:?}"
@@ -291,13 +302,22 @@ fn a_visiting_parents_needs_hold_and_it_is_never_pulled_away() {
     let mut ticks = 0;
     while pause_left(&game, bay).is_some() {
         for who in [a, b] {
-            assert_eq!(reserve(&game, who), level, "a visitor's reserve never drains");
+            assert_eq!(
+                reserve(&game, who),
+                level,
+                "a visitor's reserve never drains"
+            );
             assert!(game.world.get::<OffShift>(who).is_none());
         }
         game.tick();
         ticks += 1;
         assert!(ticks < 600, "the visit never finished");
     }
+    // Long enough that staff in the same state would have drained.
+    assert!(
+        ticks > BREEDING_VISIT_PAUSE_TICKS,
+        "the visit ran {ticks} ticks"
+    );
     for who in [a, b] {
         assert!(
             !memory_defs(&game, who)
@@ -341,9 +361,7 @@ fn each_new_refusal_names_its_reason() {
         .push(Sortie::test_stub(vec![d]));
     assert_eq!(game.breed_refusal(d), Some(BreedRefusal::AwayFromBase));
 
-    game.world
-        .entity_mut(e)
-        .insert(UnderStudy { station: bay });
+    game.world.entity_mut(e).insert(UnderStudy { station: bay });
     assert_eq!(game.breed_refusal(e), Some(BreedRefusal::Held));
 
     game.world.entity_mut(f).insert(Downed);
@@ -406,7 +424,11 @@ fn a_visit_saved_mid_pause_keeps_its_pause() {
     assert_eq!(marked(&mut loaded), 2);
     finish_visit(&mut loaded, bay);
     assert_eq!(
-        loaded.world.query::<&BreedReadyAt>().iter(&loaded.world).count(),
+        loaded
+            .world
+            .query::<&BreedReadyAt>()
+            .iter(&loaded.world)
+            .count(),
         2,
         "both parents rest after the loaded visit"
     );
@@ -424,6 +446,9 @@ fn a_pending_slot_with_no_parents_after_a_load_is_refunded() {
     let bay = loaded_bay(&mut loaded);
     assert!(loaded.world.get::<Incubator>(bay).unwrap().slots[0].is_some());
     loaded.tick();
-    assert_eq!(loaded.world.get::<Incubator>(bay).unwrap().slots, vec![None]);
+    assert_eq!(
+        loaded.world.get::<Incubator>(bay).unwrap().slots,
+        vec![None]
+    );
     assert_eq!(seeds_in_pack(&loaded), 1);
 }

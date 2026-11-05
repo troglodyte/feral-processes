@@ -603,7 +603,11 @@ impl Game {
             let Some(&bay) = structure_positions.get(&tile) else {
                 continue;
             };
-            if self.world.get::<crate::components::Incubator>(bay).is_none() {
+            if self
+                .world
+                .get::<crate::components::Incubator>(bay)
+                .is_none()
+            {
                 continue;
             }
             self.world

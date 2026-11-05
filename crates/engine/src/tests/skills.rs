@@ -61,6 +61,8 @@ fn a_bred_child_starts_at_its_species_seed_and_inherits_nothing() {
     let (mut game, a, b, bay) = {
         let mut game = new_game(31003);
         stand_in_base(&mut game);
+        // The visit's walk is the base drift's, which needs a Home.
+        spawn_machine_at(&mut game, crate::HOME_STRUCTURE_ID, -6, 2);
         let bay = spawn_machine_at(&mut game, "breeding_bay", 3, 3);
         let a = game.adopt_program("worm", 0, 0, 1.0).unwrap();
         let b = game.adopt_program("virus", 0, 0, 1.0).unwrap();
@@ -80,6 +82,7 @@ fn a_bred_child_starts_at_its_species_seed_and_inherits_nothing() {
             .level = 18;
     }
     game.breed(a, b, bay).unwrap();
+    super::breeding::finish_visit(&mut game, bay);
     game.world.resource_mut::<GameClock>().tick += crate::tuning::INCUBATION_TICKS;
     game.hatch_incubations();
 

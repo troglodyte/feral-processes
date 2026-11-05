@@ -11,8 +11,8 @@ use crate::breeding::{
     BreedRefusal, Incubation, ParentRolls, VisitPause, child_species, inherit, roll_span,
 };
 use crate::components::{
-    Attributes, BreedReadyAt, BreedingVisit, Creature, Downed, Generation, Glyph, Incubator, Position, Potential, Rarity,
-    Routines, Stats, StatusEffects, Structure, Tamed,
+    Attributes, BreedReadyAt, BreedingVisit, Creature, Downed, Generation, Glyph, Incubator,
+    Position, Potential, Rarity, Routines, Stats, StatusEffects, Structure, Tamed,
 };
 use crate::game::party::ProgramRole;
 use crate::items::ItemId;

@@ -2758,7 +2758,12 @@ impl Game {
             // Beside the subject's arm and for its reason: `Err` is dropped, a
             // parent that cannot route holds where it stands, and the visit
             // simply does not start its pause.
-            if !sharing && on_floor && self.world.get::<components::BreedingVisit>(worker).is_some()
+            if !sharing
+                && on_floor
+                && self
+                    .world
+                    .get::<components::BreedingVisit>(worker)
+                    .is_some()
             {
                 let _ = self.step_to_bay(worker);
                 if let Some(p) = self.world.get::<Position>(worker) {

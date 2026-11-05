@@ -103,10 +103,11 @@ pub(super) fn docked_panel_rect(w: f32, h: f32, dock: Dock) -> Rect {
 
 /// The side opposite where the subject stands before the camera moves, so
 /// the leader stays short and the camera's move small. `Right` near the
-/// centre, where neither side is opposite.
-pub(crate) fn dock_side(subject_px_x: f32, screen_w: f32) -> Dock {
-    let from_centre = subject_px_x - screen_w / 2.0;
-    if from_centre.abs() < screen_w * DOCK_CENTRE_BAND || from_centre < 0.0 {
+/// centre of the map `pane` — the subject is only ever drawn there, not
+/// across the HUD column — where neither side is opposite.
+pub(crate) fn dock_side(subject_px_x: f32, pane: Rect) -> Dock {
+    let from_centre = subject_px_x - (pane.x + pane.w / 2.0);
+    if from_centre.abs() < pane.w * DOCK_CENTRE_BAND || from_centre < 0.0 {
         Dock::Right
     } else {
         Dock::Left
@@ -114,7 +115,8 @@ pub(crate) fn dock_side(subject_px_x: f32, screen_w: f32) -> Dock {
 }
 
 /// The tile the camera centres on so `subject` lands in the middle of the
-/// part of the screen the docked panel leaves clear. Whole tiles: the
+/// part of the map `pane` the docked panel leaves clear (the pane is
+/// narrower than the screen: the HUD column sits right of it). Whole tiles: the
 /// camera's centre is a cell, and the sub-tile ease is `Fx`'s.
 pub(crate) fn docked_camera_centre(
     subject: (i32, i32),
@@ -126,8 +128,8 @@ pub(crate) fn docked_camera_centre(
     let panel = docked_panel_rect(screen_w, 0.0, dock);
     let clear_centre = match dock {
         Dock::Centre => return subject,
-        Dock::Right => panel.x / 2.0,
-        Dock::Left => (panel.x + panel.w + screen_w) / 2.0,
+        Dock::Right => (pane.x + panel.x) / 2.0,
+        Dock::Left => (panel.x + panel.w + pane.x + pane.w) / 2.0,
     };
     let shift = (pane.x + pane.w / 2.0 - clear_centre) / tile_px;
     (subject.0 + shift.round() as i32, subject.1)
@@ -893,32 +895,39 @@ mod tests {
 
     #[test]
     fn the_panel_goes_opposite_the_subject_and_right_near_the_centre() {
-        assert_eq!(dock_side(100.0, 1280.0), Dock::Right, "subject left");
-        assert_eq!(dock_side(1200.0, 1280.0), Dock::Left, "subject right");
-        assert_eq!(dock_side(640.0, 1280.0), Dock::Right, "dead centre");
-        assert_eq!(dock_side(700.0, 1280.0), Dock::Right, "near the centre");
-        assert_eq!(dock_side(900.0, 1280.0), Dock::Left);
+        let pane = Rect::new(0.0, 40.0, 880.0, 600.0);
+        assert_eq!(dock_side(100.0, pane), Dock::Right, "subject left");
+        assert_eq!(dock_side(850.0, pane), Dock::Left, "subject right");
+        assert_eq!(dock_side(440.0, pane), Dock::Right, "dead centre");
+        assert_eq!(dock_side(500.0, pane), Dock::Right, "near the centre");
+        assert_eq!(dock_side(700.0, pane), Dock::Left);
     }
 
     #[test]
     fn the_camera_puts_the_subject_in_the_clear_half() {
-        let pane = Rect::new(0.0, 40.0, 1280.0, 600.0);
+        // The real pane: the HUD column takes the screen's right edge.
+        let screen_w = 1280.0;
+        let pane = Rect::new(0.0, 40.0, 887.0, 600.0);
         let (tile, subject) = (20.0, (100, 50));
-        let right = docked_camera_centre(subject, Dock::Right, 1280.0, pane, tile);
-        let left = docked_camera_centre(subject, Dock::Left, 1280.0, pane, tile);
-        // A camera right of the subject draws the subject left of centre.
-        assert!(
-            right.0 > subject.0 && left.0 < subject.0,
-            "{right:?} {left:?}"
-        );
+        let px_after = |centre: (i32, i32)| {
+            pane.x + pane.w / 2.0 + (subject.0 - centre.0) as f32 * tile + tile / 2.0
+        };
+        let right = docked_camera_centre(subject, Dock::Right, screen_w, pane, tile);
+        let left = docked_camera_centre(subject, Dock::Left, screen_w, pane, tile);
         assert_eq!((right.1, left.1), (50, 50));
         assert_eq!(
-            docked_camera_centre(subject, Dock::Centre, 1280.0, pane, tile),
+            docked_camera_centre(subject, Dock::Centre, screen_w, pane, tile),
             subject
         );
-        // And the subject lands left of the right-hand panel.
-        let px = pane.x + pane.w / 2.0 + (subject.0 - right.0) as f32 * tile;
-        assert!(px < docked_panel_rect(1280.0, 720.0, Dock::Right).x, "{px}");
+        let rp = docked_panel_rect(screen_w, 720.0, Dock::Right);
+        let lp = docked_panel_rect(screen_w, 720.0, Dock::Left);
+        let (rx, lx) = (px_after(right), px_after(left));
+        // Inside the clear region, within a tile of its middle.
+        let r_mid = (pane.x + rp.x) / 2.0;
+        let l_mid = (lp.x + lp.w + pane.x + pane.w) / 2.0;
+        assert!((rx - r_mid).abs() <= tile, "right dock: {rx} vs {r_mid}");
+        assert!((lx - l_mid).abs() <= tile, "left dock: {lx} vs {l_mid}");
+        assert!(lx < pane.x + pane.w, "left-docked subject under the HUD: {lx}");
     }
 
     #[test]

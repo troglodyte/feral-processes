@@ -280,7 +280,7 @@ pub(crate) fn draw_playing_base(
                     + pane.w / 2.0
                     + (subject.0 - base_centre.0) as f32 * tile_px
                     + tile_px / 2.0;
-                let dock = crate::render::notify::dock_side(subject_px_x, painter.screen_w());
+                let dock = crate::render::notify::dock_side(subject_px_x, pane);
                 fx.set_notice_dock(dock);
                 crate::render::notify::docked_camera_centre(
                     subject,

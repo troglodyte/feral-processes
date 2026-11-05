@@ -691,3 +691,53 @@ fn stock_that_satisfies_a_work_order_is_not_a_craft() {
     game.tick();
     assert!(!game.ftue_shown(&format!("crafted:{}", ids::CORE_FRAGMENT)));
 }
+
+/// "Don't show again" files a repeating kind under the profile and stops the
+/// door queueing it; a different kind still queues.
+#[test]
+fn a_silenced_kind_does_not_queue() {
+    let mut game = fresh();
+    drain(&mut game);
+    assert!(game.notify(NotificationKind::BaseAiLevelUp));
+    let note = game.take_notification().unwrap();
+    assert_eq!(note.silence_key, Some("storyline_base_ai_level_up"));
+
+    game.silence_notification(note.silence_key.unwrap());
+    assert!(!game.notify(NotificationKind::BaseAiLevelUp));
+    assert_eq!(game.notifications_pending(), 0);
+    assert!(
+        game.notify(NotificationKind::Breach),
+        "other kinds still queue"
+    );
+    assert!(game.take_pending_profile_writes(), "the opt-out is flushed");
+    assert_eq!(game.profile().notifications_never.len(), 1);
+    game.silence_notification("storyline_base_ai_level_up");
+    assert_eq!(game.profile().notifications_never.len(), 1, "no duplicates");
+}
+
+#[test]
+fn a_once_a_run_kind_carries_no_silence_key() {
+    let mut game = fresh();
+    drain(&mut game);
+    assert!(game.notify(NotificationKind::BaseAiFused));
+    assert_eq!(game.take_notification().unwrap().silence_key, None);
+}
+
+/// The queue is not saved, but the opt-out is the profile's, and a skipped
+/// field is invisible to an in-memory clone: this goes through the file.
+#[test]
+fn the_notification_opt_out_survives_a_profile_save_and_load() {
+    let mut game = fresh();
+    game.silence_notification("milestone_breach");
+    let dir = scratch_assets_dir("notification_opt_out");
+    std::fs::create_dir_all(&*dir).unwrap();
+    let path = dir.join("profile.ron");
+    game.profile().save(&path).unwrap();
+
+    let (loaded, warning) = Profile::load(&path);
+    assert_eq!(warning, None);
+    assert_eq!(loaded.notifications_never, vec!["milestone_breach"]);
+    let mut next = fresh();
+    next.install_profile(loaded);
+    assert!(!next.notify(NotificationKind::Breach));
+}

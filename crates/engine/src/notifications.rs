@@ -22,6 +22,7 @@
 //! nothing fires — was paid to make seven strings editable.
 
 use crate::components::GlyphColor;
+use bevy_ecs::entity::Entity;
 
 /// Every milestone notification the game can raise: news about a moment,
 /// fired every time its site is reached.
@@ -362,6 +363,29 @@ impl NotificationKind {
         }
     }
 
+    /// Whether this kind can fire more than once in a run, and so offers
+    /// "don't show again". **Exhaustive by construction**, `def`'s reason: a
+    /// new kind must be classified before it compiles, where a default of
+    /// `true` would offer [D] on a once-only story beat.
+    pub fn repeats(self) -> bool {
+        match self {
+            NotificationKind::BaseAiAwakening
+            | NotificationKind::BaseAiFused
+            | NotificationKind::SweepsBegin => false,
+            NotificationKind::Breach
+            | NotificationKind::ContractClosed
+            | NotificationKind::OnboardingComplete
+            | NotificationKind::OnboardingMission
+            | NotificationKind::SettlementGrown
+            | NotificationKind::LevelCapReached
+            | NotificationKind::ResearchComplete
+            | NotificationKind::ResearchDiscovered
+            | NotificationKind::PhaseKeyFound
+            | NotificationKind::ProgramDecompiled
+            | NotificationKind::BaseAiLevelUp => true,
+        }
+    }
+
     /// A stable name for this kind, for `Display` and the censuses.
     pub fn slug(self) -> &'static str {
         match self {
@@ -417,6 +441,25 @@ pub struct Notification {
     /// The FTUE key this popup was raised for, so app-core knows to offer
     /// "don't show again". `None` for every milestone.
     pub ftue_key: Option<String>,
+    /// What on the map this notice is about, named when it is queued and
+    /// **resolved when it is drawn** (`Game::subject_position`): the queue
+    /// waits on the player, and a program can move or die in the meantime.
+    pub subject: Option<NotificationSubject>,
+    /// The kind's slug, `Some` only when the kind can fire more than once in
+    /// a run (`NotificationKind::repeats`) — what "don't show again" files
+    /// under in `Profile::notifications_never`. `None` offers no [D].
+    pub silence_key: Option<&'static str>,
+}
+
+/// The thing on the map a notice points at.
+///
+/// Plain data, so the frontend never touches the `World`: an entity is turned
+/// into a position by `Game::subject_position`, the same source `Watch` uses.
+/// A tile is for things that are not entities — an outpost, the base anchor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotificationSubject {
+    Entity(Entity),
+    Tile((i32, i32)),
 }
 
 impl From<NotificationDef> for Notification {
@@ -430,6 +473,8 @@ impl From<NotificationDef> for Notification {
             category: def.category,
             detail: None,
             ftue_key: None,
+            subject: None,
+            silence_key: None,
         }
     }
 }
@@ -495,6 +540,18 @@ mod tests {
             assert_eq!(kind.def().category, want, "{kind}");
         }
         assert_eq!(NotificationCategory::Storyline.label(), "Storyline");
+    }
+
+    #[test]
+    fn a_repeating_kind_is_silenceable_and_a_one_off_is_not() {
+        let once: Vec<_> = NotificationKind::all()
+            .into_iter()
+            .filter(|k| !k.repeats())
+            .collect();
+        assert!(once.contains(&NotificationKind::BaseAiAwakening));
+        assert!(once.contains(&NotificationKind::BaseAiFused));
+        assert!(once.contains(&NotificationKind::SweepsBegin));
+        assert!(NotificationKind::BaseAiLevelUp.repeats());
     }
 
     #[test]

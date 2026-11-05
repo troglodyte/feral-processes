@@ -27,7 +27,9 @@ use bevy_ecs::prelude::Entity;
 pub(crate) enum CancelReason {
     /// Fewer than two marked parents remain: released, fused, despawned.
     ParentGone,
-    /// A parent's role is no longer `Visiting`: party, sortie, outpost, a hold.
+    /// A parent's role is no longer `Visiting`: it joined the party. Sorties,
+    /// outposts, siphons and study all refuse a non-`Staff` body, so none of
+    /// them can start on a parent.
     LeftBase,
     /// A parent was benched.
     Downed,
@@ -49,13 +51,22 @@ impl CancelReason {
     }
 }
 
+/// What one beat of the walk did.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Progress {
+    /// Arrived, or took a step toward arriving.
+    Moved,
+    /// Neither: waiting on a side, or the final step was refused.
+    Stalled,
+}
+
 /// What the decide step sees of one parent.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ParentState {
     pub role: Option<ProgramRole>,
     pub downed: bool,
     pub arrived: bool,
-    /// No route to the bay for `BREEDING_VISIT_STUCK_TICKS` steps running.
+    /// No arrival and no step for `BREEDING_VISIT_STUCK_TICKS` beats running.
     pub unreachable: bool,
 }
 
@@ -126,21 +137,21 @@ impl Game {
     /// One step of `worker` toward a side of its bay. `Ok` on arrival and
     /// when it must wait for a free side; `Err` only when there is no bay or
     /// no route, which the drift drops, holding the body where it stands.
-    /// A run of `NoRoute` is counted on the marker, and the gather reads it
-    /// as the parent being unreachable; `BoxedIn` is a wait for a side and
-    /// resets the count.
+    /// Every beat that neither arrives nor takes a step — `NoRoute`,
+    /// `BoxedIn` or a refused final step — is counted on the marker, and the
+    /// gather reads a long run as the parent being unreachable.
     pub(crate) fn step_to_bay(&mut self, worker: Entity) -> Result<(), NoPost> {
         let result = self.walk_to_bay(worker);
         if let Some(mut visit) = self.world.get_mut::<BreedingVisit>(worker) {
             visit.stuck = match result {
-                Err(NoPost::NoRoute) => visit.stuck.saturating_add(1),
-                _ => 0,
+                Ok(Progress::Moved) => 0,
+                _ => visit.stuck.saturating_add(1),
             };
         }
-        result
+        result.map(|_| ())
     }
 
-    fn walk_to_bay(&mut self, worker: Entity) -> Result<(), NoPost> {
+    fn walk_to_bay(&mut self, worker: Entity) -> Result<Progress, NoPost> {
         let visit = *self
             .world
             .get::<BreedingVisit>(worker)
@@ -156,12 +167,17 @@ impl Game {
             .copied()
             .ok_or(NoPost::NoRoute)?;
         if at_station(here, bay, 1, Touch::Sides) {
-            return Ok(());
+            return Ok(Progress::Moved);
         }
-        // `Occupancy::rigid`: both parents are idle drift walkers, and a
-        // squeeze would knock one off its route at the next pass
-        // (`step_to_repair`'s reason).
-        let blocked = self.blocked_tiles().rigid();
+        // The player's tile is taken for the choice of side: `blocked_tiles`
+        // leaves it out, and a side picked under the player refuses the
+        // final step. Claimed before `rigid`, which folds bodies into walls
+        // (`step_to_repair`'s reason for `rigid` at all).
+        let mut blocked = self.blocked_tiles();
+        if let Some(player_at) = self.field_pos() {
+            blocked.claim(player_at);
+        }
+        let blocked = blocked.rigid();
         let grid = self.world.resource::<BaseGrid>();
         let step = step_to_post(grid, here, bay, 1, &blocked, grid.radius(), Touch::Sides)?;
         if let Some(Step { to, .. }) = step
@@ -169,8 +185,9 @@ impl Game {
             && let Some(mut pos) = self.world.get_mut::<Position>(worker)
         {
             *pos = to;
+            return Ok(Progress::Moved);
         }
-        Ok(())
+        Ok(Progress::Stalled)
     }
 
     /// The marked parents of one reserved slot, in entity order.

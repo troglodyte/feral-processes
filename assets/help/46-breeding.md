@@ -27,7 +27,7 @@ together for about 30 seconds. While they are on this visit they do no work and 
 drain. When the pause ends they go back to work, and only then does the child start growing. Each
 parent keeps a memory of the other.
 
-If something stops the visit, it is called off: a parent joins your party, goes on a sortie, is
+If something stops the visit, it is called off: a parent joins your party, is
 knocked out or lost, cannot find a way to the bay, or the bay itself is demolished or destroyed. The
 Breeding Seed goes back to your pack, the slot is freed, no memory forms and neither parent has to
 rest. The log says who and why. A battle only pauses the visit.

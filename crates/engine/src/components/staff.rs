@@ -347,7 +347,7 @@ pub struct Jailed {
 pub struct BreedingVisit {
     pub bay: Entity,
     pub slot: usize,
-    /// Consecutive steps `step_to_bay` found no route. Not saved: a load
+    /// Consecutive beats `step_to_bay` neither arrived nor stepped. Not saved: a load
     /// starts the count over.
     pub stuck: u32,
 }

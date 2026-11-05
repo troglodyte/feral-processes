@@ -1395,7 +1395,10 @@ impl Game {
                     look,
                     form,
                     is_tamed,
-                    on_staff: self.program_role(entity) == Some(ProgramRole::Staff),
+                    on_staff: matches!(
+                        self.program_role(entity),
+                        Some(ProgramRole::Staff | ProgramRole::Visiting)
+                    ),
                     is_companion,
                     is_hostile,
                     is_structure,

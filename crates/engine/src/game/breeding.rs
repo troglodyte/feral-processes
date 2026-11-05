@@ -202,7 +202,8 @@ impl Game {
                     slot,
                     stuck: 0,
                 })
-                .remove::<crate::components::Task>();
+                .remove::<crate::components::Task>()
+                .remove::<crate::components::OffShift>();
         }
         self.world
             .get_mut::<Incubator>(bay)

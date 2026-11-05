@@ -214,6 +214,51 @@ fn a_pending_slot_does_not_hatch_however_late_the_clock_is() {
     assert_eq!(game.pet_count(), pets);
 }
 
+// ---- sides ----
+
+/// Occupies three of the bay's four sides so only `open` is free.
+fn wall_off_all_but(game: &mut Game, open: (i32, i32)) {
+    for side in [(2, 3), (4, 3), (3, 2), (3, 4)] {
+        if side != open {
+            spawn_machine_at(game, "depot", side.0, side.1);
+        }
+    }
+}
+
+#[test]
+fn a_parent_boxed_in_for_good_calls_the_visit_off() {
+    let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
+    wall_off_all_but(&mut game, (2, 3));
+    game.breed(a, b, bay).unwrap();
+    for _ in 0..(BREEDING_VISIT_STUCK_TICKS * 4) {
+        game.tick();
+        if marked(&mut game) == 0 {
+            break;
+        }
+    }
+    assert_called_off(&mut game, Some(bay), &[a, b], 1);
+    assert_eq!(game.program_role(a), Some(ProgramRole::Staff));
+    assert_eq!(game.program_role(b), Some(ProgramRole::Staff));
+}
+
+#[test]
+fn a_parent_never_picks_the_side_the_player_stands_on() {
+    for side in [(2, 3), (4, 3), (3, 2), (3, 4)] {
+        let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
+        let player = game.player_entity();
+        *game.world.get_mut::<Position>(player).unwrap() = Position {
+            x: side.0,
+            y: side.1,
+        };
+        game.breed(a, b, bay).unwrap();
+        until_paused(&mut game, bay);
+        for p in [a, b] {
+            let at = *game.world.get::<Position>(p).unwrap();
+            assert_ne!((at.x, at.y), side, "a parent stands on the player's side");
+        }
+    }
+}
+
 // ---- cancels ----
 
 fn mid_visit() -> (Game, Entity, Entity, Entity) {
@@ -268,14 +313,18 @@ fn a_parent_joining_the_party_calls_the_visit_off() {
 }
 
 #[test]
-fn a_parent_sent_on_a_sortie_calls_the_visit_off() {
-    let (mut game, a, b, bay) = mid_visit();
-    game.world
-        .resource_mut::<Sorties>()
-        .0
-        .push(Sortie::test_stub(vec![a]));
-    game.tick();
-    assert_called_off(&mut game, Some(bay), &[b], 1);
+fn a_sortie_cannot_be_dispatched_with_a_visiting_parent() {
+    let (mut game, a, b, bay) = bay_game("worm", "virus", 1);
+    super::routes::deploy_relay(&mut game);
+    let site = game.sortie_board().expect("a Relay stands")[0].id.clone();
+    game.breed(a, b, bay).unwrap();
+    let before = game.world.resource::<Sorties>().0.len();
+    assert!(matches!(
+        game.dispatch_sortie(&site, &[a]),
+        Err(crate::game::sortie::SortieRefusal::NotStaff(_))
+    ));
+    assert_eq!(game.world.resource::<Sorties>().0.len(), before);
+    assert_eq!(game.program_role(a), Some(ProgramRole::Visiting));
 }
 
 #[test]
@@ -331,6 +380,10 @@ fn a_visiting_parents_needs_hold_and_it_is_never_pulled_away() {
     for who in [a, b, control] {
         set_reserve(&mut game, who, &coherence(), level);
     }
+    game.world.entity_mut(a).insert(OffShift {
+        need: coherence(),
+        waited: false,
+    });
     game.breed(a, b, bay).unwrap();
     // Every tick of the visit, not only its end: the tick that ends it hands
     // the parents back to the pool, and they drain from then on.

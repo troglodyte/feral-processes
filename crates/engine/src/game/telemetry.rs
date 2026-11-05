@@ -64,7 +64,7 @@ impl Game {
             crate::base_ledger::Event::Consume {
                 item: item.clone(),
                 qty,
-                source: source,
+                source,
             },
             move |tick, zone, _| Record::Consume {
                 tick,

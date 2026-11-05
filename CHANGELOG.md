@@ -53,7 +53,7 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
-## Unreleased
+## 0.21.47
 
 **A Holding Cell now gets a warden on its own, so a prisoner is actually decompiled.** Before, no worker could ever be sent to a cell, so a prisoner sat in it forever and no decompile attempt was ever made. Now, while the cell has power and a prisoner, a free worker comes over and works at it, and goes back to other work once the cell is empty or has no room left for a breakdown's salvage. The cell's sheet shows a progress bar for the current attempt and says when it is waiting for a free worker, and the cell's help, description and research text no longer tell you to post a warden. Saves load unchanged.
 

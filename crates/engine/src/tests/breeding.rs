@@ -248,7 +248,7 @@ fn seed() -> ItemId {
 
 /// A base with a built bay, two owned programs of the given species and
 /// `seeds` breeding seeds in the pack.
-fn bay_game(a: &str, b: &str, seeds: u32) -> (Game, Entity, Entity, Entity) {
+pub(super) fn bay_game(a: &str, b: &str, seeds: u32) -> (Game, Entity, Entity, Entity) {
     let mut game = Game::new(5150, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     stand_in_base(&mut game);
     // The walk is `drift_idle_staff`'s, which a base with no Home never runs.
@@ -296,15 +296,11 @@ fn the_base_breeds_into_the_first_bay_with_room_else_the_first() {
     assert_eq!(game.base_breeding_bay(), Some(first), "all full: the first");
 }
 
-fn seeds_in_pack(game: &Game) -> u32 {
+pub(super) fn seeds_in_pack(game: &Game) -> u32 {
     game.world
         .get::<Inventory>(game.player_entity())
         .unwrap()
         .count(&seed())
-}
-
-fn now(game: &Game) -> u64 {
-    game.world.resource::<GameClock>().tick
 }
 
 /// Everything a refused breeding must leave alone.
@@ -529,7 +525,7 @@ fn incubating_game() -> (Game, Entity, Entity, Entity) {
 
 /// Ticks the game until the parents have walked to the bay and finished
 /// their pause — the child exists only after that.
-fn finish_visit(game: &mut Game, bay: Entity) {
+pub(super) fn finish_visit(game: &mut Game, bay: Entity) {
     for _ in 0..600 {
         if game.world.get::<Incubator>(bay).unwrap().slots[0]
             .as_ref()
@@ -771,7 +767,7 @@ fn parents_stay_usable_while_the_child_incubates() {
 
 /// A RON round trip cannot see a skipped field, so breeding state is
 /// asserted through a real save and load.
-fn save_and_load(game: &mut Game, tag: &str) -> Game {
+pub(super) fn save_and_load(game: &mut Game, tag: &str) -> Game {
     let path =
         std::env::temp_dir().join(format!("feral_breeding_{tag}_{}.bin", std::process::id()));
     game.save(&path).unwrap();
@@ -798,7 +794,7 @@ fn a_retune_to_no_slots_does_not_eat_a_stored_child() {
     assert!(loaded.world.get::<Incubator>(bay).unwrap().slots[0].is_some());
 }
 
-fn loaded_bay(game: &mut Game) -> Entity {
+pub(super) fn loaded_bay(game: &mut Game) -> Entity {
     let mut query = game.world.query::<(Entity, &Incubator)>();
     query.iter(&game.world).next().expect("the bay stands").0
 }

@@ -28,6 +28,7 @@ mod behaviours;
 mod bench_stores;
 mod bonds;
 mod breeding;
+mod breeding_visit;
 mod building;
 mod caravans;
 mod catalog;

@@ -1898,6 +1898,18 @@ mod tests {
         game.reseed_outpost_announcements();
         while game.take_notification().is_some() {}
 
+        // The latch itself, before any tick: a `None` latch is silently
+        // filled by the first tick, so the tick alone cannot see a missing
+        // reseed.
+        let reached = {
+            let crew = game.outpost_crew(tile).len();
+            crate::outposts::tier(&game.world.resource::<Outposts>().0[&tile], crew)
+        };
+        assert!(reached >= 1, "the fixture must have reached a tier");
+        assert_eq!(
+            game.world.resource::<Outposts>().0[&tile].announced_tier,
+            Some(reached as u32)
+        );
         let crew = game.outpost_crew(tile);
         game.tick_one_outpost(tile, &crew);
         assert!(tier_notices(&mut game).is_empty());

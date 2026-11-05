@@ -336,14 +336,15 @@ fn a_prisoner_is_never_handed_a_task_and_never_moves() {
         .unwrap();
 
     let mut crew_worked = false;
-    for _ in 0..60 {
+    for tick in 0..60 {
         game.tick();
         crew_worked |= crew.iter().any(|c| game.world.get::<Task>(*c).is_some());
         // The cell now wards itself, so a decompile can land inside the
         // window; the claim is about a prisoner, and a decompiled body is
-        // ordinary staff. An attempt takes `ATTEMPT_TICKS`, so the claim is
-        // still held for at least that long.
+        // ordinary staff. An attempt takes `ATTEMPT_TICKS`, so the claim must
+        // have held at least that long.
         if game.world.get::<Jailed>(body).is_none() {
+            assert!(tick + 1 >= ATTEMPT_TICKS, "released on tick {tick}");
             break;
         }
         assert!(game.world.get::<Task>(body).is_none());
@@ -1066,6 +1067,30 @@ fn a_breakdown_is_priced_without_the_bench_bonus() {
         rows
     };
     assert_eq!(paid(None), paid(Some(6)), "a cell is not a bench's work");
+}
+
+/// A prisoner from a save that predates `Jailed::record` defers on a full
+/// output exactly as one with a record does: the record is rebuilt before the
+/// room check, so its worst case is priced rather than read as "fits".
+#[test]
+fn a_recordless_prisoner_waits_for_room_too() {
+    let (mut game, cell, body) = a_warded_cell(7301);
+    game.world.get_mut::<Jailed>(body).unwrap().record = None;
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+    }
+    game.world.get_mut::<Jailed>(body).unwrap().attempts = JAIL_MAX_ATTEMPTS - 1;
+
+    game.settle_jail_attempt(cell, body, false);
+
+    assert_eq!(game.cell_prisoner(cell), Some(body), "the prisoner waits");
+    assert_eq!(game.world.get::<Stock>(cell).unwrap().output_room(), 0);
+    assert!(
+        !game.cell_wants_a_warden(cell),
+        "the rebuilt record frees the warden"
+    );
 }
 
 #[test]

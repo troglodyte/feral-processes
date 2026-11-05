@@ -543,9 +543,11 @@ impl Game {
 
     /// Whether `cell` has room for the worst payout `prisoner` could break
     /// down into. Reads `Jailed::record` as stored rather than through
-    /// `prisoner_record`, which rebuilds a missing one and rolls a condition:
-    /// the scheduler asks this every pass and must draw nothing. A prisoner
-    /// with no record (a pre-`record` save) pays nothing worth room, so fits.
+    /// `prisoner_record`, which needs `&mut self` and writes the rebuilt
+    /// record back; the scheduler asks this from a read-only pass. A prisoner
+    /// with no record yet (a pre-`record` save) reads as fitting, so its warden
+    /// is posted; its first breakdown attempt rebuilds and stores the record,
+    /// and from then on this check is exact.
     fn breakdown_fits(&self, cell: Entity, prisoner: Entity) -> bool {
         let Some(program) = self
             .world
@@ -579,10 +581,12 @@ impl Game {
     /// prisoner stays. Two `GameRng` draws when it goes ahead: the tool,
     /// then the band.
     fn break_down_prisoner(&mut self, cell: Entity, prisoner: Entity) -> bool {
+        // Rebuild a missing record first, so the room check prices it rather
+        // than reading "no record" as "fits".
+        let program = self.prisoner_record(prisoner);
         if !self.breakdown_fits(cell, prisoner) {
             return false;
         }
-        let program = self.prisoner_record(prisoner);
         let label = self.creature_label(prisoner);
         let granted = match (program.as_ref(), self.breakdown_tool()) {
             (Some(program), Some(tool)) => {

@@ -43,7 +43,7 @@ way to do that, and after this fix they won't need to.
 
 ### Engine: the want
 
-`base_wants` gets a cell block right after the Teardown Rig block. Both are
+`base_wants` gets a cell block right after the Teardown Rig block (the user confirmed this priority). Both are
 self-staffing jobs, so both sit at a standing job's priority: below builds,
 fuel, research and orders, and above dig and farm wants. Priority is a want's
 position in that list, so the placement is the whole decision.
@@ -82,11 +82,13 @@ No new component is added.
 ### GUI: the structure sheet (`render/building/structure_sheet.rs`)
 
 - **Clock line.** It reads `attempts 2/5  beats 17/40  next roll 34%`, and
-  "beats N/M" is a raw tick count. It becomes `attempt 3 of 5, next try 42%
-  along, 34% chance`. The engine works out the percentage as a new
-  `PrisonerState::progress_percent`, following the tick-vocabulary rule that
-  the engine does any banding. `progress` and `attempt_ticks` leave the view
-  if nothing else reads them.
+  "beats N/M" is a raw tick count. The user chose a progress bar to replace
+  it, so the line becomes `attempt 3 of 5  ████░░░░░░  34% chance`. The bar
+  reuses the text `bar(fraction)` helper in `base_report/staff.rs`, lifted to
+  a module both screens can import rather than copied. The engine supplies the
+  fraction as a new `PrisonerState::progress_fraction`, because under the
+  tick-vocabulary rule the engine does any banding. `progress` and
+  `attempt_ticks` leave the view if nothing else reads them.
 - **No-warden line.** It reads `no warden — nothing is decompiling`. It becomes
   `waiting for a free worker`, and it is shown only when the cell holds a
   prisoner, is not `Unpowered`, and has no warden. A dark cell already gets the
@@ -102,7 +104,7 @@ No new component is added.
 | `crates/engine/src/notifications.rs` `ProgramDecompiled` body | "…A warden kept at the Holding Cell until the decompile took." | "…Its warden kept at it in the Holding Cell until the decompile took." |
 | `assets/structures/README.md` `holds_prisoner` | "a posted warden works at decompiling it … `attempt_ticks` is the warden beats…" | "a warden is staffed on its own while the cell has power and a prisoner … `attempt_ticks` is the warded, powered ticks between one roll and the next" (this README is for modders, so "ticks" is allowed here) |
 
-Optional, recommended: the Reinitialization Protocol's description
+Also (user confirmed): the Reinitialization Protocol's description
 (`assets/items/reinitialization_protocol.ron`) becomes "Boots a downed program
 as a prisoner in a Holding Cell you stand beside."
 
@@ -125,7 +127,7 @@ To add:
 - `a_dark_cell_is_not_warded`
 - `a_spent_prisoner_with_no_output_room_frees_its_warden`, and the warden comes
   back once the output is emptied.
-- A view test: `progress_percent` is 0 at a fresh attempt and under 100 just
+- A view test: `progress_fraction` is 0 at a fresh attempt and under 1 just
   before a roll.
 - A GUI line test: the no-free-worker line is absent when the cell is unpowered
   and absent when the cell is empty.

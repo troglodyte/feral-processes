@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.45
+
+**The Production page now shows how much of each item was used, and what used it.** A new `used` column sits beside `run`, and under each item a line lists where it went: into which product, burnt as fuel, built, mending, and so on, largest first. Each section now shows its top 3 items instead of 5, because every item takes two lines. Saves load unchanged; spending from before this release counts toward `used` but has no breakdown.
+
 ## 0.21.44
 
 **The base AI now stands on its Research Station instead of the tile beside it.** Once it fuses, the AI's glyph sits inside the station's outline. A save where the AI already fused beside the station moves it onto the station when the save loads. Saves load unchanged.

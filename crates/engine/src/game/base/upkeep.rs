@@ -925,19 +925,27 @@ impl Game {
             // the Extractor" directly beneath it.
             self.world.entity_mut(worker).remove::<Task>();
             self.bench_or_dissolve(worker);
-            // Only a benched body is left to mark; Permadeath despawned it.
-            if self.world.get::<Downed>(worker).is_some() {
-                self.notify_with(
-                    NotificationKind::BaseStaffDowned,
-                    NotifyArgs {
-                        fills: &[("name", &worker_label)],
-                        subject: Some(NotificationSubject::Entity(worker)),
-                        ..Default::default()
-                    },
-                );
-            }
+            self.notify_base_staff_downed(worker, &worker_label);
         }
         true
+    }
+
+    /// The at-base "Staff Down" notice, for a staff body just run through
+    /// `bench_or_dissolve`. Only a benched body is left to mark; Permadeath
+    /// despawned it. Fired by the two at-base reaps (`run_raid`'s defender and
+    /// the siege board's), never from `bench_or_dissolve` itself, which a
+    /// battle, a sortie or an off-screen siege also go through.
+    pub(crate) fn notify_base_staff_downed(&mut self, staff: Entity, label: &str) {
+        if self.world.get::<Downed>(staff).is_some() {
+            self.notify_with(
+                NotificationKind::BaseStaffDowned,
+                NotifyArgs {
+                    fills: &[("name", label)],
+                    subject: Some(NotificationSubject::Entity(staff)),
+                    ..Default::default()
+                },
+            );
+        }
     }
 
     /// Everything a town raid *is*, once it has been decided one happens.

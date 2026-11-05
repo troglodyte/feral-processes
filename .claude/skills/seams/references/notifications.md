@@ -80,8 +80,9 @@
 - **`BaseStaffDowned` is the at-base twin of `DownedProgram`, and it is
   not fired from `bench_or_dissolve`.** That door is for battle, sortie and
   off-screen siege downs, where there is no body on the base map to mark.
-  The one at-base path today is the raid defender left `Downed` in
-  `run_raid`; a tantrum's blow is clamped to 1 HP so a brawl can't down
+  The at-base paths today are the raid defender left `Downed` in
+  `run_raid` and staff reaped off an on-screen siege board
+  (`tactical/turn.rs`), both through `notify_base_staff_downed`; a tantrum's blow is clamped to 1 HP so a brawl can't down
   anyone, and `admit_the_badly_hurt` breaks off for repair rather than
   downing. A new at-base downing path fires it at the site.
 - **A focused notice carries a subject, not a position.** Notices queue, so

@@ -137,8 +137,9 @@ pub enum NotificationKind {
     /// the new `{level}`.
     BaseAiLevelUp,
     /// A base staff member is knocked out at the base —
-    /// `Game::run_raid`'s Forgiving arm, the one path that downs
-    /// staff on the base map (a brawl's blows are clamped short of zero).
+    /// `Game::notify_base_staff_downed`, from `Game::run_raid`'s defender and
+    /// the siege board's staff reap, the two paths that down staff on the
+    /// base map (a brawl's blows are clamped short of zero).
     /// Templated with the program's `{name}`. The at-base twin of the
     /// alert-board `ProgramDowned`: a down in a battle, a sortie or an
     /// off-screen siege has no body on the map to mark and stays off this.
@@ -388,7 +389,7 @@ impl NotificationKind {
             },
             NotificationKind::BaseStaffDowned => NotificationDef {
                 title: "Staff Down",
-                body: "{name} was knocked out at the base and is out of action. Downed programs stay down until you recover them.",
+                body: "{name} was knocked out at the base and is out of action. A downed program needs a Repair Bay to get back on its feet.",
                 sprite: None,
                 glyph: '!',
                 color: GlyphColor::Red,

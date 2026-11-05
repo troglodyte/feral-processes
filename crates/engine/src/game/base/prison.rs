@@ -329,8 +329,11 @@ impl Game {
                 name: self.creature_label(body),
                 attempts: jailed.attempts,
                 max_attempts: JAIL_MAX_ATTEMPTS,
-                progress: jailed.progress,
-                attempt_ticks,
+                progress_fraction: if jailed.attempts >= JAIL_MAX_ATTEMPTS {
+                    0.0
+                } else {
+                    jailed.progress as f32 / attempt_ticks.max(1) as f32
+                },
                 odds_percent: (self.jail_odds(body)? * 100.0).round() as u32,
             })
         });

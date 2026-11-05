@@ -41,10 +41,10 @@ rolls — the screen and the pull read the same figure.
 
 A record does not have to be spent on a tool at all. Forge a Reinitialization Protocol at a
 Workbench, stand beside a Holding Cell and spend it on the record: the program boots up as a
-prisoner in the pen, level 1. Post a worker to the cell as its warden and it makes a decompile
-attempt at intervals, each failure making the next likelier. A success joins it to your roster. If
-every attempt fails it breaks down, and the cell is left holding a little salvage. A boss's record
-will not reinitialize.
+prisoner in the pen, level 1. While the cell has power, a free worker comes over as its warden and
+makes a decompile attempt at intervals, each failure making the next likelier. A success joins it
+to your roster. After five failures it breaks down and the cell is left holding a little salvage
+to collect with `c`. A cell holds one prisoner at a time. A boss's record will not reinitialize.
 
 A Workbench changes both halves of that. Once Automation is researched, standing one anywhere
 makes every extraction quicker, and every tier you upgrade it past the first makes the same tool draw more out of the same body — more

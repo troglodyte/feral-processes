@@ -68,6 +68,7 @@ mod machine_recipe;
 mod manifest;
 mod marks;
 mod meta;
+mod meter;
 mod mod_copy;
 mod notify;
 mod outposts;

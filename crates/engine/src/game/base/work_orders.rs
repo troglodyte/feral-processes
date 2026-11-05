@@ -1637,11 +1637,17 @@ impl Game {
                     .get::<crate::components::Hopper>(target)
                     .is_some()
         });
+        // **And a body on a Holding Cell**, the same reason again: the cell's
+        // want vanishes when it empties or clogs.
+        let a_cell_holds_a_body = posted.iter().any(|&(target, kind)| {
+            kind == TaskKind::GatherResource && self.prison_pen(target).is_some()
+        });
         let queue_is_empty = self.world.resource::<resources::WorkOrders>().0.is_empty()
             && !wanted.iter().any(|&(_, kind)| kind == TaskKind::Construct)
             && !any_dig_marked
             && !a_burner_holds_a_body
-            && !a_rig_holds_a_body;
+            && !a_rig_holds_a_body
+            && !a_cell_holds_a_body;
         // **A body standing at a post it is no longer allowed to hold is
         // work to do**, even when the queue is empty and every want is
         // already covered. Without this term the pass returns above the free

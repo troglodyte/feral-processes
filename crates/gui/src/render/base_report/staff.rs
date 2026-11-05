@@ -2,12 +2,10 @@
 //! figure comes from the engine's report; this only formats.
 
 use super::*;
+use crate::render::meter::bar;
 use feral_processes_engine::{
     CoverageRow, DiscontentRow, StaffActivity, WellbeingNeed, WellbeingRow,
 };
-
-/// Cells in a need's bar.
-const BAR_CELLS: usize = 5;
 
 /// The widest a program's name column grows.
 const NAME_CHARS: usize = 20;
@@ -18,12 +16,6 @@ const NEED_NAME_CHARS: usize = 9;
 
 /// Letters of a need's name kept in front of its bar.
 const NEED_TAG_CHARS: usize = 4;
-
-/// A meter of `BAR_CELLS` cells, `fraction` of them filled.
-fn bar(fraction: f32) -> String {
-    let filled = (fraction.clamp(0.0, 1.0) * BAR_CELLS as f32).round() as usize;
-    format!("{}{}", "█".repeat(filled), "░".repeat(BAR_CELLS - filled))
-}
 
 /// `name` cut to `width` cells with an ellipsis, never clipped silently.
 pub(super) fn elide(name: &str, width: usize) -> String {

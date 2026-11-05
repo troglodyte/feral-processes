@@ -244,8 +244,7 @@ fn a_cell_quotes_its_prisoner_its_clock_and_the_missing_warden() {
             name: "Crawler 1".to_string(),
             attempts: 2,
             max_attempts: 5,
-            progress: 7,
-            attempt_ticks: 40,
+            progress_fraction: 0.4,
             odds_percent: 18,
         }),
     });
@@ -255,10 +254,43 @@ fn a_cell_quotes_its_prisoner_its_clock_and_the_missing_warden() {
         .collect();
     let joined = text.join("\n");
     assert!(joined.contains("holds Crawler 1"), "{joined}");
-    assert!(joined.contains("attempts 2/5"), "{joined}");
-    assert!(joined.contains("beats 7/40"), "{joined}");
-    assert!(joined.contains("next roll 18%"), "{joined}");
-    assert!(joined.contains("no warden"), "{joined}");
+    assert!(
+        joined.contains("attempt 3 of 5  ██░░░  18% chance"),
+        "{joined}"
+    );
+    assert!(joined.contains("waiting for a free worker"), "{joined}");
+}
+
+fn cell_sheet(status: MachineStatus, prisoner: bool) -> String {
+    use feral_processes_engine::views::{PrisonState, PrisonerState};
+    let mut s = structure_report(status);
+    s.prison = Some(PrisonState {
+        warded: false,
+        prisoner: prisoner.then(|| PrisonerState {
+            name: "Crawler 1".to_string(),
+            attempts: 0,
+            max_attempts: 5,
+            progress_fraction: 0.0,
+            odds_percent: 10,
+        }),
+    });
+    structure_detail_lines(&s, None, false)
+        .into_iter()
+        .map(|(t, _)| t)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn a_dark_cell_does_not_wait_for_a_worker() {
+    let text = cell_sheet(MachineStatus::Unpowered, true);
+    assert!(!text.contains("waiting for a free worker"), "{text}");
+}
+
+#[test]
+fn an_empty_cell_does_not_wait_for_a_worker() {
+    let text = cell_sheet(MachineStatus::Idle, false);
+    assert!(!text.contains("waiting for a free worker"), "{text}");
 }
 
 #[test]

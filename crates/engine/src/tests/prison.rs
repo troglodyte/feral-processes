@@ -606,6 +606,9 @@ fn jailed(game: &Game, body: Entity) -> Jailed {
 #[test]
 fn a_cell_takes_a_warden_through_the_ordinary_cronjob_door() {
     let (mut game, cell) = base_with_a_cell();
+    // A cell with nobody to ward lets its body go, so give it a prisoner.
+    game.jail_program(0).unwrap();
+    stand_ample_grid_supply(&mut game);
     let worker = spawn_tamed(&mut game, 10, 3);
     stand_in_base_at(&mut game, BESIDE.0, BESIDE.1);
     assert!(game.accepts_a_program(cell));
@@ -712,6 +715,27 @@ fn a_spent_prisoner_with_no_output_room_frees_its_warden() {
     assert_eq!(post_of(&game, body), Some((cell, TaskKind::GatherResource)));
 }
 
+/// A seated warden is let go when its cell stops wanting one, with nothing
+/// else queued: `assign_base_labour`'s empty-queue guard would otherwise
+/// return before the free loop and leave the body posted for good.
+#[test]
+fn a_seated_warden_is_released_when_the_cell_clogs() {
+    let (mut game, cell, body) = a_lit_cell_with_a_spare_body(true);
+    game.schedule_base_labour();
+    assert_eq!(post_of(&game, body), Some((cell, TaskKind::GatherResource)));
+    let prisoner = the_prisoner(&game, cell);
+    game.world.get_mut::<Jailed>(prisoner).unwrap().attempts = JAIL_MAX_ATTEMPTS;
+    {
+        let mut stock = game.world.get_mut::<Stock>(cell).unwrap();
+        let room = stock.output_room();
+        stock.output.insert(ItemId::from("core_fragment"), room);
+    }
+
+    game.schedule_base_labour();
+
+    assert_eq!(post_of(&game, body), None);
+}
+
 #[test]
 fn a_warden_advances_progress_one_per_beat() {
     let (mut game, _cell, body) = a_warded_cell(7301);
@@ -719,6 +743,24 @@ fn a_warden_advances_progress_one_per_beat() {
         game.tick();
     }
     assert_eq!(jailed(&game, body).progress, 5);
+}
+
+#[test]
+fn the_sheet_reads_the_clock_as_a_fraction_of_the_attempt() {
+    let (mut game, cell, _body) = a_warded_cell(7301);
+    let fraction = |g: &Game| {
+        g.prison_state(cell)
+            .unwrap()
+            .prisoner
+            .unwrap()
+            .progress_fraction
+    };
+    assert_eq!(fraction(&game), 0.0);
+    for _ in 0..5 {
+        game.tick();
+    }
+    let f = fraction(&game);
+    assert!(f > 0.0 && f < 1.0, "{f}");
 }
 
 #[test]

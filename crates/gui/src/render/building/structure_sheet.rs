@@ -237,16 +237,23 @@ pub(crate) fn structure_detail_lines(
                     )
                 } else {
                     format!(
-                        "  attempts {}/{}  beats {}/{}  next roll {}%",
-                        p.attempts, p.max_attempts, p.progress, p.attempt_ticks, p.odds_percent
+                        "  attempt {} of {}  {}  {}% chance",
+                        p.attempts + 1,
+                        p.max_attempts,
+                        crate::render::meter::bar(p.progress_fraction),
+                        p.odds_percent
                     )
                 };
                 lines.push((clock, TEXT_DIM));
             }
             None => lines.push(("  empty".to_string(), TEXT_DIM)),
         }
-        if !prison.warded {
-            lines.push(("  no warden — nothing is decompiling".to_string(), YELLOW));
+        // The cell takes a free worker on its own, so with a prisoner, power
+        // and no warden the only thing missing is a spare body. A dark cell
+        // already says why on its status line.
+        if prison.prisoner.is_some() && !prison.warded && s.status != Some(MachineStatus::Unpowered)
+        {
+            lines.push(("  waiting for a free worker".to_string(), YELLOW));
         }
     }
     // Dim either way: the crew reloads a spent pod on its own, so there is

@@ -95,7 +95,7 @@ from the `Mode`, which every town shares. **[ADR 0043](../../adr/0043-a-hub-rail
 page in `App` by key. The user chose this over a two-hook extension for
 long-term flexibility. The work is two steps: first move the four
 existing hubs onto the new model with no visible change, then build the
-Sites hub on it. ** Each rail row carries the
+Sites hub on it.** Each rail row carries the
 glyph, the site name, and a section header (Towns and cities /
 Outposts / Traffic). Order: settlements by name, then outposts by
 name, then **Caravans**. The `!` mark (`HubKind::marks`) flags a site that

@@ -239,6 +239,16 @@ fn a_bounty_survives_a_ron_round_trip_inside_an_active_contract() {
 }
 
 #[test]
+fn a_quarry_without_its_zone_does_not_parse() {
+    let def = rolled(4, 9);
+    let text = ron::to_string(&quarry(&def)).unwrap();
+    assert!(ron::from_str::<BountyQuarry>(&text).is_ok());
+    let without = text.replace(&format!("zone:{}", quarry(&def).zone), "");
+    assert_ne!(without, text, "the field was written");
+    assert!(ron::from_str::<BountyQuarry>(&without).is_err());
+}
+
+#[test]
 fn the_name_banks_hold_no_occult_words() {
     let banned = [
         "demon", "devil", "satan", "hell", "occult", "ritual", "cult", "witch", "curse", "doom",

@@ -433,7 +433,7 @@ impl Game {
             rarity: Some(quarry.rarity),
             routines: Some(routines),
             potential: Some(potential),
-            zone: Some(quarry.zone).filter(|z| *z > 0),
+            zone: Some(quarry.zone),
         };
         let entity = self.spawn_wild_creature_pinned(
             &quarry.species,

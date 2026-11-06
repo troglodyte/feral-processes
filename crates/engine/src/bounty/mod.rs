@@ -36,9 +36,7 @@ pub struct BountyQuarry {
     pub anchor: (i32, i32),
     pub tether: i32,
     /// The sector the bounty was rolled in, whose stat curve the quarry is
-    /// scaled by wherever the party has since gone. `0` (an absent field)
-    /// reads as the live sector.
-    #[serde(default)]
+    /// scaled by wherever the party has since gone.
     pub zone: u32,
 }
 

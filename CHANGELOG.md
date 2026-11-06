@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.49
+
+**A new Sites list, opened with [w] at base or beside a town or outpost, shows every town, city and outpost you know, plus the caravans.** Each town has Status, Goods, Routes, Jobs and Log tabs. Each outpost has Status, Crew, Stock and Log tabs. A Caravans entry shows the next trader and every route under way. Before, this was spread across visit pages and the Relay's Dispatch screen, and you mostly had to walk to a place to read it. Times are given in words ("soon", "a while ago"), never as numbers.
+
+**What you can do from it depends on where you stand.** From base you can travel by relay, send cargo, stop a repeating route, abandon a job, recall crew and repair an outpost. Beside a site you can also trade, read its board, ask for a gift, post a program and take stock. An action you can't use from where you stand still shows, and tells you why when you try it. Leaving a market, board or cargo screen you opened from the list takes you back to the tab you came from.
+
+**Each site keeps a log, and each town remembers the shelf you last saw.** Visits, trades, standing changes, jobs, gifts, routes, raids and outpost events are recorded per site. A town's Goods tab shows its shelf as you last saw it, with how long ago that was. The new Price Feeds research, which needs Dispatch and opens in zone 2, shows every known town's current shelf. Buying still means going there.
+
+**The Relay's Dispatch screen now handles sorties only.** Routes and relay trips to towns and outposts moved to the Sites list, which also lists towns you have found but not yet visited. Saves load unchanged.
+
 ## 0.21.48
 
 **A notice about one thing on the map now points at it instead of covering it.** When a program starts going wrong, fuses with the Research Station, joins you from a Holding Cell, or is knocked out at the base, and when "Your Base" is explained, the notice docks to one side, the camera brings the subject into the clear half, and pulsing brackets with a line mark it. If the subject is off the map you are viewing, the notice is centred as before. For a program, [W] Watch closes the notice and follows it; Esc stops following.

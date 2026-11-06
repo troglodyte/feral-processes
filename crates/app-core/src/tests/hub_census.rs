@@ -426,7 +426,7 @@ fn enter_hub_at_holds_the_named_page() {
 /// `App::enter_hub_at` or a turn.
 const SHARED_SCREENS: &[Mode] = &[];
 
-fn shared_screens(app: &App) -> Vec<Mode> {
+pub(super) fn shared_screens(app: &App) -> Vec<Mode> {
     let mut counts: Vec<(Mode, usize)> = Vec::new();
     for hub in Hub::ALL {
         for page in hub.kind().pages(app) {
@@ -453,4 +453,27 @@ fn shared_screens_are_pinned() {
     app.handle_key(GameKey::Char('c'));
     assert!(app.structure_hub.is_some());
     assert_eq!(shared_screens(&app), SHARED_SCREENS, "{message}");
+}
+
+/// With two towns and two outposts on the rail, every tab of a site page is
+/// shared by its twin. Caravans is one page, so its tabs never are.
+const SHARED_WITH_SITES: &[Mode] = &[
+    Mode::SiteStatus,
+    Mode::SiteGoods,
+    Mode::SiteRoutes,
+    Mode::SiteJobs,
+    Mode::SiteLog,
+    Mode::OutpostStatus,
+    Mode::OutpostCrew,
+    Mode::OutpostStock,
+];
+
+#[test]
+fn shared_screens_with_sites_are_pinned() {
+    let app = crate::tests::sites_hub::app_with_far_sites(41067);
+    let mut shared = shared_screens(&app);
+    shared.sort_by_key(|m| format!("{m:?}"));
+    let mut pinned = SHARED_WITH_SITES.to_vec();
+    pinned.sort_by_key(|m| format!("{m:?}"));
+    assert_eq!(shared, pinned);
 }

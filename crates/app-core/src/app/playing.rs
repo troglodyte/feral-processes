@@ -283,6 +283,12 @@ impl App {
                 self.open_hub(Hub::Base);
                 return;
             }
+            // The Sites hub. Opens at base or beside a site, and says so when
+            // it does not.
+            GameKey::Char('w') => {
+                self.open_sites_hub();
+                return;
+            }
             // Bound up here, beside `L`/`u`/`f` and for their reason: this
             // match runs before the `is_underground()` hand-off below, so
             // the board opens on the field and in the

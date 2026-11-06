@@ -131,7 +131,7 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     app.handle_key(GameKey::Char(match hub {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
-        Hub::Structure | Hub::GameMenu => unreachable!("hub_of names the shared hubs only"),
+        Hub::Structure | Hub::GameMenu | Hub::Sites => unreachable!("hub_of names the shared hubs only"),
     }));
     for _ in 0..BASE_REPORT_PAGES.len().max(INVENTORY_PAGES.len()) {
         if app.hub_at().map(|(_, p, _)| p) == Some(page) {

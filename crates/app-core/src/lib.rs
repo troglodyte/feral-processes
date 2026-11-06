@@ -25,6 +25,7 @@ pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
 pub use app::crafting::{craft_list, craft_visible};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
+pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, TOWN_TABS, sites_screen_keys};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dev_item_picker::dev_item_visible;
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
@@ -2297,6 +2298,30 @@ pub enum Mode {
     /// The Stock page: what the base holds against the work-order targets,
     /// short rows first - see `Game::stock_report`. Scrolls by cursor.
     BaseStock,
+    /// Sites hub, a town or city's first tab: kind, specialty, standing and
+    /// what it means - see `Game::town_status`. `T`, `G` and `H` act.
+    SiteStatus,
+    /// Sites hub, a town or city's goods: the last-seen shelf, or the live
+    /// one after the Price Feeds research - see `Game::town_goods`.
+    SiteGoods,
+    /// Sites hub, routes in flight to a town or city - see
+    /// `Game::site_routes`. `S` stops repeating; the last row dispatches.
+    SiteRoutes,
+    /// Sites hub, the contracts a town issued - see `Game::town_contracts`.
+    SiteJobs,
+    /// Sites hub, a site's recent events, newest first - see
+    /// `Game::site_log`. Shared by towns, cities and outposts.
+    SiteLog,
+    /// Sites hub, an outpost's first tab - see `Game::outpost_report`.
+    OutpostStatus,
+    /// Sites hub, an outpost's crew; `U` recalls, the last row posts.
+    OutpostCrew,
+    /// Sites hub, an outpost's stock and routes; `C` takes.
+    OutpostStock,
+    /// Sites hub, the visiting trader - see `Game::caravan_schedule`.
+    CaravanSchedule,
+    /// Sites hub, every route in flight - see `Game::routes_in_flight`.
+    RoutesInFlight,
     /// Build orders page, first screen: every structure on order - see
     /// `Game::build_order_report`. Scrolls by cursor.
     BuildOrders,
@@ -2662,6 +2687,17 @@ impl Mode {
             | Mode::BaseMachines
             | Mode::BasePower
             | Mode::BaseStock
+            // Opened from the map with `w`, a hub page: never over a fight.
+            | Mode::SiteStatus
+            | Mode::SiteGoods
+            | Mode::SiteRoutes
+            | Mode::SiteJobs
+            | Mode::SiteLog
+            | Mode::OutpostStatus
+            | Mode::OutpostCrew
+            | Mode::OutpostStock
+            | Mode::CaravanSchedule
+            | Mode::RoutesInFlight
             | Mode::BuildOrders
             | Mode::DigOrders
             | Mode::FloorOrders
@@ -2915,6 +2951,11 @@ pub struct App {
     /// The hub that is open and its page's key, checked against `mode` on
     /// every read (ADR 0043). `None` whenever the player is not in a hub.
     hub_place: Option<app::hub::HubPlace>,
+    /// The Sites page and tab a launched site screen (market, board, post
+    /// picker, outpost take, route cargo) was opened from, so its Esc lands
+    /// back on that exact tab (`App::leave_site_screen`). Cleared with
+    /// `menu_origin` when the map is reached.
+    site_return: Option<(HubPageKey, Mode)>,
     /// Whether the Save & quit page is asking "quit without saving?".
     quit_unsaved_pending: bool,
     /// Whether the open game menu was reached from a run (Esc on the map)

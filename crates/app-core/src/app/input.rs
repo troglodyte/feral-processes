@@ -407,6 +407,16 @@ impl App {
             Mode::WorldMap => self.handle_world_map_key(key),
             Mode::Structures => self.handle_structures_key(key),
             Mode::StructureAssign => self.handle_structure_assign_key(key),
+            Mode::SiteStatus
+            | Mode::SiteGoods
+            | Mode::SiteRoutes
+            | Mode::SiteJobs
+            | Mode::SiteLog
+            | Mode::OutpostStatus
+            | Mode::OutpostCrew
+            | Mode::OutpostStock
+            | Mode::CaravanSchedule
+            | Mode::RoutesInFlight => self.handle_sites_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
             Mode::BaseBuild
@@ -521,6 +531,7 @@ impl App {
         if self.mode == Mode::Playing {
             self.menu_origin = None;
             self.command_return_row = None;
+            self.site_return = None;
         }
         self.after_tick();
         // Last, because `after_tick` is itself allowed to raise a message.

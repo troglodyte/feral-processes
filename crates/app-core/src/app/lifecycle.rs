@@ -72,6 +72,7 @@ impl App {
             menu_origin: None,
             hub_last: [const { None }; Hub::ALL.len()],
             hub_place: None,
+            site_return: None,
             quit_unsaved_pending: false,
             game_menu_in_run: false,
             structure_hub: None,

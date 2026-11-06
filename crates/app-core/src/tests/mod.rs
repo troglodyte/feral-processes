@@ -67,6 +67,7 @@ mod settlement_board;
 mod settlement_market;
 mod shortcuts;
 mod siphon;
+mod sites_hub;
 mod social_tab;
 mod spend_preview;
 mod splice_rig;

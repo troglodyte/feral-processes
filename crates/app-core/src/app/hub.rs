@@ -109,10 +109,17 @@ pub enum Hub {
     Inventory,
     Structure,
     GameMenu,
+    Sites,
 }
 
 impl Hub {
-    pub const ALL: [Hub; 4] = [Hub::Base, Hub::Inventory, Hub::Structure, Hub::GameMenu];
+    pub const ALL: [Hub; 5] = [
+        Hub::Base,
+        Hub::Inventory,
+        Hub::Structure,
+        Hub::GameMenu,
+        Hub::Sites,
+    ];
 
     pub fn kind(self) -> &'static dyn HubKind {
         match self {
@@ -120,6 +127,7 @@ impl Hub {
             Hub::Inventory => &super::inventory_hub::InventoryHub,
             Hub::Structure => &super::structure_hub::StructureHubKind,
             Hub::GameMenu => &super::game_menu::GameMenu,
+            Hub::Sites => &super::sites_hub::SitesHub,
         }
     }
 

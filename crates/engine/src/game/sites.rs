@@ -30,7 +30,7 @@ impl Game {
     /// counter: a closed view shows nothing, and an older sighting is worth
     /// more than an empty one. Draws no RNG: the shelf is its own seeded
     /// derivation.
-    pub(crate) fn record_shelf_seen(&mut self, key: SettlementKey) {
+    pub fn record_shelf_seen(&mut self, key: SettlementKey) {
         let Some(view) = self.settlement_view(key) else {
             return;
         };
@@ -101,7 +101,7 @@ impl Game {
 
     /// Every visited settlement by name, then every outpost by name. Ties
     /// fall to the key, so two towns with one name stay in a stable order.
-    pub fn site_rail(&mut self) -> Vec<SiteRailEntry> {
+    pub fn site_rail(&self) -> Vec<SiteRailEntry> {
         let stalled: BTreeSet<RouteDestinationId> = self
             .route_reports()
             .into_iter()
@@ -132,26 +132,33 @@ impl Game {
                 attention,
             });
         }
-        let mut outposts: Vec<(String, crate::views::OutpostMark)> = self
-            .outpost_marks()
-            .into_iter()
-            .map(|mark| (self.outpost_destination_name(mark.tile), mark))
-            .collect();
-        outposts.sort_by(|a, b| (&a.0, a.1.tile).cmp(&(&b.0, b.1.tile)));
-        for (name, mark) in outposts {
-            let site = RouteDestinationId::Outpost(mark.tile);
-            let damaged = self
+        // Read off the records and the def rather than `outpost_marks`, whose
+        // crew count needs `&mut self`: the rail is rebuilt from `&App` on
+        // every read.
+        let glyph = self
+            .world
+            .resource::<crate::outposts::OutpostDb>()
+            .def()
+            .map(|def| def.glyph);
+        let mut outposts: Vec<(String, (i32, i32), u32)> = match glyph {
+            Some(_) => self
                 .world
                 .resource::<crate::resources::Outposts>()
                 .0
-                .get(&mark.tile)
-                .is_some_and(|o| o.integrity < OUTPOST_MAX_INTEGRITY);
+                .iter()
+                .map(|(tile, o)| (self.outpost_destination_name(*tile), *tile, o.integrity))
+                .collect(),
+            None => Vec::new(),
+        };
+        outposts.sort();
+        for (name, tile, integrity) in outposts {
+            let site = RouteDestinationId::Outpost(tile);
             rail.push(SiteRailEntry {
                 site,
                 name,
-                glyph: mark.glyph,
+                glyph: glyph.unwrap_or('o'),
                 section: SiteSection::Outposts,
-                attention: mark.dark || damaged || stalled.contains(&site),
+                attention: integrity < OUTPOST_MAX_INTEGRITY || stalled.contains(&site),
             });
         }
         rail

@@ -1400,10 +1400,13 @@ mod tests {
         let default = game.outpost_destination_name(tile);
         game.rename_outpost(tile, "  The Quarry  ").unwrap();
         assert_eq!(game.outpost_destination_name(tile), "The Quarry");
-        game.rename_outpost(tile, &"x".repeat(60)).unwrap();
+        let site = RouteDestinationId::Outpost(tile);
+        let logged = game.sites.log.newest_first(site).count();
+        // Two bytes a character: a byte-based cap would keep half as many.
+        game.rename_outpost(tile, &"é".repeat(60)).unwrap();
         assert_eq!(
-            game.outpost_destination_name(tile).chars().count(),
-            crate::tuning::OUTPOST_NAME_MAX
+            game.outpost_destination_name(tile),
+            "é".repeat(crate::tuning::OUTPOST_NAME_MAX)
         );
         game.rename_outpost(tile, "   ").unwrap();
         assert_eq!(
@@ -1411,11 +1414,10 @@ mod tests {
             default,
             "empty restores the default without counting itself as taken"
         );
-        assert!(
-            game.sites
-                .log
-                .newest_first(RouteDestinationId::Outpost(tile))
-                .all(|e| !e.text.to_lowercase().contains("rename"))
+        assert_eq!(
+            game.sites.log.newest_first(site).count(),
+            logged,
+            "a rename is the player's own act and writes no site log line"
         );
     }
 

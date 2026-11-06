@@ -867,6 +867,7 @@ mod tests {
                 let widest = feral_processes_engine::outposts::widest_notice_texts(
                     "Maximally Long Program Name",
                 );
+                let name = "W".repeat(feral_processes_engine::tuning::OUTPOST_NAME_MAX);
                 for (kind, def) in shipped() {
                     let filled = widest
                         .iter()
@@ -874,7 +875,9 @@ mod tests {
                         .map_or_else(
                             || def.body.to_string(),
                             |(_, t)| def.body.replace("{text}", t),
-                        );
+                        )
+                        .replace("{name}", &name)
+                        .replace("{label}", "Processed");
                     let (lines, _) = wrapped(&filled, None, columns);
                     let block = block_height(
                         p,

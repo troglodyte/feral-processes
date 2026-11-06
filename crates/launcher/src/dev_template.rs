@@ -437,6 +437,24 @@ mod tests {
         );
     }
 
+    /// The `bounty` template exists so a session opens holding a bounty, with
+    /// the compass row to point at and a quarry standing to walk into. A save
+    /// that loaded without either would test nothing.
+    #[test]
+    fn the_bounty_template_holds_a_bounty_with_its_quarry_on_the_compass() {
+        let out = std::env::temp_dir().join("feral_processes_template_bounty.bin");
+        generate("bounty", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let rows = game.compass_targets();
+        assert!(
+            rows.iter().any(|r| r.label.starts_with("Bounty:")),
+            "no bounty row on the compass: {:?}",
+            rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
+        );
+    }
+
     /// Loading is not the bar for `tactical` either: it exists so a session
     /// testing the second combat model opens *one keypress from a fight*,
     /// and a wandering encounter is otherwise something you walk until you

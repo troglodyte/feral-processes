@@ -372,3 +372,38 @@ fn escort_kills_advance_a_held_terminate_contract() {
             .any(|d| d.as_str() == "hunt_job")
     );
 }
+
+#[test]
+fn the_abstract_roster_and_intercept_line_name_the_quarry() {
+    let (mut game, _) = game_in(false);
+    let name = game.held_bounty().unwrap().1.name;
+    bump_the_quarry(&mut game);
+    let view = game.battle_view().unwrap();
+    assert_eq!(view.groups[0].species_name, name);
+    assert!(
+        view.groups.iter().skip(1).all(|g| g.species_name != name),
+        "only the quarry's row carries the name"
+    );
+    assert_eq!(
+        announced(&game, &format!("{name} intercepts your signal")),
+        1
+    );
+    assert_eq!(announced(&game, "rogue"), 0);
+}
+
+#[test]
+fn the_tactical_roster_and_intercept_line_name_the_quarry() {
+    let (mut game, _) = game_in(true);
+    let name = game.held_bounty().unwrap().1.name;
+    bump_the_quarry(&mut game);
+    let view = game.tactical_view().unwrap();
+    assert_eq!(
+        view.bodies.iter().filter(|b| b.label == name).count(),
+        1,
+        "the quarry's body is labelled by name"
+    );
+    assert_eq!(
+        announced(&game, &format!("{name} intercepts your signal")),
+        1
+    );
+}

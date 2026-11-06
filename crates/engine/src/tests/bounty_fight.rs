@@ -3,6 +3,7 @@
 
 use super::bounty::{accepted, anchor_of, board_bounty, broker_game, quarries, save_and_load};
 use super::support::*;
+use super::tactical::wait_for_turn;
 use crate::components::{BountyMark, Hostile};
 use crate::contracts::{ContractDef, ContractId, Objective, Reward};
 use crate::game::bounty::BountyFight;
@@ -438,4 +439,68 @@ fn a_save_made_mid_fight_brings_back_one_quarry_and_no_escort() {
             "the roster is not saved: only the respawned quarry joins the rest (tactical={tactical})"
         );
     }
+}
+
+#[test]
+fn a_battle_map_capture_refuses_the_quarry() {
+    let (mut game, _) = game_in(true);
+    bump_the_quarry(&mut game);
+    let (quarry, _) = roster(&game);
+    let player = game.player_entity();
+    set_inventory(&mut game, &[(items::ids::ICE_BREAKER, 50)]);
+    assert!(wait_for_turn(&mut game, player));
+    // Stand beside the quarry so range and sight cannot be what refuses.
+    let at = game
+        .world
+        .resource::<TacticalBattle>()
+        .cell_of(quarry)
+        .unwrap();
+    let beside = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        .into_iter()
+        .map(|(dx, dy)| (at.0 + dx, at.1 + dy))
+        .find(|&c| {
+            game.world
+                .resource_mut::<TacticalBattle>()
+                .move_to(player, c)
+        })
+        .expect("a free cell beside the quarry");
+    assert_eq!(
+        crate::tactical::reach::distance(beside, at),
+        1,
+        "next to the quarry"
+    );
+    let index = game
+        .actor_abilities(player)
+        .iter()
+        .position(|a| a.id == "decompile")
+        .expect("the player carries decompile");
+    assert!(
+        !game.tactical_use_routine(index, at),
+        "the quarry is beyond decompiling"
+    );
+    // The control: the same aim, from the same cell, is legal once the
+    // quarry is an ordinary program, so range and the catalyst were not it.
+    game.world.entity_mut(quarry).remove::<Boss>();
+    assert!(game.tactical_use_routine(index, at));
+}
+
+#[test]
+fn a_tamed_body_is_not_deleted_by_the_bounty_teardown() {
+    let (mut game, id) = game_in(false);
+    bump_the_quarry(&mut game);
+    let (quarry, escort) = roster(&game);
+    // What `decompile_body` leaves behind: no longer `Hostile`, mark intact.
+    for body in [quarry, escort[0]] {
+        game.world.entity_mut(body).remove::<Hostile>();
+    }
+    flee(&mut game);
+    assert!(game.world.get_entity(quarry).is_ok(), "the quarry survives");
+    assert!(game.world.get_entity(escort[0]).is_ok(), "the escort too");
+    assert!(game.world.get::<BountyMark>(quarry).is_none());
+    assert!(
+        game.world
+            .resource::<ActiveContracts>()
+            .failed
+            .contains(&id)
+    );
 }

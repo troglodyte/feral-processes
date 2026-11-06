@@ -9,7 +9,7 @@ use rand::prelude::*;
 use crate::Game;
 use crate::battle::{self, EnemyGroup};
 use crate::bounty::{self, BountyInput, BountyQuarry};
-use crate::components::{BountyMark, Creature, Position, Stats};
+use crate::components::{BountyMark, Creature, Hostile, Position, Stats};
 use crate::contracts::{ContractDef, ContractId, Objective};
 use crate::game::contracts::fold;
 use crate::game::spawning::SpawnPins;
@@ -219,9 +219,16 @@ impl Game {
         let Some(fight) = self.world.remove_resource::<BountyFight>() else {
             return;
         };
+        // Only what is still hostile: a body a capture turned is a companion
+        // now, and its mark comes off so the fail door's sweep spares it.
         for e in fight.escort.iter().chain([&fight.quarry]) {
-            if let Ok(body) = self.world.get_entity_mut(*e) {
+            let Ok(mut body) = self.world.get_entity_mut(*e) else {
+                continue;
+            };
+            if body.contains::<Hostile>() {
                 body.despawn();
+            } else {
+                body.remove::<BountyMark>();
             }
         }
         match bounty::verdict(fight.quarry_down) {

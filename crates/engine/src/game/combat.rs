@@ -1081,9 +1081,9 @@ impl Game {
                     self.actor_abilities(actor).get(*ability).map(|a| &a.effect),
                     Some(AbilityEffect::Decompile)
                 )
-                && self.front_of_group(*group).is_some_and(|front| {
-                    self.is_boss_creature(front) || self.is_lair_guardian(front)
-                })
+                && self
+                    .front_of_group(*group)
+                    .is_some_and(|front| self.beyond_decompiling(front))
             {
                 return Err("That program's defences are beyond decompiling.".to_string());
             }

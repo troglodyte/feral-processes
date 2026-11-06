@@ -229,11 +229,19 @@ fn clear_local_wild_leaves_the_quarry_standing() {
 }
 
 #[test]
-fn a_breach_leaves_one_quarry_at_its_original_grade() {
+fn a_breach_leaves_the_same_quarry_standing_at_its_original_grade() {
     let (mut game, id) = accepted();
     let grade = game.held_bounty().unwrap().1.grade_pct;
+    // Beside the quarry, so the breach's clear of the local wild reaches it.
+    let anchor = anchor_of(&game);
+    stand_in_base_at(&mut game, anchor.0, anchor.1 + 1);
+    let before = quarries(&mut game)[0].0;
+    let hp = game.world.get::<Stats>(before).unwrap().max_hp;
     game.enter_next_zone();
     assert_one_quarry_at_grade(&mut game, &id);
+    let after = quarries(&mut game)[0].0;
+    assert_eq!(after, before, "spared by the breach, not respawned");
+    assert_eq!(game.world.get::<Stats>(after).unwrap().max_hp, hp);
     assert_eq!(game.held_bounty().unwrap().1.grade_pct, grade);
 }
 

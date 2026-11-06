@@ -525,3 +525,18 @@ fn the_group_roster_flags_the_quarry_as_a_boss_and_quotes_no_odds() {
         "the control: the escort is still quoted"
     );
 }
+
+#[test]
+fn no_second_quarry_is_spawned_while_the_fight_is_open() {
+    let (mut game, _) = game_in(false);
+    bump_the_quarry(&mut game);
+    let (quarry, _) = roster(&game);
+    game.world.despawn(quarry);
+    game.ensure_bounty_quarry();
+    game.tick();
+    assert!(game.has_active_battle());
+    assert!(
+        quarries(&mut game).is_empty(),
+        "the fight's own teardown settles the quarry, not a respawn under it"
+    );
+}

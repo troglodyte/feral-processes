@@ -111,6 +111,7 @@ Do not duplicate between them; point instead.
 | [0041](0041-routine-parts-are-found-before-they-are-researched.md) | Routine parts are found before they are researched | Accepted | user, on Claude's proposal | — |
 | [0042](0042-storylines-are-plain-rust-arcs-owned-by-game.md) | Storylines are plain Rust arcs owned by Game | Agreed | user, on Claude's proposal | Plain structs owned in one place; Functional core, imperative shell |
 | [0043](0043-a-hub-rail-is-runtime-data-and-its-page-is-held.md) | A hub's rail is runtime data and its page is held, not derived | Agreed | user, on Claude's proposal | Strategy (`HubKind`, reshaped) |
+| [0044](0044-a-bounty-is-a-rust-rolled-contract-that-owns-its-quarry.md) | A bounty is a Rust-rolled contract that owns its quarry | Proposed | user, on Claude's proposal | Plain structs owned in one place; Functional core, imperative shell; Tolerant reader |
 
 ## Pattern index
 

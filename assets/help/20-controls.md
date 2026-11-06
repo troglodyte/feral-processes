@@ -42,6 +42,9 @@ Your menus and stores:
   Phase keys, Downed programs and Tools, then Companions (your roster), Programs (manifests,
   fuse, refactor, develop), Routines (install, etch, extract) and Perks. The rail and page keys
   work as they do under b, and i reopens the page you left.
+- w — the sites list: every town, city and outpost you know, and the caravans. It opens at base or
+  beside a site, and the rail and page keys work as they do under b. Each site has its own pages
+  for its status, goods, routes, jobs and log.
 - D — the Downed programs page of your inventory: the downed programs you are holding, and the
   tools that take them apart. The same key opens it from Items. See
   [taking a program apart](extraction).

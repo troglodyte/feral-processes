@@ -95,6 +95,24 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
     panic!("{label:?} is not offered right now; pages: {offered:?}");
 }
 
+/// Where `mode` sits in the base report's or the inventory's fixed table, as
+/// `(hub, page, screen)`. The rails that depend on the `App` are not here.
+pub(crate) fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
+    [
+        (Hub::Base, BASE_REPORT_PAGES),
+        (Hub::Inventory, INVENTORY_PAGES),
+    ]
+    .into_iter()
+    .find_map(|(hub, table)| {
+        table.iter().enumerate().find_map(|(p, page)| {
+            page.screens
+                .iter()
+                .position(|&s| s == mode)
+                .map(|s| (hub, p, s))
+        })
+    })
+}
+
 /// `[c]` and into the first page: the hub opens on its rail, so a test
 /// about a page's own keys needs the `Right` a player would press.
 pub(crate) fn open_structure_page(app: &mut App) {
@@ -115,8 +133,8 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
         Hub::Inventory => 'i',
         Hub::Structure | Hub::GameMenu => unreachable!("hub_of names the shared hubs only"),
     }));
-    for _ in 0..hub.kind().table().len() {
-        if hub_of(app.mode).map(|(_, p, _)| p) == Some(page) {
+    for _ in 0..BASE_REPORT_PAGES.len().max(INVENTORY_PAGES.len()) {
+        if app.hub_at().map(|(_, p, _)| p) == Some(page) {
             break;
         }
         app.handle_key(GameKey::Char(']'));

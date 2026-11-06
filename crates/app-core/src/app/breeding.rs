@@ -132,7 +132,7 @@ impl App {
         if let Some(page) = info {
             self.enter_structure_page(page);
         } else if self.hub_for(Mode::Breed).is_some() {
-            self.mode = Mode::Breed;
+            self.enter_hub_at(Hub::Base, HubPageKey::Named("Breed"), Mode::Breed);
         } else {
             self.close_screen();
         }

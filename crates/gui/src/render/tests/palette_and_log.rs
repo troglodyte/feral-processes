@@ -329,6 +329,7 @@ fn modes_that_already_show_the_status_line_dont_double_up() {
 fn the_options_screen_draws_its_toggle() {
     let mut app = census_app();
     app.mode = Mode::GameplayOptions;
+    app.settle_hub();
     let m = ui_metrics(900.0);
     let (_, shapes) = crate::paint::with_painter(|p| draw_game_menu_page(&app, None, p, &m));
     let drawn = crate::paint::painted_text(&shapes);

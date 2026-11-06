@@ -12,27 +12,27 @@ const VOLUME_STEP: i16 = 10;
 /// Where a full volume sits, and what the profile's integer is clamped to.
 const VOLUME_MAX: i16 = 100;
 
-const GAMEPLAY: HubPage = HubPage {
+const GAMEPLAY: FixedPage = FixedPage {
     title: "Gameplay",
     screens: &[Mode::GameplayOptions],
 };
-const AUDIO: HubPage = HubPage {
+const AUDIO: FixedPage = FixedPage {
     title: "Audio",
     screens: &[Mode::AudioOptions],
 };
-const GRAPHICS: HubPage = HubPage {
+const GRAPHICS: FixedPage = FixedPage {
     title: "Graphics",
     screens: &[Mode::GraphicsOptions],
 };
-const SPRITES: HubPage = HubPage {
+const SPRITES: FixedPage = FixedPage {
     title: "Sprites",
     screens: &[Mode::SpriteOptions],
 };
-const MANUAL: HubPage = HubPage {
+const MANUAL: FixedPage = FixedPage {
     title: "Manual",
     screens: &[Mode::ManualOptions],
 };
-const SAVE_AND_QUIT: HubPage = HubPage {
+const SAVE_AND_QUIT: FixedPage = FixedPage {
     title: "Save & quit",
     screens: &[Mode::QuitRunConfirm],
 };
@@ -45,12 +45,12 @@ impl HubKind for GameMenu {
     }
 
     /// The Save & quit page exists only while there is a run to save.
-    fn pages(&self, app: &App) -> Vec<&'static HubPage> {
+    fn pages(&self, app: &App) -> Vec<HubPage> {
         let mut pages = vec![&GAMEPLAY, &AUDIO, &GRAPHICS, &SPRITES, &MANUAL];
         if app.game_menu_in_run {
             pages.push(&SAVE_AND_QUIT);
         }
-        pages
+        pages.into_iter().map(FixedPage::page).collect()
     }
 
     /// A remembered Save & quit page would not exist when the menu is next

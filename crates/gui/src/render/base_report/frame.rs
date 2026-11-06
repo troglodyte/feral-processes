@@ -67,11 +67,9 @@ pub(super) fn hub_layout(frame: Rect, m: &Metrics, char_w: f32) -> HubLayout {
 /// What one hub's frame shows, as `HubFrame` took it off the `App`.
 pub(super) struct FrameView<'a> {
     pub(super) title: (&'a str, &'a str),
-    pub(super) pages: &'a [&'static HubPage],
+    pub(super) pages: &'a [HubPage],
     pub(super) page: usize,
     pub(super) screen: usize,
-    /// Which pages carry the rail's `!`; past its end, none.
-    pub(super) marks: &'a [bool],
     /// The hub's own keys, as `(key, verb)`.
     pub(super) extra_keys: &'a [(&'static str, &'static str)],
 }
@@ -191,7 +189,7 @@ fn draw_rail(
             );
         }
         painter.ui(
-            entry.title,
+            &entry.title,
             rail.rows.x + char_w * 2.0,
             base,
             m.font_size,
@@ -201,7 +199,7 @@ fn draw_rail(
                 hud::palette::EMPHASIS
             },
         );
-        if view.marks.get(page).copied().unwrap_or(false) {
+        if entry.marked {
             painter.ui_bold(
                 "!",
                 rail.rows.x + rail.rows.w - char_w * 2.0,
@@ -221,14 +219,14 @@ fn draw_rail(
 /// A one-screen page draws no dots.
 fn draw_title(
     title: &Rect,
-    pages: &[&HubPage],
+    pages: &[HubPage],
     page: usize,
     screen: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
     let base = title.y + title.h * 0.75;
-    let name = pages[page].title;
+    let name = pages[page].title.as_str();
     painter.ui_bold(name, title.x, base, m.title(), hud::palette::PANE_TITLE);
     let screens = pages[page].screens.len();
     if screens > 1 {
@@ -245,7 +243,7 @@ fn draw_title(
 /// what the cursor does where it is.
 pub(super) fn keybar_groups(
     mode: Mode,
-    pages: &[&HubPage],
+    pages: &[HubPage],
     page: usize,
     on_rail: bool,
     extra_keys: &[(&str, &str)],
@@ -428,19 +426,17 @@ mod tests {
             Mode::Structures,
             Mode::Alerts,
         ] {
-            let page = feral_processes_app_core::hub_of(mode).unwrap().1;
-            let text = |on_rail| -> String {
-                keybar_groups(
-                    mode,
-                    &BASE_REPORT_PAGES.iter().collect::<Vec<_>>(),
-                    page,
-                    on_rail,
-                    &[],
-                )
+            let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
+            let page = pages
                 .iter()
-                .flatten()
-                .map(|(t, _, _)| t.as_str())
-                .collect()
+                .position(|p| p.screens.contains(&mode))
+                .unwrap();
+            let text = |on_rail| -> String {
+                keybar_groups(mode, &pages, page, on_rail, &[])
+                    .iter()
+                    .flatten()
+                    .map(|(t, _, _)| t.as_str())
+                    .collect()
             };
             let rail = text(true);
             assert!(rail.contains("page"), "{mode:?}: {rail}");
@@ -456,7 +452,8 @@ mod tests {
     fn bar_text(extra_keys: &[(&str, &str)], on_rail: bool) -> String {
         let pages = [feral_processes_app_core::structure_page(
             feral_processes_engine::StructurePage::Inventory,
-        )];
+        )
+        .page()];
         keybar_groups(Mode::Transfer, &pages, 0, on_rail, extra_keys)
             .iter()
             .flatten()
@@ -492,15 +489,15 @@ mod tests {
         let name = "W".repeat(80);
         let page = feral_processes_app_core::structure_page(
             feral_processes_engine::StructurePage::Inventory,
-        );
+        )
+        .page();
         let (_, shapes) = with_painter(|p| {
             paint_frame(
                 &FrameView {
                     title: (&name, " — north (2 of 3)"),
-                    pages: &[page],
+                    pages: std::slice::from_ref(&page),
                     page: 0,
                     screen: 0,
-                    marks: &[],
                     extra_keys: TAB,
                 },
                 None,

@@ -217,6 +217,7 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: GameKey) {
+        self.settle_hub();
         // A key pressed while narration is still scrolling in dumps the rest
         // and is not acted on. Without this the pacing would be a tax on
         // anyone who reads faster than it scrolls.
@@ -491,10 +492,12 @@ impl App {
             self.quit_unsaved_pending = false;
         }
         // A hub that remembers is reopened where the player last was.
+        self.settle_hub();
         if let Some((hub, ..)) = self.hub_at()
             && hub.kind().remembers()
+            && let Some(place) = &self.hub_place
         {
-            self.hub_last[hub.slot()] = Some(self.mode);
+            self.hub_last[hub.slot()] = Some((place.key.clone(), self.mode));
         }
         // The structure hub is only open while a mode of its own is up; any
         // other mode (the map after an action) means it was left. A popup

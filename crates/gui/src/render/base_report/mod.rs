@@ -54,11 +54,9 @@ pub(super) struct HubFrame {
     /// The rail heading as `(head, tail)`: the tail is kept whole when the
     /// head is elided to fit.
     title: (String, String),
-    pages: Vec<&'static HubPage>,
+    pages: Vec<HubPage>,
     page: usize,
     screen: usize,
-    /// Which pages carry the rail's `!`.
-    marks: Vec<bool>,
     /// The hub's own keys, as `(key, verb)`.
     extra_keys: Vec<(&'static str, &'static str)>,
 }
@@ -74,7 +72,6 @@ impl HubFrame {
             pages: kind.pages(app),
             page,
             screen,
-            marks: kind.marks(app),
             extra_keys: kind.extra_keys(app),
         })
     }
@@ -93,7 +90,6 @@ impl HubFrame {
                 pages: &self.pages,
                 page: self.page,
                 screen: self.screen,
-                marks: &self.marks,
                 extra_keys: &self.extra_keys,
             },
             keybar_mode,

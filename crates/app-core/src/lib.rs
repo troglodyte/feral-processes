@@ -36,7 +36,7 @@ pub use app::gear_craft::{
     design_row_category, gear_craft_refusal_line,
 };
 pub use app::group_menu::GroupMenuRow;
-pub use app::hub::{Hub, HubKind, HubPage, hub_of};
+pub use app::hub::{FixedPage, Hub, HubKind, HubPage, HubPageKey};
 pub use app::inventory::{equip_swap_visible, inventory_visible};
 pub use app::inventory_hub::INVENTORY_PAGES;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -2911,7 +2911,10 @@ pub struct App {
     /// indexed by `Hub::slot`, so `b` and `i` reopen where the player left
     /// off. `None` until a hub has been opened, which lands on its first
     /// page.
-    hub_last: [Option<Mode>; Hub::ALL.len()],
+    hub_last: [Option<(HubPageKey, Mode)>; Hub::ALL.len()],
+    /// The hub that is open and its page's key, checked against `mode` on
+    /// every read (ADR 0043). `None` whenever the player is not in a hub.
+    hub_place: Option<app::hub::HubPlace>,
     /// Whether the Save & quit page is asking "quit without saving?".
     quit_unsaved_pending: bool,
     /// Whether the open game menu was reached from a run (Esc on the map)

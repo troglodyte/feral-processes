@@ -5,40 +5,40 @@ use crate::*;
 /// The inventory's table, in rail order: what you carry, then who you carry
 /// it with. The roster and Perks are pages in their own right; the two
 /// command pages hold the errands that act on programs and on routines.
-pub const INVENTORY_PAGES: &[HubPage] = &[
-    HubPage {
+pub const INVENTORY_PAGES: &[FixedPage] = &[
+    FixedPage {
         title: "Items",
         screens: &[Mode::Inventory],
     },
-    HubPage {
+    FixedPage {
         title: "Phase keys",
         screens: &[Mode::PhaseKeys],
     },
-    HubPage {
+    FixedPage {
         title: "Downed programs",
         screens: &[Mode::DownedPrograms],
     },
-    HubPage {
+    FixedPage {
         title: "Tools",
         screens: &[Mode::Tools],
     },
-    HubPage {
+    FixedPage {
         title: "Companions",
         screens: &[Mode::Companion],
     },
-    HubPage {
+    FixedPage {
         title: "Manifests",
         screens: &[Mode::ManifestIntro],
     },
-    HubPage {
+    FixedPage {
         title: "Programs",
         screens: &[Mode::PartyPrograms],
     },
-    HubPage {
+    FixedPage {
         title: "Routines",
         screens: &[Mode::PartyRoutines],
     },
-    HubPage {
+    FixedPage {
         title: "Perks",
         screens: &[Mode::Perks],
     },
@@ -51,8 +51,8 @@ impl HubKind for InventoryHub {
         "INVENTORY"
     }
 
-    fn table(&self) -> &'static [HubPage] {
-        INVENTORY_PAGES
+    fn pages(&self, _app: &App) -> Vec<HubPage> {
+        INVENTORY_PAGES.iter().map(FixedPage::page).collect()
     }
 
     /// Enter or Right on the Manifests rail entry opens the sheet itself,

@@ -13,18 +13,10 @@ type Place = (Mode, Option<(Hub, usize, usize)>, bool);
 
 /// Title, screens and `!` per rail page, in order.
 fn rail(app: &App, hub: Hub) -> Vec<(String, Vec<Mode>, bool)> {
-    let kind = hub.kind();
-    let marks = kind.marks(app);
-    kind.pages(app)
-        .iter()
-        .enumerate()
-        .map(|(i, p)| {
-            (
-                p.title.to_string(),
-                p.screens.to_vec(),
-                marks.get(i).copied().unwrap_or(false),
-            )
-        })
+    hub.kind()
+        .pages(app)
+        .into_iter()
+        .map(|p| (p.title, p.screens.to_vec(), p.marked))
         .collect()
 }
 
@@ -361,4 +353,104 @@ fn a_popup_over_a_hub_screen_keeps_its_parent_frame() {
         Some((Hub::Base, 9, 0))
     );
     assert_eq!(app.hub_at(), None);
+}
+
+#[test]
+fn hub_for_answers_only_from_the_held_page() {
+    let mut app = test_app(41060);
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(app.mode, Mode::BaseOverview);
+    assert_eq!(app.hub_for(Mode::BaseStock), None);
+    let stock = HubPageKey::Named("Stock");
+    app.turn_hub_to(Hub::Base, &stock);
+    assert_eq!(app.hub_at(), Some((Hub::Base, 8, 0)));
+    assert_eq!(app.hub_page(), Some(&stock));
+}
+
+#[test]
+fn a_held_key_that_left_the_rail_is_forgotten_on_reopen() {
+    // The bay is gone: the remembered Breed page is not on the rail.
+    let mut app = app_inside_a_small_base_with_programs(41061, false, 2);
+    let breed = HubPageKey::Named("Breed");
+    app.hub_last[Hub::Base.slot()] = Some((breed.clone(), Mode::Breed));
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 0, 0)));
+
+    // Held while it leaves: nothing panics, and the hub is simply not shown.
+    app.hub_place = Some(app::hub::HubPlace {
+        hub: Hub::Base,
+        key: breed,
+    });
+    app.mode = Mode::Breed;
+    assert_eq!(app.hub_at(), None);
+    assert!(!app.handle_hub_nav(GameKey::Down));
+}
+
+#[test]
+fn settle_adopts_only_an_unambiguous_page() {
+    let mut app = test_app(41062);
+    app.mode = Mode::DownedPrograms;
+    app.settle_hub();
+    assert_eq!(app.hub_at(), Some((Hub::Inventory, 2, 0)));
+
+    let mut app = test_app(41063);
+    app.mode = Mode::Transfer;
+    app.settle_hub();
+    assert_eq!(app.hub_at(), None);
+}
+
+#[test]
+fn landing_on_the_map_clears_the_held_page() {
+    let mut app = test_app(41064);
+    app.handle_key(GameKey::Char('b'));
+    assert!(app.hub_page().is_some());
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.hub_place.is_none());
+    assert_eq!(app.hub_page(), None);
+}
+
+#[test]
+fn enter_hub_at_holds_the_named_page() {
+    let mut app = test_app(41065);
+    let key = HubPageKey::Named("Staff");
+    app.enter_hub_at(Hub::Base, key.clone(), Mode::StaffCoverage);
+    assert_eq!(app.hub_page(), Some(&key));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 6, 1)));
+    app.settle_hub();
+    assert_eq!(app.hub_page(), Some(&key), "settle keeps the held page");
+}
+
+/// Every screen offered by more than one page, across every hub. A screen
+/// enters this list only once everything that jumps onto it goes through
+/// `App::enter_hub_at` or a turn.
+const SHARED_SCREENS: &[Mode] = &[];
+
+fn shared_screens(app: &App) -> Vec<Mode> {
+    let mut counts: Vec<(Mode, usize)> = Vec::new();
+    for hub in Hub::ALL {
+        for page in hub.kind().pages(app) {
+            for &mode in page.screens {
+                match counts.iter_mut().find(|(m, _)| *m == mode) {
+                    Some((_, n)) => *n += 1,
+                    None => counts.push((mode, 1)),
+                }
+            }
+        }
+    }
+    counts
+        .into_iter()
+        .filter(|(_, n)| *n > 1)
+        .map(|(m, _)| m)
+        .collect()
+}
+
+#[test]
+fn shared_screens_are_pinned() {
+    let mut app = app_with_a_breeding_bay(41066, 1, false);
+    let message = "a screen is now shared by several pages: enter it with App::enter_hub_at";
+    assert_eq!(shared_screens(&app), SHARED_SCREENS, "{message}");
+    app.handle_key(GameKey::Char('c'));
+    assert!(app.structure_hub.is_some());
+    assert_eq!(shared_screens(&app), SHARED_SCREENS, "{message}");
 }

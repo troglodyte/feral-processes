@@ -244,6 +244,7 @@ const NEEDS_PENDING_STATE: [Mode; 34] = [
 /// How many times `mode` paints `CENSUS_REFUSAL` with it set.
 fn refusals_drawn(app: &mut feral_processes_app_core::App, fx: &mut Fx, mode: Mode) -> usize {
     app.mode = mode;
+    app.settle_hub();
     app.status_line = Some(CENSUS_REFUSAL.to_string());
     let (_, shapes) = crate::paint::with_painter(|p| draw(app, fx, p, false, false));
     crate::paint::painted_text(&shapes)

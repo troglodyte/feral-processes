@@ -197,7 +197,9 @@ const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
 /// must *not* appear on them but not where it must. Their `draw_popup`
 /// calls are threaded the same way every other one is.
 const NEEDS_PENDING_STATE: [Mode; 42] = [
-    // The Sites pages are drawn inside the hub frame, on a held site.
+    // The Sites tabs are shared by every site, so `settle_hub` cannot adopt
+    // one without a held key; `sites::every_sites_tab_draws_a_refusal_once`
+    // drives them held instead.
     Mode::SiteStatus,
     Mode::SiteGoods,
     Mode::SiteRoutes,

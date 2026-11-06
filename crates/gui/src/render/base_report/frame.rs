@@ -366,6 +366,19 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
             .iter()
             .map(|(key, verb)| keycap(key, verb))
             .collect(),
+        Mode::SiteStatus
+        | Mode::SiteGoods
+        | Mode::SiteRoutes
+        | Mode::SiteJobs
+        | Mode::SiteLog
+        | Mode::OutpostStatus
+        | Mode::OutpostCrew
+        | Mode::OutpostStock
+        | Mode::CaravanSchedule
+        | Mode::RoutesInFlight => feral_processes_app_core::sites_screen_keys(mode)
+            .iter()
+            .map(|(key, verb)| keycap(key, verb))
+            .collect(),
         Mode::Perks => vec![keycap("a-z", "buy a level")],
         Mode::PhaseKeys => vec![keycap("↑/↓", "read")],
         Mode::DownedPrograms => vec![keycap("↑/↓", "select"), keycap("Enter", "extract")],

@@ -1050,7 +1050,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         _ => Vec::new(),
     };
     let list_filter = app.filter_text().to_owned();
+    let site = app.held_site();
     let app_screens = base_report::AppScreens {
+        site,
         list_filter: &list_filter,
         commands: commands.as_deref(),
         command_counts: &command_counts,

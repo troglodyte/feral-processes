@@ -652,6 +652,11 @@ impl Game {
             },
         );
         self.post_alert(AlertKind::OutpostRaided, subject.clone(), line);
+        self.note_site(
+            crate::RouteDestinationId::Outpost(tile),
+            crate::sites::SiteLogKind::Raided,
+            "Raided.".into(),
+        );
         if dark {
             // Every remaining crew member is recalled — `bench_or_dissolve`
             // above already dropped the one it benched from this same list.
@@ -669,6 +674,11 @@ impl Game {
                 },
             );
             self.post_alert(AlertKind::OutpostDark, subject, text);
+            self.note_site(
+                crate::RouteDestinationId::Outpost(tile),
+                crate::sites::SiteLogKind::Dark,
+                "Went dark.".into(),
+            );
         }
     }
 
@@ -980,6 +990,11 @@ impl Game {
                 MessageKind::Raid,
                 format!("Raiders out of {name} probe your defences and turn back empty-handed."),
             );
+            self.note_site(
+                crate::RouteDestinationId::Settlement(key),
+                crate::sites::SiteLogKind::RaidedBase,
+                "Raiders turned back from your base empty-handed.".into(),
+            );
             return;
         }
 
@@ -1006,11 +1021,21 @@ impl Game {
                 MessageKind::Raid,
                 format!("Raiders out of {name} ransack your stores and find them bare."),
             );
+            self.note_site(
+                crate::RouteDestinationId::Settlement(key),
+                crate::sites::SiteLogKind::RaidedBase,
+                "Raiders ransacked your stores and found them bare.".into(),
+            );
             return;
         }
         self.log_base_kind(
             MessageKind::Raid,
             format!("Raiders out of {name} carry off {taken} {money} from your stores."),
+        );
+        self.note_site(
+            crate::RouteDestinationId::Settlement(key),
+            crate::sites::SiteLogKind::RaidedBase,
+            format!("Raiders carried off {taken} {money} from your base."),
         );
     }
 

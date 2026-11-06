@@ -28,6 +28,11 @@ pub(crate) fn contract_row(idx: usize, active: usize, offers: usize) -> Option<C
     (idx < offers).then_some(ContractScreenRow::Offer(idx))
 }
 
+/// Why an onboarding mission cannot be given back, on the contracts screen
+/// and the Sites hub's Jobs tab alike.
+pub(crate) const TUTORIAL_REFUSAL: &str =
+    "Onboarding missions cannot be given back — finish this one and the next arrives.";
+
 impl App {
     /// Both halves of the screen, in the order they are numbered. The handler
     /// and the renderer both call this rather than each asking the engine
@@ -76,10 +81,7 @@ impl App {
                 // lives — but a bare `false` cannot reach the log, and a key
                 // that silently does nothing reads as a broken key.
                 if active[row].tutorial {
-                    self.refuse(
-                        "Onboarding missions cannot be given back — finish this one and \
-                         the next arrives.",
-                    );
+                    self.refuse(TUTORIAL_REFUSAL);
                     return;
                 }
                 let id = active[row].id.clone();

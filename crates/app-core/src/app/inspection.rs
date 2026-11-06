@@ -1,5 +1,6 @@
 //! Aiming the inspector at a tile, and the manifest screen it opens.
 
+use crate::app::sites_hub::{WALK_TO_BOARD, WALK_TO_TRADE};
 use crate::*;
 use feral_processes_engine::tuning::EXAMINE_RANGE_TILES;
 use feral_processes_engine::{
@@ -192,8 +193,11 @@ impl App {
                         .is_some_and(|game| game.settlement_view(key).is_some())
                 });
                 if !reachable {
-                    self.refuse("You'd have to walk over there to trade.");
+                    self.refuse(WALK_TO_TRADE);
                     return;
+                }
+                if let (Some(key), Some(game)) = (self.pending_settlement, self.game.as_mut()) {
+                    game.record_shelf_seen(key);
                 }
                 self.settlement_amounts.clear();
                 self.mode = Mode::SettlementMarket;
@@ -208,7 +212,7 @@ impl App {
                         .is_some_and(|game| game.settlement_board(key).is_some())
                 });
                 if !reachable {
-                    self.refuse("You'd have to walk over there to read their board.");
+                    self.refuse(WALK_TO_BOARD);
                     return;
                 }
                 self.menu_selected = 0;

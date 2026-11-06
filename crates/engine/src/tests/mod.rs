@@ -137,6 +137,7 @@ mod settlement_relations;
 mod settlements;
 mod siege;
 mod siphon;
+mod sites;
 mod situations;
 mod skill_views;
 mod skills;

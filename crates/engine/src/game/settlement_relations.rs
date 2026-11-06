@@ -8,9 +8,11 @@
 //! the door speaks only on a transition, so entering a band is news and
 //! staying in it is not.
 
+use crate::RouteDestinationId;
 use crate::resources;
 use crate::settlements::SettlementKey;
 use crate::settlements::relations::{self, Standing};
+use crate::sites::SiteLogKind;
 use crate::tuning::SETTLEMENT_NOTICE_RADIUS;
 
 use crate::Game;
@@ -57,6 +59,11 @@ impl Game {
             self.log_kind(
                 MessageKind::Outcome,
                 format!("{name} now regards you as {}.", now.label()),
+            );
+            self.note_site(
+                RouteDestinationId::Settlement(key),
+                SiteLogKind::Standing,
+                format!("Now regards you as {}.", now.label()),
             );
         }
     }
@@ -250,6 +257,11 @@ impl Game {
             MessageKind::Loot,
             format!("{town} sends {name} to your base."),
         );
+        self.note_site(
+            RouteDestinationId::Settlement(key),
+            SiteLogKind::Gift,
+            format!("Sent {name} to your base."),
+        );
         Ok(())
     }
 
@@ -369,6 +381,13 @@ impl Game {
         }
         let name = self.settlement_name(key);
         self.log(format!("The relay sets you down outside {name}."));
+        if self.settlement_reach(key) {
+            self.note_site(
+                RouteDestinationId::Settlement(key),
+                SiteLogKind::Visit,
+                "The relay set you down outside.".into(),
+            );
+        }
         self.spend_travel_ticks(ticks);
         Ok(())
     }

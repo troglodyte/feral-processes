@@ -4,6 +4,7 @@
 use crate::components::TownPatrol;
 use crate::game::pursuit::pursuit_field;
 use crate::resources::SeenConditions;
+use crate::sites::SiteLogKind;
 use crate::telemetry::Record;
 use crate::tuning::{
     NEST_AGGRO_LEASH_RADIUS, NEST_PATH_SEARCH_MARGIN, NEST_PURSUIT_STEPS_PER_TICK,
@@ -857,14 +858,22 @@ impl Game {
             // The same arm records having been there: reaching a town is
             // what promotes its compass row from a bearing to a name and a
             // distance, and this bump is the only thing that means reached.
-            if let Some(known) = self
+            let first = self
                 .world
                 .resource_mut::<crate::resources::Settlements>()
                 .0
                 .get_mut(&key)
-            {
-                known.visited = true;
-            }
+                .is_some_and(|known| !std::mem::replace(&mut known.visited, true));
+            let name = self.settlement_name(key);
+            let (kind, text) = if first {
+                (
+                    SiteLogKind::FirstVisit,
+                    format!("Reached {name} for the first time."),
+                )
+            } else {
+                (SiteLogKind::Visit, format!("Walked into {name}."))
+            };
+            self.note_site(RouteDestinationId::Settlement(key), kind, text);
             self.tick();
             return (0, 0);
         }

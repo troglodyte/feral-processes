@@ -6,10 +6,11 @@ use rand::RngExt;
 
 use crate::Game;
 use crate::ProgramRole;
+use crate::RouteDestinationId;
 use crate::base_ledger::LootSource;
 use crate::components::{
-    Carrying, CarryingProgram, Creature, Downed, Experience, Inventory, Perks, Position, PostedAt,
-    ProgramId, Tamed, Task,
+    Carrying, CarryingProgram, Creature, Downed, Experience, Inventory, Perks, PostedAt, ProgramId,
+    Tamed, Task,
 };
 use crate::game::base::transfer::{Moved, TransferBasket};
 use crate::game::notify::NotifyArgs;
@@ -17,6 +18,7 @@ use crate::notifications::{NotificationKind, NotificationSubject};
 use crate::outposts::{Outpost, OutpostDb};
 use crate::perks::Perk;
 use crate::resources::{GameRng, Outposts};
+use crate::sites::SiteLogKind;
 use crate::species::SpeciesDb;
 use crate::systems::mining_success_chance;
 use crate::tuning::{
@@ -101,6 +103,11 @@ impl Game {
             .resource_mut::<Outposts>()
             .0
             .insert(tile, Outpost::new(biome, OUTPOST_MAX_INTEGRITY));
+        self.note_site(
+            RouteDestinationId::Outpost(tile),
+            SiteLogKind::Founded,
+            "Founded.".into(),
+        );
         Ok(())
     }
 
@@ -180,6 +187,11 @@ impl Game {
             .remove::<Task>();
         let name = self.creature_label(creature);
         self.log(format!("{name} is posted at the outpost."));
+        self.note_site(
+            RouteDestinationId::Outpost(tile),
+            SiteLogKind::CrewPosted,
+            format!("{name} was posted here."),
+        );
         Ok(())
     }
 
@@ -195,12 +207,17 @@ impl Game {
     /// program downed in the Stack takes; an ordinary recall does not go
     /// through it at all.
     pub fn recall_from_outpost(&mut self, creature: Entity) -> Result<(), String> {
-        if self.world.get::<PostedAt>(creature).is_none() {
+        let Some(&PostedAt(tile)) = self.world.get::<PostedAt>(creature) else {
             return Err("That program isn't posted at an outpost.".into());
-        }
+        };
         self.world.entity_mut(creature).remove::<PostedAt>();
         let name = self.creature_label(creature);
         self.log(format!("{name} is recalled to base staff."));
+        self.note_site(
+            RouteDestinationId::Outpost(tile),
+            SiteLogKind::CrewRecalled,
+            format!("{name} was recalled to base staff."),
+        );
         Ok(())
     }
 
@@ -248,6 +265,11 @@ impl Game {
             .unwrap()
             .integrity = OUTPOST_MAX_INTEGRITY;
         self.log("The outpost is repaired.".to_string());
+        self.note_site(
+            RouteDestinationId::Outpost(tile),
+            SiteLogKind::Repaired,
+            "Repaired to full integrity.".into(),
+        );
         Ok(())
     }
 
@@ -292,6 +314,15 @@ impl Game {
             ),
             crate::outposts::Trend::Growing | crate::outposts::Trend::Stable => return,
         };
+        let line = match trend {
+            crate::outposts::Trend::Stale => "Turned stale.",
+            _ => "Began to decline.",
+        };
+        self.note_site(
+            RouteDestinationId::Outpost(tile),
+            SiteLogKind::Trend,
+            line.into(),
+        );
         let outpost = self.world.resource::<Outposts>().0[&tile].clone();
         let reason = trend.reason(&outpost, crew, tier);
         let subject = format!("outpost@{},{}", tile.0, tile.1);
@@ -324,6 +355,14 @@ impl Game {
         if latched.is_none_or(|was| tier <= was) {
             return;
         }
+        self.note_site(
+            RouteDestinationId::Outpost(tile),
+            SiteLogKind::TierReached,
+            format!(
+                "Reached tier: {}.",
+                crate::outposts::tier_label(tier as usize)
+            ),
+        );
         let (x, y) = (tile.0.to_string(), tile.1.to_string());
         self.notify_with(
             NotificationKind::OutpostTierReached,
@@ -367,12 +406,13 @@ impl Game {
     /// Whether the player is standing at (or diagonally beside) `tile` —
     /// the shared "at the outpost" reach `post_to_outpost` and
     /// `take_from_outpost` both refuse without.
-    fn standing_at_outpost(&self, tile: (i32, i32)) -> bool {
-        let player = self.player_entity();
-        let Some(pos) = self.world.get::<Position>(player) else {
+    pub(super) fn standing_at_outpost(&self, tile: (i32, i32)) -> bool {
+        // `field_pos`, not the raw `Position`: underground that stays pinned
+        // to the entrance tile, which can sit beside a remote outpost.
+        let Some(pos) = self.field_pos() else {
             return false;
         };
-        (pos.x - tile.0).abs().max((pos.y - tile.1).abs()) <= 1
+        (pos.0 - tile.0).abs().max((pos.1 - tile.1).abs()) <= 1
     }
 
     /// One tick of every outpost — design spec §5, called from `tick_inner`
@@ -764,6 +804,14 @@ impl Game {
             self.grant_loot(item.clone(), qty, LootSource::Outpost);
             moved.push((item.clone(), qty));
         }
+        if !moved.is_empty() {
+            let units: u32 = moved.iter().map(|(_, qty)| *qty).sum();
+            self.note_site(
+                RouteDestinationId::Outpost(tile),
+                SiteLogKind::StockTaken,
+                format!("Took {units} units of stock."),
+            );
+        }
         Ok(moved)
     }
 }
@@ -875,6 +923,29 @@ mod tests {
         assert_eq!(record.stale_ticks, 0);
         assert_eq!(record.cycle_progress, 0);
         assert!(record.announced.is_none());
+    }
+
+    #[test]
+    fn underground_beside_the_link_is_not_standing_at_an_outpost() {
+        let mut game = game(64);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 10;
+        let player = game.player_entity();
+        let pos = *game.world.get::<Position>(player).unwrap();
+        game.enter_stack(pos.x, pos.y);
+        assert!(game.is_underground());
+        assert_eq!(game.site_reach().beside, None);
+        let repair = game.repair_outpost(tile).expect_err("underground");
+        assert!(repair.contains("standing"), "unexpected: {repair}");
+        let take = game
+            .take_from_outpost(tile, &TransferBasket::default())
+            .expect_err("underground");
+        assert!(take.contains("standing"), "unexpected: {take}");
     }
 
     #[test]
@@ -1928,5 +1999,58 @@ mod tests {
             Some(crate::notifications::NotificationSubject::Tile(tile))
         );
         assert!(note.body.contains(&format!("({}, {})", tile.0, tile.1)));
+    }
+
+    #[test]
+    fn an_outpost_logs_founding_posting_recall_repair_and_stock_taken() {
+        use crate::sites::SiteLogKind;
+        let mut game = game(66);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        let site = RouteDestinationId::Outpost(tile);
+        let kinds = |game: &Game| -> Vec<SiteLogKind> {
+            game.sites.log.newest_first(site).map(|e| e.kind).collect()
+        };
+        assert_eq!(kinds(&game), vec![SiteLogKind::Founded]);
+
+        let program = staff(&mut game);
+        game.post_to_outpost(tile, program).unwrap();
+        game.recall_from_outpost(program).unwrap();
+
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 10;
+        game.world
+            .insert_resource(outpost_db_with_repair_cost(&[("raw_trace", 3)]));
+        let raw_trace = crate::items::ItemId("raw_trace".to_string());
+        let player = game.player_entity();
+        game.world
+            .get_mut::<Inventory>(player)
+            .unwrap()
+            .add(raw_trace.clone(), 3);
+        game.repair_outpost(tile).unwrap();
+
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .stock
+            .insert(raw_trace.clone(), 2);
+        let basket = TransferBasket::items(&[(raw_trace, 2)], &[]);
+        game.take_from_outpost(tile, &basket).unwrap();
+
+        assert_eq!(
+            kinds(&game),
+            vec![
+                SiteLogKind::StockTaken,
+                SiteLogKind::Repaired,
+                SiteLogKind::CrewRecalled,
+                SiteLogKind::CrewPosted,
+                SiteLogKind::Founded,
+            ]
+        );
     }
 }

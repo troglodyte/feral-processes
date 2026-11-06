@@ -1,7 +1,7 @@
 use super::*;
 
 /// Every `Mode`, as the status-line census below drives them.
-const ALL_MODES: [Mode; 172] = [
+const ALL_MODES: [Mode; 182] = [
     Mode::Dossier,
     Mode::TacticalBattle,
     Mode::TacticalRoutine,
@@ -127,6 +127,16 @@ const ALL_MODES: [Mode; 172] = [
     Mode::RefitCopy,
     Mode::Contracts,
     Mode::Alerts,
+    Mode::SiteStatus,
+    Mode::SiteGoods,
+    Mode::SiteRoutes,
+    Mode::SiteJobs,
+    Mode::SiteLog,
+    Mode::OutpostStatus,
+    Mode::OutpostCrew,
+    Mode::OutpostStock,
+    Mode::CaravanSchedule,
+    Mode::RoutesInFlight,
     Mode::History,
     Mode::Compass,
     Mode::Structures,
@@ -186,7 +196,18 @@ const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
 /// Each draws nothing at all here, so the census can say where a refusal
 /// must *not* appear on them but not where it must. Their `draw_popup`
 /// calls are threaded the same way every other one is.
-const NEEDS_PENDING_STATE: [Mode; 34] = [
+const NEEDS_PENDING_STATE: [Mode; 42] = [
+    // The Sites tabs are shared by every site, so `settle_hub` cannot adopt
+    // one without a held key; `sites::every_sites_tab_draws_a_refusal_once`
+    // drives them held instead.
+    Mode::SiteStatus,
+    Mode::SiteGoods,
+    Mode::SiteRoutes,
+    Mode::SiteJobs,
+    Mode::SiteLog,
+    Mode::OutpostStatus,
+    Mode::OutpostCrew,
+    Mode::OutpostStock,
     // The Workbench pages are drawn only inside the structure hub frame,
     // which the census app never opens.
     Mode::RoutineBuild,
@@ -244,6 +265,7 @@ const NEEDS_PENDING_STATE: [Mode; 34] = [
 /// How many times `mode` paints `CENSUS_REFUSAL` with it set.
 fn refusals_drawn(app: &mut feral_processes_app_core::App, fx: &mut Fx, mode: Mode) -> usize {
     app.mode = mode;
+    app.settle_hub();
     app.status_line = Some(CENSUS_REFUSAL.to_string());
     let (_, shapes) = crate::paint::with_painter(|p| draw(app, fx, p, false, false));
     crate::paint::painted_text(&shapes)

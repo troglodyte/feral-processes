@@ -8,6 +8,7 @@
 //! throughout, since both features dispatch from the same Relay.
 
 use rand::RngExt;
+use serde::{Deserialize, Serialize};
 
 use crate::Game;
 use crate::components::GlyphColor;
@@ -17,6 +18,7 @@ use crate::resources::{self, MessageKind};
 use crate::routes::{Route, RouteEnd, RouteLeg};
 use crate::settlements::relations::Standing;
 use crate::settlements::{SettlementKey, Temperament};
+use crate::sites::SiteLogKind;
 
 /// Why a dispatch or a sever was refused.
 ///
@@ -57,7 +59,7 @@ pub enum RouteRefusal {
 /// stores. Widening this rather than `RouteEnd` itself is what let outposts
 /// join the hub without touching the dispatch/predation machinery in this
 /// module's lower half.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RouteDestinationId {
     Settlement(SettlementKey),
     Outpost((i32, i32)),
@@ -579,7 +581,13 @@ impl Game {
             )
         };
         let name = self.settlement_name(destination);
-        self.roll_cargo_predation(anchor, destination_tile, &name, &mut surviving);
+        self.roll_cargo_predation(
+            anchor,
+            destination_tile,
+            RouteDestinationId::Settlement(destination),
+            &name,
+            &mut surviving,
+        );
         let proceeds = self.route_quote(&surviving, temperament);
         self.credit_trade_volume(destination, proceeds);
         let currency = self.trade_currency();
@@ -618,6 +626,11 @@ impl Game {
         self.log_base_kind(
             MessageKind::Loot,
             format!("The caravan returns from {name} with {proceeds} {currency_name}."),
+        );
+        self.note_site(
+            RouteDestinationId::Settlement(destination),
+            SiteLogKind::RouteDelivered,
+            format!("A caravan came home from here with {proceeds} {currency_name}."),
         );
         // Depot first, the player's pack second, a log line for anything
         // that fits nowhere — `Game::return_material`'s own rule. Calling
@@ -781,7 +794,13 @@ impl Game {
             (route.cargo.clone(), route.standing)
         };
         let anchor = self.anchor_position().unwrap_or((0, 0));
-        self.roll_cargo_predation(anchor, tile, "the outpost", &mut cargo);
+        self.roll_cargo_predation(
+            anchor,
+            tile,
+            RouteDestinationId::Outpost(tile),
+            "the outpost",
+            &mut cargo,
+        );
         let total: u32 = cargo.iter().map(|(_, qty)| *qty).sum();
         if total > 0 {
             for (item, qty) in &cargo {
@@ -791,8 +810,18 @@ impl Game {
                 MessageKind::Loot,
                 format!("The caravan returns from the outpost with {total} units of cargo."),
             );
+            self.note_site(
+                RouteDestinationId::Outpost(tile),
+                SiteLogKind::RouteHauledHome,
+                format!("A caravan hauled {total} units of stock home."),
+            );
         } else {
             self.log_base("The caravan returns from the outpost empty-handed.".to_string());
+            self.note_site(
+                RouteDestinationId::Outpost(tile),
+                SiteLogKind::RouteHauledHome,
+                "A caravan came home empty-handed.".into(),
+            );
         }
         self.queue_cargo_walk(false);
         if !standing {
@@ -848,6 +877,7 @@ impl Game {
         &mut self,
         base: (i32, i32),
         destination: (i32, i32),
+        site: RouteDestinationId,
         dest_name: &str,
         cargo: &mut [(ItemId, u32)],
     ) {
@@ -872,6 +902,11 @@ impl Game {
                 "{predator_name} raids the caravan bound for {dest_name}, seizing {taken_units} units of cargo."
             );
             self.log_base_kind(MessageKind::Outcome, line);
+            self.note_site(
+                site,
+                SiteLogKind::RoutePreyedOn,
+                format!("{predator_name} raided a caravan bound here, seizing {taken_units} units of cargo."),
+            );
         }
     }
 
@@ -905,6 +940,11 @@ impl Game {
                 "{predator_name} tolls the caravan home from {dest_name}, taking {take} {currency_name}."
             );
             self.log_base_kind(MessageKind::Outcome, line);
+            self.note_site(
+                RouteDestinationId::Settlement(destination_key),
+                SiteLogKind::RoutePreyedOn,
+                format!("{predator_name} took {take} {currency_name} from a caravan coming home."),
+            );
         }
     }
 }

@@ -1050,7 +1050,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         _ => Vec::new(),
     };
     let list_filter = app.filter_text().to_owned();
+    let site = app.held_site();
     let app_screens = base_report::AppScreens {
+        site,
         list_filter: &list_filter,
         commands: commands.as_deref(),
         command_counts: &command_counts,
@@ -1179,11 +1181,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         }),
         _ => None,
     };
-    // The hub's own two sections, `settlement_market`'s reason one rung up:
-    // `App::dispatch_hub_sections`/`dispatch_trip_reports` take `&mut self`,
+    // The hub's sortie list, `settlement_market`'s reason one rung up:
+    // `App::dispatch_sites`/`dispatch_trip_reports` take `&mut self`,
     // so they have to run before `game` below takes `&mut app.game`.
     let dispatch_sections = match app.mode {
-        Mode::Dispatch => app.dispatch_hub_sections(),
+        Mode::Dispatch => app.dispatch_sites(),
         _ => None,
     };
     let dispatch_trips = match app.mode {
@@ -1707,9 +1709,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::StackMarket => draw_stack_market(game, &list_filter, selected, refusal, painter, m),
         Mode::Caravan => draw_caravan(game, caravan, selected, refusal, painter, m),
         Mode::Dispatch => draw_dispatch(
-            dispatch_sections
-                .as_ref()
-                .map(|(sites, destinations)| (sites.as_slice(), destinations.as_slice())),
+            dispatch_sections.as_deref(),
             &dispatch_trips.0,
             &dispatch_trips.1,
             selected,

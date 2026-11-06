@@ -5,18 +5,15 @@
 
 use feral_processes_app_core::{RouteCargoBasket, SortieSquadRow};
 use feral_processes_engine::routes::RouteLeg;
-use feral_processes_engine::{RouteDestination, RouteReport, SortieReport, SortieRow};
+use feral_processes_engine::{RouteReport, SortieReport, SortieRow};
 
 use super::popup::*;
 use super::*;
 
-/// The hub itself: sortie sites, then route destinations, numbered
-/// continuously the way `app::dispatch::dispatch_row` resolves a keypress
-/// against them, so a row drawn here and a row acted on there can never
-/// disagree about which index means what. Every trip in flight is drawn
-/// below as read-only status.
+/// The hub itself: the sortie sites, which are its only selectable rows.
+/// Every trip in flight is drawn below as read-only status.
 pub(super) fn draw_dispatch(
-    sections: Option<(&[SortieRow], &[RouteDestination])>,
+    sites: Option<&[SortieRow]>,
     sortie_reports: &[SortieReport],
     route_reports: &[RouteReport],
     selected: usize,
@@ -24,7 +21,7 @@ pub(super) fn draw_dispatch(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let Some((sites, destinations)) = sections else {
+    let Some(sites) = sites else {
         draw_popup(
             "Relay",
             PopupSize::Small,
@@ -35,23 +32,21 @@ pub(super) fn draw_dispatch(
         );
         return;
     };
-    let rows = dispatch_hub_rows(sites, destinations, sortie_reports, route_reports, selected);
+    let rows = dispatch_hub_rows(sites, sortie_reports, route_reports, selected);
     draw_popup("Relay", PopupSize::Large, &rows, refusal, painter, m);
 }
 
 pub(super) fn dispatch_hub_rows(
     sites: &[SortieRow],
-    destinations: &[RouteDestination],
     sortie_reports: &[SortieReport],
     route_reports: &[RouteReport],
     selected: usize,
 ) -> Vec<Row> {
     let mut rows = vec![Row::TextColored("Sortie sites".to_string(), TEXT)];
-    let mut idx = 0;
     if sites.is_empty() {
         rows.push(text_row("    Nothing on the board."));
     }
-    for site in sites {
+    for (idx, site) in sites.iter().enumerate() {
         rows.push(item_row(
             format!(
                 "{} — risk +{}, {} fights, {} ticks",
@@ -59,24 +54,6 @@ pub(super) fn dispatch_hub_rows(
             ),
             idx == selected,
         ));
-        idx += 1;
-    }
-
-    rows.push(text_row(""));
-    rows.push(Row::TextColored("Known destinations".to_string(), TEXT));
-    if destinations.is_empty() {
-        rows.push(text_row("    Nothing known yet."));
-    }
-    for dest in destinations {
-        let tag = match dest.band {
-            Some(band) => band.label().to_string(),
-            None => "outpost".to_string(),
-        };
-        rows.push(item_row(
-            format!("{} — {tag}, {} ticks", dest.name, dest.ticks),
-            idx == selected,
-        ));
-        idx += 1;
     }
 
     rows.push(text_row(""));
@@ -123,12 +100,7 @@ pub(super) fn dispatch_hub_rows(
 
 /// Split out for the census below, `board_footer`'s reason.
 fn dispatch_hub_footer() -> String {
-    key_hints(&[
-        "[S] send a squad",
-        "[C] send cargo",
-        "[X] cut a standing route",
-        "Esc back",
-    ])
+    key_hints(&["[S] send a squad", "Esc back"])
 }
 
 /// The squad picker, opened with `[S]` on the hub for one sortie site.
@@ -276,7 +248,6 @@ mod tests {
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
-    use feral_processes_engine::settlements::relations::Standing;
     use feral_processes_engine::settlements::{SettlementDb, SettlementKey};
     use feral_processes_engine::sorties::SortieDb;
     use feral_processes_engine::{DifficultyMode, Game, RouteDestinationId};
@@ -337,12 +308,6 @@ mod tests {
             battles: 9,
             ticks: 9_999,
         }];
-        let destinations = vec![RouteDestination {
-            destination: RouteDestinationId::Settlement(SettlementKey { rx: 0, ry: 0 }),
-            name: widest_town_name,
-            band: Some(Standing::Allied),
-            ticks: 9_999,
-        }];
         let sortie_reports = vec![SortieReport {
             site: sites[0].name.clone(),
             members: vec!["A".to_string()],
@@ -355,8 +320,8 @@ mod tests {
             aborted: true,
         }];
         let route_reports = vec![RouteReport {
-            destination: destinations[0].destination,
-            destination_name: destinations[0].name.clone(),
+            destination: RouteDestinationId::Settlement(SettlementKey { rx: 0, ry: 0 }),
+            destination_name: widest_town_name,
             standing: true,
             stalled: true,
             leg: RouteLeg::Inbound,
@@ -365,7 +330,7 @@ mod tests {
             proceeds: 9_999,
         }];
 
-        let rows = dispatch_hub_rows(&sites, &destinations, &sortie_reports, &route_reports, 0);
+        let rows = dispatch_hub_rows(&sites, &sortie_reports, &route_reports, 0);
         assert_rows_fit(&rows);
     }
 
@@ -427,23 +392,6 @@ mod tests {
             outpost_carry_cap: None,
         };
         let rows = route_cargo_rows(&basket, 0);
-        assert_rows_fit(&rows);
-    }
-
-    /// An outpost's own hub row — the "outpost" tag in place of a standing
-    /// band — against a synthetic worst-case name, since v1 ships one short
-    /// def name but `outpost_destination_name` appends tile coordinates
-    /// that could run wide (`no_dispatch_hub_row_overflows_its_popup`'s
-    /// shape, one destination kind over).
-    #[test]
-    fn no_outpost_destination_row_overflows_its_popup() {
-        let destinations = vec![RouteDestination {
-            destination: RouteDestinationId::Outpost((-9_999_999, -9_999_999)),
-            name: "A Very Long Outpost Design Name Indeed (-9999999, -9999999)".to_string(),
-            band: None,
-            ticks: 9_999,
-        }];
-        let rows = dispatch_hub_rows(&[], &destinations, &[], &[], 0);
         assert_rows_fit(&rows);
     }
 

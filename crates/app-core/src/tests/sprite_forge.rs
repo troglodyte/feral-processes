@@ -41,7 +41,7 @@ fn the_game_menu_rail_offers_sprites_and_manual_before_save_and_quit() {
         .kind()
         .pages(&app)
         .iter()
-        .map(|p| p.title)
+        .map(|p| p.title.clone())
         .collect();
     assert_eq!(
         titles,

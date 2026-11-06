@@ -1364,10 +1364,17 @@ impl Game {
     /// very next keypress spent walking away, and the tile would read as a
     /// wall the player can never leave.
     pub fn take_visit(&mut self) -> Option<crate::resources::Visit> {
-        self.world
+        let visit = self
+            .world
             .resource_mut::<crate::resources::PendingVisit>()
             .0
-            .take()
+            .take();
+        // The drain both the bump and the relay landing feed, so this is the
+        // one place a town's shelf is seen on arrival.
+        if let Some(crate::resources::Visit::Settlement(key)) = visit {
+            self.record_shelf_seen(key);
+        }
+        visit
     }
 
     /// Rebuilds the map entity for every settlement a save already knew.

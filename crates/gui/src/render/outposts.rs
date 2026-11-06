@@ -115,12 +115,12 @@ pub(super) fn draw_outpost_marks(
 /// The growth bar's text rendering for the popup page — a bracketed ASCII
 /// gauge, since `draw_popup` is text rows and has no bar primitive of its
 /// own. `width` is in characters.
-fn text_growth_bar(fill: f32, width: usize) -> String {
+pub(super) fn text_growth_bar(fill: f32, width: usize) -> String {
     let filled = ((fill.clamp(0.0, 1.0) * width as f32).round() as usize).min(width);
     format!("[{}{}]", "#".repeat(filled), "-".repeat(width - filled))
 }
 
-const GROWTH_BAR_WIDTH: usize = 20;
+pub(super) const GROWTH_BAR_WIDTH: usize = 20;
 
 /// `Mode::OutpostVisit`'s page — every figure comes out of
 /// `Game::outpost_report` alone, `draw_companion_memories`'s own rule: a

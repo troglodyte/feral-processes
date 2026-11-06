@@ -217,6 +217,7 @@ impl App {
     }
 
     pub fn handle_key(&mut self, key: GameKey) {
+        self.settle_hub();
         // A key pressed while narration is still scrolling in dumps the rest
         // and is not acted on. Without this the pacing would be a tax on
         // anyone who reads faster than it scrolls.
@@ -406,6 +407,16 @@ impl App {
             Mode::WorldMap => self.handle_world_map_key(key),
             Mode::Structures => self.handle_structures_key(key),
             Mode::StructureAssign => self.handle_structure_assign_key(key),
+            Mode::SiteStatus
+            | Mode::SiteGoods
+            | Mode::SiteRoutes
+            | Mode::SiteJobs
+            | Mode::SiteLog
+            | Mode::OutpostStatus
+            | Mode::OutpostCrew
+            | Mode::OutpostStock
+            | Mode::CaravanSchedule
+            | Mode::RoutesInFlight => self.handle_sites_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
             Mode::BaseBuild
@@ -491,10 +502,12 @@ impl App {
             self.quit_unsaved_pending = false;
         }
         // A hub that remembers is reopened where the player last was.
+        self.settle_hub();
         if let Some((hub, ..)) = self.hub_at()
             && hub.kind().remembers()
+            && let Some(place) = &self.hub_place
         {
-            self.hub_last[hub.slot()] = Some(self.mode);
+            self.hub_last[hub.slot()] = Some((place.key.clone(), self.mode));
         }
         // The structure hub is only open while a mode of its own is up; any
         // other mode (the map after an action) means it was left. A popup
@@ -518,6 +531,7 @@ impl App {
         if self.mode == Mode::Playing {
             self.menu_origin = None;
             self.command_return_row = None;
+            self.site_return = None;
         }
         self.after_tick();
         // Last, because `after_tick` is itself allowed to raise a message.

@@ -7,32 +7,32 @@ use feral_processes_engine::BaseReportFlags;
 /// The base report's one table: the rail, the screen order and "is this mode
 /// in the hub" are all read off it, so a page cannot be on the rail and
 /// missing from the nav. Rail order is the order here; `[` and `]` walk it.
-pub const BASE_REPORT_PAGES: &[HubPage] = &[
-    HubPage {
+pub const BASE_REPORT_PAGES: &[FixedPage] = &[
+    FixedPage {
         title: "Overview",
         screens: &[Mode::BaseOverview],
     },
-    HubPage {
+    FixedPage {
         title: "Build",
         screens: &[Mode::BaseBuild],
     },
-    HubPage {
+    FixedPage {
         title: "Research",
         screens: &[Mode::BaseResearch],
     },
-    HubPage {
+    FixedPage {
         title: "Trade",
         screens: &[Mode::BaseTrade],
     },
-    HubPage {
+    FixedPage {
         title: "Compile",
         screens: &[Mode::BaseCompile],
     },
-    HubPage {
+    FixedPage {
         title: "Recipes",
         screens: &[Mode::Recipes],
     },
-    HubPage {
+    FixedPage {
         title: "Staff",
         screens: &[
             Mode::StaffWellbeing,
@@ -40,27 +40,27 @@ pub const BASE_REPORT_PAGES: &[HubPage] = &[
             Mode::StaffDiscontent,
         ],
     },
-    HubPage {
+    FixedPage {
         title: "Production",
         screens: &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
     },
-    HubPage {
+    FixedPage {
         title: "Stock",
         screens: &[Mode::BaseStock],
     },
-    HubPage {
+    FixedPage {
         title: "Work orders",
         screens: &[Mode::WorkOrders],
     },
-    HubPage {
+    FixedPage {
         title: "Staffing",
         screens: &[Mode::BaseStaff, Mode::Structures],
     },
-    HubPage {
+    FixedPage {
         title: "Build orders",
         screens: &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
     },
-    HubPage {
+    FixedPage {
         title: "Alerts",
         screens: &[Mode::Alerts],
     },
@@ -69,7 +69,7 @@ pub const BASE_REPORT_PAGES: &[HubPage] = &[
 /// The Breed page, on the rail after the fixed table once a bay stands.
 /// Last, so every fixed page keeps the index `base_page_flag` and the marks
 /// read it by.
-const BREED_PAGE: HubPage = HubPage {
+const BREED_PAGE: FixedPage = FixedPage {
     title: "Breed",
     screens: &[Mode::Breed],
 };
@@ -83,33 +83,29 @@ impl HubKind for BaseReport {
         "BASE REPORT"
     }
 
-    fn table(&self) -> &'static [HubPage] {
-        BASE_REPORT_PAGES
-    }
-
     /// The table, then Breed once a bay stands — but not while the `[c]`
     /// hub is open, whose own Breed page is the same mode: a mode names
     /// one hub, so only one may offer it at a time.
-    fn pages(&self, app: &App) -> Vec<&'static HubPage> {
-        let mut pages: Vec<&'static HubPage> = BASE_REPORT_PAGES.iter().collect();
+    fn pages(&self, app: &App) -> Vec<HubPage> {
+        let flags = app.game.as_ref().map(|g| g.base_report_flags());
+        let mut pages: Vec<HubPage> = BASE_REPORT_PAGES
+            .iter()
+            .enumerate()
+            .map(|(i, fixed)| HubPage {
+                marked: flags
+                    .as_ref()
+                    .is_some_and(|f| base_page_flag(f, i).is_some()),
+                ..fixed.page()
+            })
+            .collect();
         let bay_stands = app
             .game
             .as_ref()
             .is_some_and(|g| g.base_breeding_bay().is_some());
         if bay_stands && app.structure_hub.is_none() {
-            pages.push(&BREED_PAGE);
+            pages.push(BREED_PAGE.page());
         }
         pages
-    }
-
-    fn marks(&self, app: &App) -> Vec<bool> {
-        let Some(game) = &app.game else {
-            return Vec::new();
-        };
-        let flags = game.base_report_flags();
-        (0..BASE_REPORT_PAGES.len())
-            .map(|page| base_page_flag(&flags, page).is_some())
-            .collect()
     }
 }
 
@@ -133,7 +129,8 @@ impl App {
     /// own shortcut, jumps to that page's first screen.
     pub(crate) fn handle_base_overview_key(&mut self, key: GameKey) {
         if let Some(row) = self.selected_index(key, BASE_REPORT_PAGES.len() - 1) {
-            self.mode = BASE_REPORT_PAGES[row + 1].screens[0];
+            let title = BASE_REPORT_PAGES[row + 1].title;
+            self.turn_hub_to(Hub::Base, &HubPageKey::Named(title));
         }
     }
 

@@ -1853,6 +1853,8 @@ fn a_creature_whose_nest_is_missing_loads_as_an_ordinary_wild_program() {
         outposts: Vec::new(),
         outpost_routes: Vec::new(),
         storyline: Default::default(),
+        site_logs: Vec::new(),
+        seen_shelves: Vec::new(),
     };
     let path = std::env::temp_dir().join(format!("feral_missing_nest_{}.bin", std::process::id()));
     save::save_to_file(&path, &data).unwrap();

@@ -739,12 +739,15 @@ fn b_underground_opens_the_hub_and_build_has_no_base_rows() {
 
 #[test]
 fn no_mode_is_in_two_hubs() {
+    let app = app_with_a_breeding_bay(30090, 1, false);
     let mut seen = Vec::new();
     for hub in Hub::ALL {
-        for mode in hub.kind().table().iter().flat_map(|p| p.screens) {
+        let mut in_hub = Vec::new();
+        for mode in hub.kind().pages(&app).iter().flat_map(|p| p.screens) {
             assert!(!seen.contains(mode), "{mode:?} is in two hubs");
-            seen.push(*mode);
+            in_hub.push(*mode);
         }
+        seen.extend(in_hub);
     }
 }
 

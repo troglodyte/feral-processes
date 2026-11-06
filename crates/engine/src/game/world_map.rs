@@ -4,12 +4,9 @@
 
 use crate::components::{Position, SurfaceLink};
 use crate::game::inspection::link_compass_label;
-use crate::resources::{
-    ExploredChunks, Locale, Outposts, Routes, Settlements, StackMemory, Standings,
-};
+use crate::resources::{ExploredChunks, Locale, Outposts, Routes, Settlements, StackMemory};
 use crate::routes::corridor_chunks;
-use crate::settlements::growth::{self, outlook, trend};
-use crate::settlements::{CompassTarget, SettlementKind};
+use crate::settlements::CompassTarget;
 use crate::tuning::WORLD_MAP_REVEAL_RADIUS_CHUNKS;
 use crate::views::{WorldMapCell, WorldMapMark, WorldMapMarkKind, WorldMapRoute, WorldMapView};
 use crate::world::{CHUNK_SIZE, WorldMap};
@@ -155,9 +152,6 @@ impl Game {
             .iter()
             .map(|(key, town)| (*key, town.tile, town.compass_label()))
             .collect();
-        let seed = self.world.resource::<WorldMap>().seed();
-        let now = self.current_tick();
-        let epoch = now / crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS;
         for (key, tile, label) in known {
             if !in_view(chunk_of(tile)) {
                 continue;
@@ -166,31 +160,15 @@ impl Game {
                 continue;
             };
             let standing = self.standing_band(key);
-            let relation = self
-                .world
-                .resource::<Standings>()
-                .0
-                .get(&key)
-                .copied()
-                .unwrap_or_default();
-            let settled = growth::settle_commerce(
-                &relation,
-                epoch,
-                standing == crate::settlements::Standing::Hostile,
-            );
-            let mainframe = kind == SettlementKind::Mainframe;
-            let vitality = self
-                .settlement_vitality(key)
-                .map(|_| growth::vitality_with_floor(settled.commerce, relation.traded, standing));
+            let reading = self.growth_reading(key);
             push(
                 tile,
                 WorldMapMarkKind::Town {
                     standing,
                     kind,
-                    vitality,
-                    trend: mainframe.then(|| trend(settled.commerce, settled.commerce_at_epoch)),
-                    outlook: (!mainframe)
-                        .then(|| outlook(now, growth::due_with_pull(seed, key, settled.commerce))),
+                    vitality: reading.vitality,
+                    trend: reading.trend,
+                    outlook: reading.outlook,
                     sends_raiders: standing.sends_raiders(),
                     fields_patrols: standing.fields_patrols(),
                     preys_on_routes: standing.preys_on_routes(),

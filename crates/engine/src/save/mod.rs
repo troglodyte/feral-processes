@@ -2154,6 +2154,15 @@ pub struct SaveData {
     /// arc. No `SAVE_FORMAT_VERSION` bump.
     #[serde(default)]
     pub storyline: crate::storyline::Storyline,
+    /// Each site's recent-event ring — `sites::SiteLog`. Additive behind a
+    /// default: a save without it loads with empty logs, which is exactly
+    /// true of a run that predates them. No `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub site_logs: Vec<crate::sites::SiteLogSave>,
+    /// The last-seen shelf of each town — `sites::SeenShelves`. Same
+    /// default as `site_logs`, for the same reason.
+    #[serde(default)]
+    pub seen_shelves: Vec<crate::sites::SeenShelfSave>,
 }
 
 /// Bumped whenever `SaveData` (or anything it contains, transitively)

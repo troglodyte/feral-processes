@@ -65,9 +65,9 @@ fn the_inventory_hub_lists_nine_pages_in_rail_order() {
     assert_eq!(Hub::Inventory.kind().title(), "INVENTORY");
     let titles: Vec<_> = Hub::Inventory
         .kind()
-        .table()
+        .pages(&test_app(9500))
         .iter()
-        .map(|p| p.title)
+        .map(|p| p.title.clone())
         .collect();
     assert_eq!(
         titles,

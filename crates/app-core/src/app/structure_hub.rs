@@ -13,69 +13,69 @@ use crate::*;
 /// The structure hub's page table: a rail title and the one screen each
 /// `StructurePage` is. Which pages a structure shows, and in what order, is
 /// the engine's answer (`AdjacentStructure::pages`).
-pub fn structure_page(page: StructurePage) -> &'static HubPage {
+pub fn structure_page(page: StructurePage) -> &'static FixedPage {
     match page {
-        StructurePage::Inventory => &HubPage {
+        StructurePage::Inventory => &FixedPage {
             title: "Inventory",
             screens: &[Mode::Transfer],
         },
-        StructurePage::Filter => &HubPage {
+        StructurePage::Filter => &FixedPage {
             title: "Filter",
             screens: &[Mode::DepotFilter],
         },
-        StructurePage::Recipe => &HubPage {
+        StructurePage::Recipe => &FixedPage {
             title: "Recipe",
             screens: &[Mode::MachineRecipe],
         },
-        StructurePage::Tool => &HubPage {
+        StructurePage::Tool => &FixedPage {
             title: "Tool",
             screens: &[Mode::RigTool],
         },
-        StructurePage::Siphon => &HubPage {
+        StructurePage::Siphon => &FixedPage {
             title: "Siphon",
             screens: &[Mode::Siphon],
         },
-        StructurePage::Splice => &HubPage {
+        StructurePage::Splice => &FixedPage {
             title: "Splice",
             screens: &[Mode::SpliceRig],
         },
-        StructurePage::Grow => &HubPage {
+        StructurePage::Grow => &FixedPage {
             title: "Grow",
             screens: &[Mode::FarmRecipe],
         },
-        StructurePage::Rebuild => &HubPage {
+        StructurePage::Rebuild => &FixedPage {
             title: "Rebuild",
             screens: &[Mode::BuildProgram],
         },
-        StructurePage::Build => &HubPage {
+        StructurePage::Build => &FixedPage {
             title: "Build routine",
             screens: &[Mode::RoutineBuild],
         },
-        StructurePage::Weapon => &HubPage {
+        StructurePage::Weapon => &FixedPage {
             title: "Build weapon",
             screens: &[Mode::WeaponBuild],
         },
-        StructurePage::Salvage => &HubPage {
+        StructurePage::Salvage => &FixedPage {
             title: "Salvage",
             screens: &[Mode::WeaponSalvage],
         },
-        StructurePage::Compile => &HubPage {
+        StructurePage::Compile => &FixedPage {
             title: "Compile",
             screens: &[Mode::Craft],
         },
-        StructurePage::Built => &HubPage {
+        StructurePage::Built => &FixedPage {
             title: "Built routines",
             screens: &[Mode::BuiltRoutines],
         },
-        StructurePage::Breed => &HubPage {
+        StructurePage::Breed => &FixedPage {
             title: "Breed",
             screens: &[Mode::Breed],
         },
-        StructurePage::Hold => &HubPage {
+        StructurePage::Hold => &FixedPage {
             title: "Hold",
             screens: &[Mode::PinPrisoner],
         },
-        StructurePage::Info => &HubPage {
+        StructurePage::Info => &FixedPage {
             title: "Info",
             screens: &[Mode::StructureManifest],
         },
@@ -135,14 +135,14 @@ impl HubKind for StructureHubKind {
         }
     }
 
-    fn pages(&self, app: &App) -> Vec<&'static HubPage> {
+    fn pages(&self, app: &App) -> Vec<HubPage> {
         app.structure_hub
             .as_ref()
             .map(|h| {
                 h.current()
                     .pages
                     .iter()
-                    .map(|&p| structure_page(p))
+                    .map(|&p| structure_page(p).page())
                     .collect()
             })
             .unwrap_or_default()

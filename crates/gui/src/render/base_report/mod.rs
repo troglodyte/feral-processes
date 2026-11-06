@@ -18,13 +18,14 @@ mod orders;
 mod overview;
 mod production;
 mod recipes;
+pub(in crate::render) mod sites;
 mod staff;
 mod stock;
 
 use super::popup::*;
 use super::*;
 use feral_processes_app_core::{BASE_REPORT_PAGES, GroupMenuRow, HubPage, WorkOrderRow};
-use feral_processes_engine::{PerkPreview, WorkTable};
+use feral_processes_engine::{PerkPreview, RouteDestinationId, WorkTable};
 
 /// What the screens that read `App` state rather than the `Game` are drawn
 /// from, taken off the app before `app.game` is borrowed — the same
@@ -44,6 +45,8 @@ pub(super) struct AppScreens<'a> {
     pub(super) perk_previews: &'a [Option<PerkPreview>],
     /// What was typed to filter the current screen's list, or `""`.
     pub(super) list_filter: &'a str,
+    /// `App::held_site`: the site the Sites tabs are about.
+    pub(super) site: Option<RouteDestinationId>,
 }
 
 /// Where a mode sits in its hub and what the frame says about it, taken off
@@ -54,11 +57,9 @@ pub(super) struct HubFrame {
     /// The rail heading as `(head, tail)`: the tail is kept whole when the
     /// head is elided to fit.
     title: (String, String),
-    pages: Vec<&'static HubPage>,
+    pages: Vec<HubPage>,
     page: usize,
     screen: usize,
-    /// Which pages carry the rail's `!`.
-    marks: Vec<bool>,
     /// The hub's own keys, as `(key, verb)`.
     extra_keys: Vec<(&'static str, &'static str)>,
 }
@@ -74,7 +75,6 @@ impl HubFrame {
             pages: kind.pages(app),
             page,
             screen,
-            marks: kind.marks(app),
             extra_keys: kind.extra_keys(app),
         })
     }
@@ -93,7 +93,6 @@ impl HubFrame {
                 pages: &self.pages,
                 page: self.page,
                 screen: self.screen,
-                marks: &self.marks,
                 extra_keys: &self.extra_keys,
             },
             keybar_mode,
@@ -249,6 +248,16 @@ fn screen_rows(
         Mode::Companion => party::roster_rows(game, selected),
         Mode::ManifestIntro => party::manifest_intro_rows(),
         Mode::Perks => progression::perks_rows(game, app_screens.perk_previews, selected),
+        Mode::SiteStatus
+        | Mode::SiteGoods
+        | Mode::SiteRoutes
+        | Mode::SiteJobs
+        | Mode::SiteLog
+        | Mode::OutpostStatus
+        | Mode::OutpostCrew
+        | Mode::OutpostStock
+        | Mode::CaravanSchedule
+        | Mode::RoutesInFlight => sites::site_rows(game, mode, app_screens.site, selected),
         other => vec![text_row(format!("No report for {other:?}."))],
     }
 }

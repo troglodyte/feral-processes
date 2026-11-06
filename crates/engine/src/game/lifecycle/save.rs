@@ -1081,6 +1081,8 @@ impl Game {
                 })
                 .collect(),
             storyline: self.storyline.clone(),
+            site_logs: self.sites.log.to_save(),
+            seen_shelves: self.sites.seen.to_save(),
         };
         save::save_to_file(path, &data)
     }

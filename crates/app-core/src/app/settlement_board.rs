@@ -37,7 +37,7 @@ impl App {
     pub(crate) fn handle_settlement_board_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.status_line = None;
-            self.mode = Mode::Settlement;
+            self.leave_site_screen(Mode::Settlement);
             return;
         }
         let Some(town) = self.pending_settlement else {

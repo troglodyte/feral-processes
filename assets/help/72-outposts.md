@@ -26,9 +26,9 @@ why: growing, holding steady at what the crew posted can reach, sitting on a ful
 nowhere to put more, or slipping — undercrewed, damaged, or backed up too long.
 
 Getting the stock home is your choice. Walk it out by hand through that same take screen, or send a
-caravan: at a Relay, C on a known outpost dispatches one the way it does to a settlement, except
-there is no manifest to build — it goes out empty and hauls back a load on its own. A standing
-route keeps making that same round trip on its own until you cut it.
+caravan: open the sites list with w, pick the outpost and step to its Stock page, then choose New
+outpost route. There is no manifest to build — it goes out empty and hauls back a load on its own.
+A standing route keeps making that same round trip on its own until you cut it.
 
 An outpost can be raided exactly like your base once your run has reached zone 2 — the first zone
 never rolls one at all. A hit costs it some integrity, steals a share of its stock, and benches one

@@ -100,8 +100,13 @@ fn a_run_has_six_pages_and_every_one_is_found_by_hub_for() {
     .into_iter()
     .enumerate()
     {
+        // A mode on another page is not in the hub, by design: the page is
+        // held, so each is found by turning to it.
+        let key = kind.pages(&app)[i].key.clone();
+        app.turn_hub_to(Hub::GameMenu, &key);
+        assert_eq!(app.mode, mode);
         assert_eq!(
-            app.hub_for(mode).map(|(h, p, _)| (h, p)),
+            app.hub_at().map(|(h, p, _)| (h, p)),
             Some((Hub::GameMenu, i))
         );
     }

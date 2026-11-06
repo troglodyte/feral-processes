@@ -56,6 +56,7 @@ pub mod routine_tree;
 pub mod save;
 pub mod score;
 pub mod settlements;
+pub mod sites;
 pub mod situations;
 pub mod skills;
 pub mod sociability;
@@ -170,6 +171,10 @@ pub use resources::{
     RoutineCue, SlotShift, SpeechCue, SwingOutcome, TacticalFxCue, TacticalFxKind, TransitCue,
     Visit, VisualEffect, condense,
 };
+pub use sites::{
+    CaravanSchedule, RouteLine, SeenOffer, SiteLogLine, SiteRailEntry, SiteReach, SiteSection,
+    TimeBand, TownGoods, TownStatus, time_band,
+};
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 pub use statuses::{StatusBehaviour, StatusDb, StatusId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};
@@ -222,6 +227,9 @@ pub struct Game {
     /// Plain Rust, not a `Resource`: a new resource shifts bevy's iteration
     /// order (ADR 0042).
     storyline: storyline::Storyline,
+    /// Plain Rust for the same reason: the per-site logs and last-seen
+    /// shelves (`sites::SiteRecords`).
+    sites: sites::SiteRecords,
     /// A bench's override of whether the storyline may leave `Dormant`
     /// (`Game::dev_set_storyline`): `None` means on. Never saved.
     dev_storyline: Option<bool>,

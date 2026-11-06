@@ -761,3 +761,21 @@ pub const SETTLEMENT_GIFT_SPECIALTY_MULT: f32 = 1.25;
 /// advance exactly as far as they would have. Not a guess, which is why it
 /// is the one constant in this feature with an argument instead of a shrug.
 pub const SETTLEMENT_TRAVEL_TICKS_PER_TILE: u64 = 1;
+
+/// The research node that turns the Sites hub's Goods tab from the
+/// last-seen shelf into the live one for every known town. A Rust id, not a
+/// schema field, on the `WEAPON_TREE_OPENER` precedent: the node unlocks
+/// nothing in data, `Game::live_shelf_known` is what reads it.
+pub const LIVE_SHELF_RESEARCH: &str = "town_price_feeds";
+
+/// Most entries one site's log keeps (`sites::SiteLog`); the oldest drop
+/// first. Short on purpose: it is a glance at recent events, not a history.
+pub const SITE_LOG_CAP: usize = 12;
+/// Ticks up to which an age or wait reads as "just now" / "any moment"
+/// (`sites::time_band`).
+pub const SITE_TIME_NOW_TICKS: u64 = 30;
+/// Ticks up to which an age or wait reads as "recently" / "soon".
+pub const SITE_TIME_SOON_TICKS: u64 = 300;
+/// Ticks up to which an age or wait reads as "a while ago" / "a while yet";
+/// past it, "long ago" / "a long way off".
+pub const SITE_TIME_A_WHILE_TICKS: u64 = 1800;

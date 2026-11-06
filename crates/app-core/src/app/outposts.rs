@@ -98,7 +98,7 @@ impl App {
     pub(crate) fn handle_outpost_post_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.status_line = None;
-            self.mode = Mode::OutpostVisit;
+            self.leave_site_screen(Mode::OutpostVisit);
             return;
         }
         let Some(tile) = self.pending_outpost else {
@@ -119,7 +119,7 @@ impl App {
                 match game.post_to_outpost(tile, entity) {
                     Ok(()) => {
                         self.status_line = None;
-                        self.mode = Mode::OutpostVisit;
+                        self.leave_site_screen(Mode::OutpostVisit);
                     }
                     Err(e) => self.refuse(e),
                 }

@@ -36,7 +36,7 @@ pub use app::gear_craft::{
     design_row_category, gear_craft_refusal_line,
 };
 pub use app::group_menu::GroupMenuRow;
-pub use app::hub::{Hub, HubKind, HubPage, hub_of};
+pub use app::hub::{FixedPage, Hub, HubKind, HubPage, HubPageKey};
 pub use app::inventory::{equip_swap_visible, inventory_visible};
 pub use app::inventory_hub::INVENTORY_PAGES;
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
@@ -52,6 +52,7 @@ pub use app::routine_craft::{
     BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft,
 };
 pub use app::shortcuts::{ShortcutArea, ShortcutGroup, ShortcutSheet, shortcut_sheet_for};
+pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, TOWN_TABS, sites_screen_keys};
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
     DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,
@@ -158,10 +159,10 @@ use feral_processes_engine::{
     DispatchReach, DuelComparison, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
     FieldRoutineTargetView, Game, HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine,
     MESSAGE_LOG_CAP, MachineRecipeView, MessageSource, OutpostReport, PerkPreview, PerkReport,
-    ProgramSaleOption, RigToolView, RouteDestination, RouteDestinationId, RouteRefusal,
-    RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome,
-    TransferBasket, TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder,
-    WorkOrderReport, WorkTable, condense,
+    ProgramSaleOption, RigToolView, RouteDestinationId, RouteRefusal, RouteReport, SlotShift,
+    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
+    TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport,
+    WorkTable, condense,
 };
 
 /// Chunks from the centre to the edge of the world map's grid. The grid and
@@ -2123,17 +2124,11 @@ pub enum Mode {
     /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
     /// The Relay hub, opened with the Trade page's "Dispatch" row — sortie
-    /// sites (`Game::sortie_board`), route destinations
-    /// (`Game::route_destinations`) numbered continuously in one list
-    /// (`app::dispatch::dispatch_row`, `contract_row`'s shape), and every
-    /// trip in flight (`Game::sortie_reports` / `Game::route_reports`) drawn
-    /// below as read-only status. Uppercase actions only, since lowercase is
-    /// a row selector: `[S]` opens `Mode::SortieSquad` for the highlighted
-    /// site, `[C]` opens `Mode::RouteCargo` for the highlighted destination,
-    /// `[X]` severs the standing route running to it, if one is there, and
-    /// `[T]` travels there in person through `Game::travel_to_settlement`,
-    /// closing the hub on success. The last three all resolve their row
-    /// through `dispatch_row` and refuse on a site row.
+    /// sites (`Game::sortie_board`) in one list, and every trip in flight
+    /// (`Game::sortie_reports` / `Game::route_reports`) drawn below as
+    /// read-only status. Uppercase actions only, since lowercase is a row
+    /// selector: `[S]` opens `Mode::SortieSquad` for the highlighted site.
+    /// Cargo routes are sent from the Sites hub.
     Dispatch,
     /// Multi-select over `Game::base_staff`, opened with `[S]` from
     /// `Mode::Dispatch`. `App::dispatch_squad` is the toggled set — `[X]`
@@ -2297,6 +2292,30 @@ pub enum Mode {
     /// The Stock page: what the base holds against the work-order targets,
     /// short rows first - see `Game::stock_report`. Scrolls by cursor.
     BaseStock,
+    /// Sites hub, a town or city's first tab: kind, specialty, standing and
+    /// what it means - see `Game::town_status`. `T`, `G` and `H` act.
+    SiteStatus,
+    /// Sites hub, a town or city's goods: the last-seen shelf, or the live
+    /// one after the Price Feeds research - see `Game::town_goods`.
+    SiteGoods,
+    /// Sites hub, routes in flight to a town or city - see
+    /// `Game::site_routes`. `S` stops repeating; the last row dispatches.
+    SiteRoutes,
+    /// Sites hub, the contracts a town issued - see `Game::town_contracts`.
+    SiteJobs,
+    /// Sites hub, a site's recent events, newest first - see
+    /// `Game::site_log`. Shared by towns, cities and outposts.
+    SiteLog,
+    /// Sites hub, an outpost's first tab - see `Game::outpost_report`.
+    OutpostStatus,
+    /// Sites hub, an outpost's crew; `U` recalls, the last row posts.
+    OutpostCrew,
+    /// Sites hub, an outpost's stock and routes; `C` takes.
+    OutpostStock,
+    /// Sites hub, the visiting trader - see `Game::caravan_schedule`.
+    CaravanSchedule,
+    /// Sites hub, every route in flight - see `Game::routes_in_flight`.
+    RoutesInFlight,
     /// Build orders page, first screen: every structure on order - see
     /// `Game::build_order_report`. Scrolls by cursor.
     BuildOrders,
@@ -2662,6 +2681,17 @@ impl Mode {
             | Mode::BaseMachines
             | Mode::BasePower
             | Mode::BaseStock
+            // Opened from the map with `w`, a hub page: never over a fight.
+            | Mode::SiteStatus
+            | Mode::SiteGoods
+            | Mode::SiteRoutes
+            | Mode::SiteJobs
+            | Mode::SiteLog
+            | Mode::OutpostStatus
+            | Mode::OutpostCrew
+            | Mode::OutpostStock
+            | Mode::CaravanSchedule
+            | Mode::RoutesInFlight
             | Mode::BuildOrders
             | Mode::DigOrders
             | Mode::FloorOrders
@@ -2911,7 +2941,15 @@ pub struct App {
     /// indexed by `Hub::slot`, so `b` and `i` reopen where the player left
     /// off. `None` until a hub has been opened, which lands on its first
     /// page.
-    hub_last: [Option<Mode>; Hub::ALL.len()],
+    hub_last: [Option<(HubPageKey, Mode)>; Hub::ALL.len()],
+    /// The hub that is open and its page's key, checked against `mode` on
+    /// every read (ADR 0043). `None` whenever the player is not in a hub.
+    hub_place: Option<app::hub::HubPlace>,
+    /// The Sites page and tab a launched site screen (market, board, post
+    /// picker, outpost take, route cargo) was opened from, so its Esc lands
+    /// back on that exact tab (`App::leave_site_screen`). Cleared with
+    /// `menu_origin` when the map is reached.
+    site_return: Option<(HubPageKey, Mode)>,
     /// Whether the Save & quit page is asking "quit without saving?".
     quit_unsaved_pending: bool,
     /// Whether the open game menu was reached from a run (Esc on the map)

@@ -45,17 +45,27 @@ impl Game {
     /// tactical one is handed the roster as it stands, since its ceilings
     /// live in `gather_pack`/`group_pack` and not in the opening.
     pub(crate) fn start_bounty_battle(&mut self, quarry: Entity) {
-        let Some(mark) = self.world.get::<BountyMark>(quarry).cloned() else {
+        let Some(pack) = self.field_bounty_pack(quarry) else {
             return;
         };
-        let Some((id, held)) = self.held_bounty() else {
-            return;
-        };
-        let Some(at) = self.world.get::<Position>(quarry).copied() else {
-            return;
-        };
+        if self.fights_tactically(&pack) {
+            self.open_tactical_battle(pack);
+        } else {
+            let groups = self.bounty_groups(&pack);
+            self.begin_battle(groups);
+        }
+    }
+
+    /// The roster a bump on `quarry` fights: the quarry first, then its
+    /// escort spawned beside it, with the fight's tag installed. Split from
+    /// `start_bounty_battle` so the arena can stage the same roster and open
+    /// the fight itself.
+    pub(crate) fn field_bounty_pack(&mut self, quarry: Entity) -> Option<Vec<Entity>> {
+        let mark = self.world.get::<BountyMark>(quarry).cloned()?;
+        let (id, held) = self.held_bounty()?;
+        let at = self.world.get::<Position>(quarry).copied()?;
         if id != mark.contract {
-            return;
+            return None;
         }
         let mut escort = Vec::new();
         for (species, count) in &held.escort {
@@ -75,12 +85,60 @@ impl Game {
             escort,
             quarry_down: false,
         });
-        if self.fights_tactically(&pack) {
-            self.open_tactical_battle(pack);
-        } else {
-            let groups = self.species_groups(&pack);
-            self.begin_battle(groups);
-        }
+        Some(pack)
+    }
+
+    /// Rolls the sector's bounty beside the player, holds it and fields its
+    /// roster, for a staged arena fight. The anchor is a few tiles from the
+    /// player rather than a lattice sample: an arena has no base to measure
+    /// from, and where the quarry stands is not what is being measured.
+    pub(crate) fn arena_bounty_pack(&mut self) -> Result<Vec<Entity>, String> {
+        let zone = self.world.resource::<ZoneLevel>().0;
+        let at = *self
+            .world
+            .get::<Position>(self.player_entity())
+            .ok_or("the player has no position to stage a bounty beside")?;
+        let habitat: Vec<String> = self
+            .template_pools()
+            .species
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        let input = BountyInput {
+            zone,
+            habitat,
+            anchor_candidates: vec![(at.x + 3, at.y)],
+        };
+        let def = {
+            let seed: u64 = self
+                .world
+                .resource_mut::<crate::resources::GameRng>()
+                .0
+                .random();
+            let mut rng = StdRng::seed_from_u64(seed);
+            bounty::roll(&input, &mut rng)
+                .ok_or_else(|| {
+                    format!("sector {zone} rolls no bounty (the lowest is {BOUNTY_MIN_ZONE})")
+                })?
+                .def
+        };
+        let Objective::Bounty(quarry) = def.objective.clone() else {
+            return Err("a bounty roll returned another kind of contract".into());
+        };
+        let id = def.id.clone();
+        self.world.resource_mut::<ActiveContracts>().active.push(
+            crate::resources::ActiveContract {
+                def,
+                progress: 0,
+                accepted_tick: 0,
+                issuer: None,
+            },
+        );
+        let entity = self
+            .spawn_bounty_quarry(&id, &quarry)
+            .ok_or("the quarry's species did not spawn")?;
+        self.field_bounty_pack(entity)
+            .ok_or_else(|| "the bounty fight did not field".to_string())
     }
 
     /// The quarry's generated name while `entity` is the quarry of the
@@ -102,10 +160,16 @@ impl Game {
             })
     }
 
-    /// One group per species in first-appearance order, with no ceiling.
-    fn species_groups(&self, pack: &[Entity]) -> Vec<EnemyGroup> {
+    /// The quarry alone in the first group, then one group per escort
+    /// species in first-appearance order, with no ceiling.
+    ///
+    /// The quarry is its own group even when escort shares its species: a
+    /// shared group would label the whole row with the quarry's name and a
+    /// count ("4 Vesk the Long Wires"), and the quarry is the one body the
+    /// player has to tell apart.
+    pub(crate) fn bounty_groups(&self, pack: &[Entity]) -> Vec<EnemyGroup> {
         let mut groups: Vec<EnemyGroup> = Vec::new();
-        for &entity in pack {
+        for (i, &entity) in pack.iter().enumerate() {
             let Some(species) = self
                 .world
                 .get::<Creature>(entity)
@@ -113,13 +177,14 @@ impl Game {
             else {
                 continue;
             };
-            match groups.iter_mut().find(|g| g.species == species) {
+            let id = battle::GroupId::new(groups.len() as u32);
+            match groups
+                .iter_mut()
+                .skip(1)
+                .find(|g| i > 0 && g.species == species)
+            {
                 Some(group) => group.members.push(entity),
-                None => groups.push(EnemyGroup::new(
-                    battle::GroupId::new(groups.len() as u32),
-                    species,
-                    vec![entity],
-                )),
+                None => groups.push(EnemyGroup::new(id, species, vec![entity])),
             }
         }
         groups

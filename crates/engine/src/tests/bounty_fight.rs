@@ -143,7 +143,7 @@ fn bumping_the_quarry_opens_a_tactical_fight_holding_the_whole_roster() {
 }
 
 #[test]
-fn a_roster_of_two_species_is_more_than_one_group() {
+fn the_quarry_leads_a_group_of_its_own_and_each_escort_species_gets_one() {
     for seed in 1..200 {
         let mut game = broker_game(seed, 2);
         let Some(def) = board_bounty(&mut game) else {
@@ -155,12 +155,19 @@ fn a_roster_of_two_species_is_more_than_one_group() {
         bump_the_quarry(&mut game);
         let groups = game.world.resource::<BattleState>().groups.len();
         let quarry = game.held_bounty().unwrap().1;
-        let mut kinds: Vec<&String> = quarry.escort.iter().map(|(s, _)| s).collect();
-        kinds.push(&quarry.species);
-        kinds.sort();
-        kinds.dedup();
-        assert_eq!(groups, kinds.len(), "one group per species, none cut");
-        if kinds.len() >= 2 {
+        let kinds = quarry.escort.len();
+        assert_eq!(
+            groups,
+            1 + kinds,
+            "the quarry alone, then one group per escort species, none cut"
+        );
+        let first = &game.world.resource::<BattleState>().groups[0];
+        assert_eq!(
+            first.members.len(),
+            1,
+            "the quarry is not folded into a pack"
+        );
+        if kinds >= 2 {
             return;
         }
     }

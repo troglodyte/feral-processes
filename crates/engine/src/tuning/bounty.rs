@@ -15,12 +15,12 @@ pub const BOUNTY_ANCHOR_BAND: (i32, i32) = (25, 60);
 pub const BOUNTY_TETHER: i32 = 6;
 
 /// Stat multiplier on the boss path at the lowest bounty sector, as a percent.
-pub const BOUNTY_GRADE_BASE_PCT: u32 = 150;
+pub const BOUNTY_GRADE_BASE_PCT: u32 = 600;
 /// Percent added to the grade for every sector above `BOUNTY_MIN_ZONE`.
-pub const BOUNTY_GRADE_PER_ZONE_PCT: u32 = 25;
+pub const BOUNTY_GRADE_PER_ZONE_PCT: u32 = 100;
 
 /// Escort members at the lowest bounty sector.
-pub const BOUNTY_ESCORT_BASE: u32 = 3;
+pub const BOUNTY_ESCORT_BASE: u32 = 5;
 /// Escort members added for every sector above `BOUNTY_MIN_ZONE`.
 pub const BOUNTY_ESCORT_PER_ZONE: u32 = 1;
 /// The most distinct species an escort is drawn from.

@@ -63,6 +63,10 @@ pub struct Scenario {
     /// A context to roll, instead of naming `opponents`. Mutually exclusive
     /// with them — one scenario asks one question.
     pub encounter: Option<Encounter>,
+    /// Fight a rolled bounty for the player's zone: the quarry at its grade
+    /// and the whole escort it would bring. Mutually exclusive with
+    /// `opponents` and `encounter`, and the builder has no row for it.
+    pub bounty: bool,
     /// Which of the game's two combat models fights this scenario.
     ///
     /// Read by `arena::run` and refused by the played arena screen: a fight
@@ -106,6 +110,7 @@ impl Default for Scenario {
             opponents: Vec::new(),
             opponent_routines: Vec::new(),
             encounter: None,
+            bounty: false,
             model: CombatModel::default(),
             approach: None,
             party_turns: PartyTurnsSpec::default(),
@@ -432,6 +437,13 @@ impl Scenario {
                     .into(),
             );
         }
+        if self.bounty && (self.encounter.is_some() || !self.opponents.is_empty()) {
+            return Err(
+                "`bounty` is mutually exclusive with `opponents` and `encounter` — it rolls \
+                 its own roster"
+                    .into(),
+            );
+        }
         if self.approach.is_some() && self.model != CombatModel::Tactical {
             return Err(
                 "`approach` applies only to `model: Tactical` — a group fight has no board \
@@ -451,7 +463,7 @@ impl Scenario {
                 ));
             }
         }
-        if self.encounter.is_none() && self.opponents.is_empty() {
+        if self.encounter.is_none() && !self.bounty && self.opponents.is_empty() {
             return Err("`opponents` is empty — a scenario with nobody to fight is a typo".into());
         }
         if !matches!(self.player, PlayerSource::Fresh { .. }) {

@@ -9,8 +9,8 @@ use crate::ProgramRole;
 use crate::RouteDestinationId;
 use crate::base_ledger::LootSource;
 use crate::components::{
-    Carrying, CarryingProgram, Creature, Downed, Experience, Inventory, Perks, Position, PostedAt,
-    ProgramId, Tamed, Task,
+    Carrying, CarryingProgram, Creature, Downed, Experience, Inventory, Perks, PostedAt, ProgramId,
+    Tamed, Task,
 };
 use crate::game::base::transfer::{Moved, TransferBasket};
 use crate::game::notify::NotifyArgs;
@@ -406,12 +406,13 @@ impl Game {
     /// Whether the player is standing at (or diagonally beside) `tile` —
     /// the shared "at the outpost" reach `post_to_outpost` and
     /// `take_from_outpost` both refuse without.
-    pub(crate) fn standing_at_outpost(&self, tile: (i32, i32)) -> bool {
-        let player = self.player_entity();
-        let Some(pos) = self.world.get::<Position>(player) else {
+    pub(super) fn standing_at_outpost(&self, tile: (i32, i32)) -> bool {
+        // `field_pos`, not the raw `Position`: underground that stays pinned
+        // to the entrance tile, which can sit beside a remote outpost.
+        let Some(pos) = self.field_pos() else {
             return false;
         };
-        (pos.x - tile.0).abs().max((pos.y - tile.1).abs()) <= 1
+        (pos.0 - tile.0).abs().max((pos.1 - tile.1).abs()) <= 1
     }
 
     /// One tick of every outpost — design spec §5, called from `tick_inner`
@@ -922,6 +923,29 @@ mod tests {
         assert_eq!(record.stale_ticks, 0);
         assert_eq!(record.cycle_progress, 0);
         assert!(record.announced.is_none());
+    }
+
+    #[test]
+    fn underground_beside_the_link_is_not_standing_at_an_outpost() {
+        let mut game = game(64);
+        let tile = founded_outpost_with_player_standing_there(&mut game);
+        game.world
+            .resource_mut::<Outposts>()
+            .0
+            .get_mut(&tile)
+            .unwrap()
+            .integrity = 10;
+        let player = game.player_entity();
+        let pos = *game.world.get::<Position>(player).unwrap();
+        game.enter_stack(pos.x, pos.y);
+        assert!(game.is_underground());
+        assert_eq!(game.site_reach().beside, None);
+        let repair = game.repair_outpost(tile).expect_err("underground");
+        assert!(repair.contains("standing"), "unexpected: {repair}");
+        let take = game
+            .take_from_outpost(tile, &TransferBasket::default())
+            .expect_err("underground");
+        assert!(take.contains("standing"), "unexpected: {take}");
     }
 
     #[test]

@@ -686,12 +686,43 @@ fn the_next_trader_is_named_and_banded() {
 }
 
 #[test]
-fn a_docked_trader_says_how_long_it_stays() {
+fn a_trader_still_walking_in_is_not_docked() {
     let mut game = game();
     skip_tutorial(&mut game);
     market_base(&mut game);
     let visit = game.visit_at(game.visit_index()).unwrap();
     set_tick(&mut game, visit.arrival_tick);
+    game.caravan_tick();
+    assert_eq!(game.caravan_schedule().docked, None, "it has not arrived");
+}
+
+fn dock_the_trader(game: &mut Game) {
+    let visit = game.visit_at(game.visit_index()).unwrap();
+    set_tick(game, visit.arrival_tick);
+    game.caravan_tick();
+    for _ in 0..600 {
+        let mut query = game.world.query::<&crate::components::Caravan>();
+        if query
+            .iter(&game.world)
+            .any(|c| matches!(c.stage, crate::components::CaravanStage::Docked))
+        {
+            return;
+        }
+        game.caravan_tick();
+        game.world
+            .resource_mut::<crate::resources::GameClock>()
+            .tick += 1;
+    }
+    panic!("the trader never docked");
+}
+
+#[test]
+fn a_docked_trader_says_how_long_it_stays() {
+    let mut game = game();
+    skip_tutorial(&mut game);
+    market_base(&mut game);
+    dock_the_trader(&mut game);
+    let visit = game.visit_at(game.visit_index()).unwrap();
     assert_eq!(game.caravan_schedule().docked.unwrap().1, "a while yet");
     set_tick(&mut game, visit.depart_tick - 100);
 

@@ -87,7 +87,7 @@ fn route(cargo: &str) -> RouteLine {
         site_name: LONG_NAME.to_string(),
         leg: "Outbound",
         cargo: cargo.to_string(),
-        due: "a long way off",
+        due: "held up for stock",
         standing: true,
         stalled: true,
     }
@@ -365,5 +365,16 @@ fn every_sites_tab_draws_a_refusal_once() {
         }
         app.handle_key(GameKey::Down);
     }
-    assert!(modes.len() >= 8, "only reached {modes:?}");
+    for mode in [
+        "SiteStatus",
+        "SiteGoods",
+        "SiteRoutes",
+        "SiteJobs",
+        "SiteLog",
+        "OutpostStatus",
+        "OutpostCrew",
+        "OutpostStock",
+    ] {
+        assert!(modes.contains(mode), "never reached {mode}: {modes:?}");
+    }
 }

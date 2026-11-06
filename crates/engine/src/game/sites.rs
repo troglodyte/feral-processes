@@ -314,8 +314,8 @@ impl Game {
             .collect()
     }
 
-    /// The visiting trader: docked now (read off the open visit window, so it
-    /// does not depend on where the party stands) and the next to arrive.
+    /// The visiting trader: docked now (the caravan standing at the counter in
+    /// the open window, so it does not depend on where the party stands) and the next to arrive.
     pub fn caravan_schedule(&self) -> CaravanSchedule {
         let now = self.current_tick();
         let name_of = |def_id: &str| -> String {
@@ -324,7 +324,18 @@ impl Game {
                 .get(def_id)
                 .map_or_else(|| "A trader".to_string(), |def| def.name.clone())
         };
-        let docked = self.scheduled_visit().map(|visit| {
+        // "Docked" is the trader standing at the counter, not merely a visit
+        // window that is open: it spends the first part of the window walking
+        // in from the edge of the sector.
+        let arrived = self
+            .world
+            .try_query::<&crate::components::Caravan>()
+            .is_some_and(|mut query| {
+                query
+                    .iter(&self.world)
+                    .any(|c| matches!(c.stage, crate::components::CaravanStage::Docked))
+            });
+        let docked = self.scheduled_visit().filter(|_| arrived).map(|visit| {
             (
                 name_of(&visit.def_id),
                 time_band(visit.depart_tick.saturating_sub(now)).until(),

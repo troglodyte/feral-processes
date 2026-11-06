@@ -1,7 +1,7 @@
 # 0044. A bounty is a Rust-rolled contract that owns its quarry
 
-- Status: Proposed
-- Decided by: (pending) user, on Claude's proposal
+- Status: Agreed
+- Decided by: user, on Claude's proposal (2026-11-06)
 - Date: 2026-11-06
 - Pattern: Plain structs owned in one place; Functional core, imperative shell; Tolerant reader
 - Depends on: [0019](0019-content-defaults-to-rust.md), [0020](0020-functional-core-imperative-shell.md), [0021](0021-plain-rust-over-ecs-for-discrete-logic.md), [0022](0022-rng-never-depends-on-query-order.md), [0023](0023-saves-are-field-named-ron.md)

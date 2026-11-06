@@ -92,6 +92,7 @@ pub fn roll(input: &BountyInput, rng: &mut impl Rng) -> Option<RolledBounty> {
         escort,
         anchor,
         tether: BOUNTY_TETHER,
+        zone: input.zone,
     };
     let id = ContractId::from(format!(
         "bounty{ROLLED_ID_SEPARATOR}{}_{:08x}",

@@ -2368,6 +2368,7 @@ impl Game {
                 crate::game::spawning::SpawnPins {
                     rarity: Some(snapshot.rarity),
                     routines: Some(Vec::new()),
+                    ..Default::default()
                 },
             ) else {
                 continue;

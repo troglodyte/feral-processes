@@ -393,9 +393,20 @@ impl Game {
     /// stats afterwards rather than threaded through the spawn: it is the one
     /// thing no other spawn has, and `Stats` is what a fight reads.
     fn spawn_bounty_quarry(&mut self, id: &ContractId, quarry: &BountyQuarry) -> Option<Entity> {
+        // Everything that varies between two spawns is pinned to the
+        // contract: the zone it was rolled in, an individual seeded from
+        // its id, and no wild routine (that roll is a `GameRng` draw). A
+        // load, a breach or a re-accept then brings back the same body, and
+        // the respawn costs the run's stream nothing.
+        let mut rng = StdRng::seed_from_u64(crate::derive::fold_bytes(
+            crate::derive::FNV_BASIS,
+            id.as_str().as_bytes(),
+        ));
         let pins = SpawnPins {
             rarity: Some(quarry.rarity),
-            routines: None,
+            routines: Some(Vec::new()),
+            potential: Some(crate::components::Potential::roll(&mut rng)),
+            zone: Some(quarry.zone).filter(|z| *z > 0),
         };
         let entity = self.spawn_wild_creature_pinned(
             &quarry.species,

@@ -301,11 +301,49 @@ fn two_loads_leave_one_body_of_the_quarry_not_a_copy_per_load() {
             wild, wild_before,
             "load {n}: no unmarked copy of the quarry"
         );
-        assert!(
-            hps.iter().filter(|&&hp| hp >= quarry_hp / 2).count() >= 1,
-            "load {n}: a quarry-grade body stands"
+        assert_eq!(
+            hps.iter().filter(|&&hp| hp == quarry_hp).count(),
+            1,
+            "load {n}: exactly one body at the quarry's max HP"
         );
     }
+}
+
+fn quarry_figures(game: &mut Game) -> (i32, i32) {
+    let found = quarries(game);
+    assert_eq!(found.len(), 1);
+    let stats = game.world.get::<Stats>(found[0].0).unwrap();
+    (stats.max_hp, stats.atk)
+}
+
+fn lose_the_quarry(game: &mut Game) {
+    let e = quarries(game)[0].0;
+    game.world.despawn(e);
+    game.ensure_bounty_quarry();
+}
+
+#[test]
+fn a_respawned_quarry_is_the_same_individual_after_a_breach_and_two_loads() {
+    let (mut game, _) = accepted();
+    let first = quarry_figures(&mut game);
+    game.enter_next_zone();
+    lose_the_quarry(&mut game);
+    assert_eq!(quarry_figures(&mut game), first, "after a breach");
+    let mut once = save_and_load(&mut game, "same_a");
+    assert_eq!(quarry_figures(&mut once), first, "after one load");
+    let mut twice = save_and_load(&mut once, "same_b");
+    assert_eq!(quarry_figures(&mut twice), first, "after two loads");
+}
+
+#[test]
+fn respawning_the_quarry_does_not_draw_from_the_run_stream() {
+    // Two identical runs; only one loses its quarry. If the respawn drew
+    // from `GameRng`, their next draws would part.
+    let (mut respawned, _) = accepted();
+    let (mut control, _) = accepted();
+    lose_the_quarry(&mut respawned);
+    let next = |game: &mut Game| game.world.resource_mut::<GameRng>().0.random::<u64>();
+    assert_eq!(next(&mut respawned), next(&mut control));
 }
 
 #[test]

@@ -216,6 +216,7 @@ impl Game {
         let pins = SpawnPins {
             rarity: Some(record.rarity),
             routines: Some(carried),
+            ..Default::default()
         };
         // The spawn is the last thing that can fail, so it precedes the spend.
         let Some(prisoner) =

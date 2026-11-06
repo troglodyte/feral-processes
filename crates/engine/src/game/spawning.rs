@@ -88,6 +88,12 @@ impl SpawnEscalation {
 pub(crate) struct SpawnPins {
     pub(crate) rarity: Option<Rarity>,
     pub(crate) routines: Option<Vec<crate::abilities::AbilityId>>,
+    /// The individual's rolls, for a body that must be the same one every
+    /// time it is spawned (a bounty's quarry).
+    pub(crate) potential: Option<Potential>,
+    /// The zone whose stat curve the body is scaled by, instead of the live
+    /// `ZoneLevel`.
+    pub(crate) zone: Option<u32>,
 }
 
 /// The zone's ceiling on one species group: `ZONE_ONE_GROUP_CAP` at zone 1,
@@ -324,10 +330,16 @@ impl Game {
             .resource::<SpeciesDb>()
             .get(species_id)
             .cloned()?;
-        let zone_level = self.world.resource::<ZoneLevel>();
+        let zone_level = ZoneLevel(
+            pins.zone
+                .unwrap_or_else(|| self.world.resource::<ZoneLevel>().0),
+        );
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
-        let potential = self.roll_potential();
+        let potential = match pins.potential {
+            Some(potential) => potential,
+            None => self.roll_potential(),
+        };
         let routines = match pins.routines {
             Some(routines) => routines,
             None => self.roll_wild_routine(),
@@ -928,27 +940,7 @@ impl Game {
     /// independently uniform in `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`
     /// — the "same species, different stats" mechanic.
     pub(crate) fn roll_potential(&mut self) -> Potential {
-        let mut rng = self.world.resource_mut::<GameRng>();
-        Potential {
-            hp_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            atk_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            def_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            growth_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            assembly_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            extraction_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-        }
+        Potential::roll(&mut self.world.resource_mut::<GameRng>().0)
     }
 
     /// Rolls the rare-spawn tier for a creature about to be created at

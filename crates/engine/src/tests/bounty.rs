@@ -74,7 +74,7 @@ pub(super) fn anchor_of(game: &Game) -> (i32, i32) {
     game.held_bounty().unwrap().1.anchor
 }
 
-fn save_and_load(game: &mut Game, tag: &str) -> Game {
+pub(super) fn save_and_load(game: &mut Game, tag: &str) -> Game {
     let path = std::env::temp_dir().join(format!("feral_bounty_{tag}_{}.bin", std::process::id()));
     game.save(&path).unwrap();
     let loaded = Game::load(&path, &test_assets_dir()).unwrap();

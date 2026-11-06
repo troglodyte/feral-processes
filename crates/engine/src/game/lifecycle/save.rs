@@ -2,6 +2,7 @@
 
 use super::convert::{copy_to_save, worn_to_save};
 use crate::components::{BountyMark, Needs, Tools};
+use crate::game::bounty::BountyFight;
 use crate::*;
 
 impl Game {
@@ -792,6 +793,16 @@ impl Game {
                 .world
                 .query_filtered::<Entity, (With<Creature>, Without<BountyMark>)>();
             q.iter(&self.world).collect()
+        };
+        // **Nor is a bounty fight's escort.** Battles are not saved, so the
+        // roster it fielded would load as untethered wild creatures with no
+        // fight around them, and a second bump would field another escort.
+        let creature_ids = match self.world.get_resource::<BountyFight>() {
+            Some(fight) => creature_ids
+                .into_iter()
+                .filter(|e| *e != fight.quarry && !fight.escort.contains(e))
+                .collect(),
+            None => creature_ids,
         };
         let creatures: Vec<save::CreatureSave> = creature_ids
             .into_iter()

@@ -1,7 +1,7 @@
 //! The bounty fight: the bump, the roster, the verdict and the fail door
 //! (ADR 0044), in both combat models.
 
-use super::bounty::{accepted, anchor_of, board_bounty, broker_game, quarries};
+use super::bounty::{accepted, anchor_of, board_bounty, broker_game, quarries, save_and_load};
 use super::support::*;
 use crate::components::{BountyMark, Hostile};
 use crate::contracts::{ContractDef, ContractId, Objective, Reward};
@@ -413,4 +413,29 @@ fn the_tactical_roster_and_intercept_line_name_the_quarry() {
         announced(&game, &format!("{name} intercepts your signal")),
         1
     );
+}
+
+/// Every wild creature on the map, the quarry and any escort included.
+fn wild_bodies(game: &mut Game) -> usize {
+    let mut q = game
+        .world
+        .query_filtered::<Entity, (With<Creature>, With<Hostile>)>();
+    q.iter(&game.world).count()
+}
+
+#[test]
+fn a_save_made_mid_fight_brings_back_one_quarry_and_no_escort() {
+    for tactical in [false, true] {
+        let (mut game, _) = game_in(tactical);
+        bump_the_quarry(&mut game);
+        let (_, escort) = roster(&game);
+        let others = wild_bodies(&mut game) - escort.len() - 1;
+        let mut loaded = save_and_load(&mut game, if tactical { "midt" } else { "mida" });
+        assert_eq!(quarries(&mut loaded).len(), 1, "tactical={tactical}");
+        assert_eq!(
+            wild_bodies(&mut loaded),
+            others + 1,
+            "the roster is not saved: only the respawned quarry joins the rest (tactical={tactical})"
+        );
+    }
 }

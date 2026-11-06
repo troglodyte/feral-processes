@@ -329,6 +329,11 @@ impl Game {
         // player is standing, because finishing is not delivering.
         if let Some(key) = contract.issuer {
             self.adjust_standing(key, crate::tuning::SETTLEMENT_CONTRACT_STANDING);
+            self.note_site(
+                crate::RouteDestinationId::Settlement(key),
+                crate::sites::SiteLogKind::ContractDelivered,
+                format!("Finished the job: {}.", contract.def.name),
+            );
         }
         // Below the reward loop rather than above it, so the alert screen
         // can quote the same figure the `Loot` line just logged. Moving it
@@ -1361,6 +1366,13 @@ impl Game {
             MessageKind::Outcome,
             format!("Contract taken: {name}{from}."),
         );
+        if let Some(key) = issuer {
+            self.note_site(
+                crate::RouteDestinationId::Settlement(key),
+                crate::sites::SiteLogKind::ContractAccepted,
+                format!("Took the job: {name}."),
+            );
+        }
         Ok(())
     }
 
@@ -1390,6 +1402,11 @@ impl Game {
         // and a band crossing reads wrong above the line that says why.
         if let Some(key) = issuer {
             self.adjust_standing(key, crate::tuning::SETTLEMENT_ABANDON_STANDING);
+            self.note_site(
+                crate::RouteDestinationId::Settlement(key),
+                crate::sites::SiteLogKind::ContractAbandoned,
+                format!("Gave up the job: {name}."),
+            );
         }
         true
     }

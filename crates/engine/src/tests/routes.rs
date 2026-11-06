@@ -209,7 +209,7 @@ fn set_standing(game: &mut Game, key: SettlementKey, standing: i32) {
 /// A base with a Home, a Relay and a Depot holding `qty` of a Material item,
 /// plus one known settlement — `Neutral` by default — reachable from it.
 /// Returns the game, the cargo item and the destination's key.
-fn a_dispatch_ready_base(seed: u32, qty: u32) -> (Game, ItemId, SettlementKey) {
+pub(super) fn a_dispatch_ready_base(seed: u32, qty: u32) -> (Game, ItemId, SettlementKey) {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     deploy_relay(&mut game);
     let item = ItemId::from("cache_grain");
@@ -998,7 +998,7 @@ fn a_severed_stalled_route_does_not_depart_again_when_stock_returns() {
 /// — inserted directly into `resources::Outposts` rather than through
 /// `Game::found_outpost`, since these tests are about the route mechanism
 /// and not the placement ladder (already covered in `game::outposts::tests`).
-fn an_outpost_ready_base(seed: u32, tile: (i32, i32)) -> Game {
+pub(super) fn an_outpost_ready_base(seed: u32, tile: (i32, i32)) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     deploy_relay(&mut game);
     game.world
@@ -1015,7 +1015,7 @@ fn an_outpost_ready_base(seed: u32, tile: (i32, i32)) -> Game {
 }
 
 /// Puts `qty` of `item` into the outpost's own stock at `tile`.
-fn stock_the_outpost(game: &mut Game, tile: (i32, i32), item: &ItemId, qty: u32) {
+pub(super) fn stock_the_outpost(game: &mut Game, tile: (i32, i32), item: &ItemId, qty: u32) {
     game.world
         .resource_mut::<crate::resources::Outposts>()
         .0

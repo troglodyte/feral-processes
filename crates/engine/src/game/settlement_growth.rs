@@ -130,6 +130,11 @@ impl Game {
             crate::resources::MessageKind::Info,
             format!("{name} has grown. It is a Mainframe now."),
         );
+        self.note_site(
+            crate::RouteDestinationId::Settlement(key),
+            crate::sites::SiteLogKind::Grew,
+            "Grew into a Mainframe.".into(),
+        );
         // Only for a town the party has actually stood in. A notification
         // takes the screen, and a place they have never reached has not
         // earned that — `KnownSettlement::visited` is the same flag the

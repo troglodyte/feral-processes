@@ -355,6 +355,11 @@ impl Game {
 
         let currency = self.trade_currency();
         let money = self.item_name(&currency).to_string();
+        let net = if proceeds >= cost {
+            format!("Trade netted {} {money}.", proceeds - cost)
+        } else {
+            format!("Trade cost {} {money}.", cost - proceeds)
+        };
         let sold = planned_sells.len();
         let bought = planned_buys.len();
 
@@ -383,6 +388,11 @@ impl Game {
         if settled.is_ok() {
             self.credit_trade_volume(key, volume);
             self.note_deed(crate::contracts::Deed::TradedWithTown);
+            self.note_site(
+                crate::RouteDestinationId::Settlement(key),
+                crate::sites::SiteLogKind::Trade,
+                net,
+            );
         }
         settled
     }

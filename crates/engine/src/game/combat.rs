@@ -427,7 +427,13 @@ impl Game {
         // passes `allow_boss: true`), so without this it would be swept into
         // whatever ordinary cluster it happened to be standing near. The
         // anchor is exempt by construction: bumping a boss has to fight it.
-        pack.extend(sweep.into_iter().filter(|&e| !self.is_boss_creature(e)));
+        // The bounty quarry is a boss, so the filter below already keeps it
+        // out; named anyway because that is its own rule: it fights only in
+        // the roster its contract built (`start_bounty_battle`).
+        pack.extend(sweep.into_iter().filter(|&e| {
+            !self.is_boss_creature(e)
+                && self.world.get::<crate::components::BountyMark>(e).is_none()
+        }));
         pack.truncate(self.group_size_ceiling() * self.enemy_group_ceiling());
         pack
     }
@@ -522,7 +528,7 @@ impl Game {
     ///
     /// `require_field` is called rather than restated. The Stack is off it,
     /// and the Stack's own model is settled.
-    fn fights_tactically(&self, pack: &[Entity]) -> bool {
+    pub(crate) fn fights_tactically(&self, pack: &[Entity]) -> bool {
         self.profile().tactical_battles
             && self.require_field().is_ok()
             && !pack
@@ -552,12 +558,20 @@ impl Game {
     /// One wording for both combat models. `bodies` is the whole pack, so
     /// the singular case is a pack of one rather than a separate concept.
     pub(crate) fn intercept_line(&self, point: Option<Entity>, bodies: usize) -> String {
+        if let Some(quarry) = point.and_then(|e| self.bounty_quarry_name(e)) {
+            return Self::bounty_intercept_line(&quarry, bodies.saturating_sub(1));
+        }
         let name = point
             .and_then(|e| self.world.get::<Creature>(e))
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species))
             .map(|s| s.name.clone())
             .unwrap_or_else(|| "program".to_string());
         self.intercept_line_named(&name, bodies.saturating_sub(1))
+    }
+
+    /// The line a bounty fight opens with: the quarry by name.
+    fn bounty_intercept_line(quarry: &str, others: usize) -> String {
+        format!("{quarry} intercepts your signal, with {others} more behind it!")
     }
 
     /// `intercept_line` with the point species' name already in hand, which
@@ -583,6 +597,10 @@ impl Game {
         // `use_item`'s `prebattle_buff`), and both must carry into the
         // fight they were armed for. `clear_battle_status_effects` is what
         // clears `CombatBuff` once the fight ends; `FieldBuff` outlives it.
+        let quarry = groups
+            .first()
+            .and_then(|g| g.members.first().copied())
+            .and_then(|e| self.bounty_quarry_name(e));
         let name = groups
             .first()
             .and_then(|g| self.world.resource::<SpeciesDb>().get(&g.species))
@@ -631,7 +649,10 @@ impl Game {
             party: g.telemetry_party(),
             enemies: g.telemetry_enemy_groups(),
         });
-        let line = self.intercept_line_named(&name, others);
+        let line = match &quarry {
+            Some(q) => Self::bounty_intercept_line(q, others),
+            None => self.intercept_line_named(&name, others),
+        };
         self.log(line);
         self.roll_implant_battle_start();
         // The first nemesis in the opening groups, group-then-slot order —
@@ -1060,9 +1081,9 @@ impl Game {
                     self.actor_abilities(actor).get(*ability).map(|a| &a.effect),
                     Some(AbilityEffect::Decompile)
                 )
-                && self.front_of_group(*group).is_some_and(|front| {
-                    self.is_boss_creature(front) || self.is_lair_guardian(front)
-                })
+                && self
+                    .front_of_group(*group)
+                    .is_some_and(|front| self.beyond_decompiling(front))
             {
                 return Err("That program's defences are beyond decompiling.".to_string());
             }

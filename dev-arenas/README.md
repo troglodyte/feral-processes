@@ -111,6 +111,7 @@ run rather than quietly changing the fight.
 | `opponents` | — | The fight, authored. Required unless `encounter` is set |
 | `opponent_routines` | `[]` | Routine ids every authored opponent carries |
 | `encounter` | `None` | A context to roll instead of authoring one |
+| `bounty` | `false` | Fight a rolled bounty for the player's zone — the quarry at its grade and its whole escort. Refused beside `opponents` or `encounter`; zone 2 is the lowest that rolls one. The builder has no row for it, so `[S]` keeps it from a loaded file |
 | `model` | `Group` | Which combat model fights it — see below |
 | `approach` | `None` | `Tactical` only. Which way the pack is seated |
 | `party_turns` | `SwingOnly` | `Tactical` only. `AutoPlay` drives the party with the `[A]` logic (routines, Power, own-side blast veto); `SwingOnly` closes and swings only |

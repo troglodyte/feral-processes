@@ -53,6 +53,12 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## Unreleased
+
+**Contract Brokers now sometimes offer a bounty: hunt one named program and the escort running with it.** From sector 2 on, a Broker's board may add a bounty such as "Bounty: Vesk the Long Wire", with a line saying what the target is and how many programs travel with it. At most one is offered at a time, and you can hold only one. Accepting it places the target out on the map, 25 to 60 tiles from you, and adds a row to the compass (U) that shows its bearing and distance and follows it as it wanders within a few tiles of where it started.
+
+**Walking into the target starts a fight against it and its whole escort at once.** Nothing is held back and nobody joins later. The target is much tougher than an ordinary program of its kind, and the escort grows with the sector. The battle names the target, and its own row in the roster stands apart from the escort's. Bringing the target down finishes the contract and pays credits and XP well above a Hunt contract, even if some of the escort is still standing. If you flee or are beaten while the target is up, it gets away: the bounty fails, its compass row disappears, and the Broker may offer a different one later. Saves load unchanged, and a held bounty puts its target back where it started after loading or breaching.
+
 ## 0.21.50
 
 **Outposts have names instead of coordinates.** A new outpost is named for its direction from your base, such as "Outpost north-east", and a second one in the same direction becomes "Outpost north-east 2". Press N on an outpost's Sites Status tab or its visit page to rename it; Enter keeps the new name, an empty name goes back to the default, and Esc changes nothing. The name shows on the Sites list, routes, cargo, the map, alerts and notices. Long names on the Sites list are cut short at the end. Saves load unchanged, and outposts in older saves get direction names.

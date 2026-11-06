@@ -960,11 +960,13 @@ impl Game {
             .world
             .get::<Creature>(front)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species));
-        let species_name = species
-            .map(|s| self.zone_tagged_name(front, s.name.clone()))
-            .unwrap_or_default();
+        let species_name = self.bounty_quarry_name(front).unwrap_or_else(|| {
+            species
+                .map(|s| self.zone_tagged_name(front, s.name.clone()))
+                .unwrap_or_default()
+        });
         let resistance = self.target_resistance(front)?;
-        let is_boss = species.is_some_and(|s| s.is_boss);
+        let is_boss = self.is_boss_creature(front);
         Some(EnemyGroupView {
             // A group model overwrites this with the group's own id; on a
             // grid there are no groups, so the body's position stands in.
@@ -980,10 +982,10 @@ impl Game {
             is_boss,
             engaged,
             statuses: self.status_tags(front),
-            // No odds against a boss, because there is no attempt to
+            // No odds against a boss or lair guardian, because there is no attempt to
             // make — `battle_set_action` refuses the target outright.
             decompile_chance: catalyst_potency
-                .filter(|_| !is_boss)
+                .filter(|_| !self.beyond_decompiling(front))
                 .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
             charge: None,
         })

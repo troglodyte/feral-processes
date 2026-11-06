@@ -88,6 +88,12 @@ impl SpawnEscalation {
 pub(crate) struct SpawnPins {
     pub(crate) rarity: Option<Rarity>,
     pub(crate) routines: Option<Vec<crate::abilities::AbilityId>>,
+    /// The individual's rolls, for a body that must be the same one every
+    /// time it is spawned (a bounty's quarry).
+    pub(crate) potential: Option<Potential>,
+    /// The zone whose stat curve the body is scaled by, instead of the live
+    /// `ZoneLevel`.
+    pub(crate) zone: Option<u32>,
 }
 
 /// The zone's ceiling on one species group: `ZONE_ONE_GROUP_CAP` at zone 1,
@@ -225,32 +231,9 @@ impl Game {
     /// Exactly one routine. A carrier is a prize, and a second would need a
     /// slot policy at capture time that nothing else in the design needs.
     pub(crate) fn roll_wild_routine(&mut self) -> Vec<crate::abilities::AbilityId> {
-        let carries = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(WILD_ROUTINE_CHANCE)
-        };
-        if !carries {
-            return Vec::new();
-        }
-        let pool: Vec<(crate::abilities::AbilityId, u32)> = self
-            .world
-            .resource::<AbilityDb>()
-            .wild_pool()
-            .into_iter()
-            .map(|(def, weight)| (def.id.clone(), weight))
-            .collect();
-        let total: u32 = pool.iter().map(|(_, w)| w).sum();
-        if total == 0 {
-            return Vec::new();
-        }
-        let roll = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(0..total)
-        };
-        let weights: Vec<u32> = pool.iter().map(|(_, w)| *w).collect();
-        crate::abilities::weighted_pick(&weights, roll)
-            .map(|index| vec![pool[index].0.clone()])
-            .unwrap_or_default()
+        self.world.resource_scope(|world, mut rng: Mut<GameRng>| {
+            pick_wild_routine(world.resource::<AbilityDb>(), &mut rng.0)
+        })
     }
 
     /// An unscaled spawn: `spawn_wild_creature_scaled` at x1, no boss.
@@ -324,10 +307,16 @@ impl Game {
             .resource::<SpeciesDb>()
             .get(species_id)
             .cloned()?;
-        let zone_level = self.world.resource::<ZoneLevel>();
+        let zone_level = ZoneLevel(
+            pins.zone
+                .unwrap_or_else(|| self.world.resource::<ZoneLevel>().0),
+        );
         let mult = zone_level.stat_multiplier() as f32;
         let zone = zone_level.0;
-        let potential = self.roll_potential();
+        let potential = match pins.potential {
+            Some(potential) => potential,
+            None => self.roll_potential(),
+        };
         let routines = match pins.routines {
             Some(routines) => routines,
             None => self.roll_wild_routine(),
@@ -928,27 +917,7 @@ impl Game {
     /// independently uniform in `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`
     /// — the "same species, different stats" mechanic.
     pub(crate) fn roll_potential(&mut self) -> Potential {
-        let mut rng = self.world.resource_mut::<GameRng>();
-        Potential {
-            hp_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            atk_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            def_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            growth_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            assembly_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-            extraction_roll: rng
-                .0
-                .random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL),
-        }
+        Potential::roll(&mut self.world.resource_mut::<GameRng>().0)
     }
 
     /// Rolls the rare-spawn tier for a creature about to be created at
@@ -1192,7 +1161,7 @@ impl Game {
     /// evicts whole chunks *outside* the margin, which is exactly the ground
     /// this covers the complement of.
     ///
-    /// **Two kinds of wild are kept, and the rule is the same one twice: an
+    /// **Three kinds of wild are kept, and the rule is the same each time: an
     /// anonymous body is stock, and a named one is not.**
     ///
     /// - A `NestGuardian` belongs to a place. Its tier re-rolls when the
@@ -1204,7 +1173,11 @@ impl Game {
     ///   breach, which is precisely what the persistent world exists to
     ///   stop.
     ///
-    /// Neither exception is held by the compiler. Both have a test.
+    /// - A bounty's quarry is a named individual the contract owns, and
+    ///   `ensure_bounty_quarry` would respawn it at its anchor anyway;
+    ///   sparing it keeps its grade and its place.
+    ///
+    /// None of the exceptions is held by the compiler. Each has a test.
     pub(crate) fn clear_local_wild(&mut self) {
         let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
@@ -1214,6 +1187,7 @@ impl Game {
                 Without<NestGuardian>,
                 Without<Nemesis>,
                 Without<crate::components::NemesisFollower>,
+                Without<crate::components::BountyMark>,
             )>();
             query
                 .iter(&self.world)
@@ -1564,12 +1538,15 @@ impl Game {
                 // skipped at the despawn below: a victim chunk holding only
                 // them would never shrink the count and the loop would not
                 // end. They are exempt because a grudge that the cap could
-                // delete never gets to gather a band.
+                // delete never gets to gather a band. A bounty's quarry is
+                // filtered for the same reason: the contract's quarry must not
+                // be evicted for the cap and respawned in a loop.
                 let mut query = self.world.query_filtered::<(Entity, &Position), (
                     With<Hostile>,
                     Without<crate::components::Besieger>,
                     Without<Nemesis>,
                     Without<crate::components::NemesisFollower>,
+                    Without<crate::components::BountyMark>,
                 )>();
                 query
                     .iter(&self.world)
@@ -2080,7 +2057,7 @@ impl Game {
     /// tile already known to be legal — `try_spawn_habitat_creature` already
     /// refused a footprint cell for it, so `find_settlement_at` here only
     /// ever turns away the *scattered* offset, never the fallback.
-    fn scatter_open_tile(&mut self, x: i32, y: i32, radius: i32) -> (i32, i32) {
+    pub(crate) fn scatter_open_tile(&mut self, x: i32, y: i32, radius: i32) -> (i32, i32) {
         let (ox, oy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
             (
@@ -2240,4 +2217,31 @@ pub(crate) fn ring_tiles(from: (i32, i32), min_band: i32, max_band: i32) -> Vec<
         }
     }
     out
+}
+
+/// `Game::roll_wild_routine` over a stream of the caller's choosing, as
+/// `Potential::roll` is to `Game::roll_potential`: a body that must be the
+/// same one every time (a bounty's quarry) draws from its own seeded stream.
+/// The draw order is the run's: the carry chance, then the pool pick.
+pub(crate) fn pick_wild_routine(
+    abilities: &AbilityDb,
+    rng: &mut impl rand::RngExt,
+) -> Vec<crate::abilities::AbilityId> {
+    if !rng.random_bool(WILD_ROUTINE_CHANCE) {
+        return Vec::new();
+    }
+    let pool: Vec<(crate::abilities::AbilityId, u32)> = abilities
+        .wild_pool()
+        .into_iter()
+        .map(|(def, weight)| (def.id.clone(), weight))
+        .collect();
+    let total: u32 = pool.iter().map(|(_, w)| w).sum();
+    if total == 0 {
+        return Vec::new();
+    }
+    let roll = rng.random_range(0..total);
+    let weights: Vec<u32> = pool.iter().map(|(_, w)| *w).collect();
+    crate::abilities::weighted_pick(&weights, roll)
+        .map(|index| vec![pool[index].0.clone()])
+        .unwrap_or_default()
 }

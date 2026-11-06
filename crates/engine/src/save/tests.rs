@@ -257,6 +257,7 @@ fn sample_data() -> SaveData {
         siege: None,
         contracts: Vec::new(),
         contracts_done: Vec::new(),
+        contracts_failed: Vec::new(),
         work_orders: Vec::new(),
         alerts: Vec::new(),
         next_program_id: crate::resources::NextProgramId::START.0,

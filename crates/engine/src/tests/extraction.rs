@@ -4049,6 +4049,7 @@ fn a_pinned_rarity_lands_as_the_component_and_scales_stats() {
             crate::game::spawning::SpawnPins {
                 rarity: Some(Rarity::Ordinary),
                 routines: Some(Vec::new()),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -4065,6 +4066,7 @@ fn a_pinned_rarity_lands_as_the_component_and_scales_stats() {
             crate::game::spawning::SpawnPins {
                 rarity: Some(Rarity::Prismatic),
                 routines: Some(Vec::new()),
+                ..Default::default()
             },
         )
         .unwrap();
@@ -4124,6 +4126,7 @@ fn a_fully_pinned_spawn_draws_nothing_for_rarity_or_routines() {
             crate::game::spawning::SpawnPins {
                 rarity: Some(Rarity::Prismatic),
                 routines: Some(vec![carried]),
+                ..Default::default()
             },
         )
         .unwrap();

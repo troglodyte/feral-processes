@@ -341,6 +341,10 @@ pub fn stage(
     game.world.insert_resource(LevellingFrozen);
 
     let (groups, warnings) = match &scenario.encounter {
+        None if scenario.bounty => {
+            let pack = game.arena_bounty_pack()?;
+            (game.bounty_groups(&pack), Vec::new())
+        }
         // A rolled encounter warns about nothing: nothing was asked for past
         // a ceiling, because nothing was asked for.
         Some(encounter) => (encounter::roll(&mut game, encounter)?, Vec::new()),
@@ -1035,6 +1039,49 @@ mod tests {
         };
 
         assert_ne!(hp(1), hp(999));
+    }
+
+    fn a_bounty_scenario(zone: u32) -> Scenario {
+        Scenario {
+            player: PlayerSource::Fresh { level: 8, zone },
+            bounty: true,
+            ..Scenario::default()
+        }
+    }
+
+    #[test]
+    fn a_bounty_scenario_fields_the_quarry_and_its_whole_escort() {
+        let staged = stage(
+            &a_bounty_scenario(3),
+            &test_assets_dir(),
+            1,
+            false,
+            CombatModel::Group,
+        )
+        .unwrap();
+        let game = staged.game;
+        let (_, held) = game.held_bounty().expect("the bounty is held");
+        let fielded: usize = game
+            .world
+            .resource::<BattleState>()
+            .groups
+            .iter()
+            .map(|g| g.members.len())
+            .sum();
+        assert_eq!(fielded, 1 + held.escort_size() as usize);
+        assert_eq!(
+            game.battle_view().unwrap().groups[0].species_name,
+            held.name
+        );
+    }
+
+    #[test]
+    fn a_bounty_scenario_refuses_what_it_would_ignore() {
+        let both =
+            Scenario::from_ron(r#"( bounty: true, opponents: [(species: "glitch", count: 1)] )"#);
+        assert!(both.is_err());
+        let alone = Scenario::from_ron("( bounty: true )");
+        assert!(alone.is_ok(), "{alone:?}");
     }
 
     fn a_rolled_scenario(reps: u32, seed: u64) -> Scenario {

@@ -521,6 +521,7 @@ fn restore_resources(data: &mut save::SaveData, dbs: AssetDbs) -> ResourceRestor
     world.insert_resource(crate::resources::ActiveContracts {
         active: std::mem::take(&mut data.contracts),
         done: std::mem::take(&mut data.contracts_done),
+        failed: std::mem::take(&mut data.contracts_failed),
     });
     world.insert_resource(crate::resources::WorkOrders(std::mem::take(
         &mut data.work_orders,
@@ -1074,6 +1075,7 @@ fn restore_tutorial(game: &mut Game, tutorial_seeded: bool) {
     // A save taken mid-chain resumes with no seeding path of its own —
     // the position is derived from the `done` list the save carries.
     game.ensure_tutorial_held();
+    game.ensure_bounty_quarry();
 }
 
 /// Writes off stranded research currency and clears a stale project.

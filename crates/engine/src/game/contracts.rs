@@ -125,6 +125,8 @@ pub fn contract_system(
             }
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
+            // Completed by the fight that kills the quarry, not polled.
+            Objective::Bounty(_) => 0,
             // The state-shaped ones advance by exactly the predicate
             // `Game::offerable` refuses a board slot on, so a contract cannot
             // be offered in a state that would finish it and then fail to
@@ -597,6 +599,18 @@ impl Game {
                 defs.push(tier.swap_remove(rng.random_range(0..tier.len())));
             }
         }
+        // After the draw above, and from its own RNG, so a bounty takes a
+        // slot without moving which of the others were drawn. It is the
+        // Broker's alone: a town posts no bounties.
+        if issuer.is_none()
+            && let Some(bounty) = self.board_bounty(seed)
+        {
+            if defs.len() < slots {
+                defs.push(bounty);
+            } else if let Some(last) = defs.last_mut() {
+                *last = bounty;
+            }
+        }
         Some(defs)
     }
 
@@ -612,6 +626,15 @@ impl Game {
         key: crate::settlements::SettlementKey,
     ) -> Option<Vec<crate::contracts::ContractDef>> {
         self.board_defs(Some(key))
+    }
+
+    /// The Broker's board as defs, for a test that reads a rolled
+    /// contract's `Objective` back. `settlement_board_defs_for_test`'s twin.
+    #[cfg(test)]
+    pub(crate) fn broker_board_defs_for_test(
+        &mut self,
+    ) -> Option<Vec<crate::contracts::ContractDef>> {
+        self.board_defs(None)
     }
 
     /// What the town at `key` is good for, or `None` if the run has not
@@ -794,13 +817,23 @@ impl Game {
         self.offerable(def)
     }
 
-    fn offerable(&self, def: &crate::contracts::ContractDef) -> bool {
+    pub(crate) fn offerable(&self, def: &crate::contracts::ContractDef) -> bool {
         let zone = self.world.resource::<ZoneLevel>().0;
         let held = self.world.resource::<ActiveContracts>();
         if def.min_zone > zone {
             return false;
         }
         if held.active.iter().any(|c| c.def.id == def.id) {
+            return false;
+        }
+        // One bounty at a time, and never the one that already got away.
+        if matches!(def.objective, Objective::Bounty(_))
+            && (held
+                .active
+                .iter()
+                .any(|c| matches!(c.def.objective, Objective::Bounty(_)))
+                || held.failed.contains(&def.id))
+        {
             return false;
         }
         if held.done.contains(&def.id) && !def.repeatable {
@@ -1092,6 +1125,8 @@ impl Game {
             // "Terminate 3 wild programs" names the whole errand.
             Objective::Terminate { .. } => None,
 
+            Objective::Bounty(_) => Some("Walk into it to start the fight.".to_string()),
+
             // A deed decides for itself: the six that name the key they are
             // performed with need nothing, and the seven that name a
             // subsystem say where it is. See `Deed::hint`.
@@ -1237,6 +1272,7 @@ impl Game {
                 species: None,
                 count,
             } => format!("Terminate {count} wild programs"),
+            Objective::Bounty(quarry) => format!("Bring down {}", quarry.name),
             Objective::Deliver { item, count } => {
                 format!("Deliver {count} {}", self.item_name(item))
             }
@@ -1366,6 +1402,7 @@ impl Game {
             MessageKind::Outcome,
             format!("Contract taken: {name}{from}."),
         );
+        self.ensure_bounty_quarry();
         if let Some(key) = issuer {
             self.note_site(
                 crate::RouteDestinationId::Settlement(key),
@@ -1396,6 +1433,7 @@ impl Game {
         let given_back = held.active.remove(idx);
         let name = given_back.def.name;
         let issuer = given_back.issuer;
+        self.drop_bounty_quarry(id);
         self.log_kind(MessageKind::Outcome, format!("Contract abandoned: {name}."));
         // Below the removal, `complete_contract`'s ordering: the announcement
         // `adjust_standing` may make is about the town, not about the job,
@@ -1409,6 +1447,31 @@ impl Game {
             );
         }
         true
+    }
+
+    /// The door a bounty leaves by when its quarry got away: the contract is
+    /// removed and not filed under `done`, its id goes to
+    /// `ActiveContracts::failed` so this epoch's board does not offer it
+    /// again, the quarry leaves the map and the compass, and the player is
+    /// told once. A contract that is not held does nothing, which is what
+    /// makes "once" hold however many paths reach here.
+    pub(crate) fn fail_contract(&mut self, id: &ContractId) {
+        let failed = {
+            let mut held = self.world.resource_mut::<ActiveContracts>();
+            let Some(idx) = held.active.iter().position(|c| c.def.id == *id) else {
+                return;
+            };
+            let gone = held.active.remove(idx);
+            held.failed.push(id.clone());
+            gone
+        };
+        self.drop_bounty_quarry(id);
+        if let Objective::Bounty(quarry) = &failed.def.objective {
+            self.log_kind(
+                MessageKind::Outcome,
+                format!("{} got away. Bounty failed.", quarry.name),
+            );
+        }
     }
 
     /// Hands over as many of a `Deliver` objective's items as it still needs,

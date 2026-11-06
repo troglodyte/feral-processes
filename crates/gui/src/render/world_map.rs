@@ -64,7 +64,7 @@ fn outpost_trend_arrow(trend: Trend) -> (char, Color) {
 /// thing on both screens; a town alone overrides it, since the map knows its
 /// kind and standing and the picker does not.
 fn mark_glyph(mark: &WorldMapMark) -> (char, Color) {
-    match (&mark.kind, mark.target) {
+    match (&mark.kind, &mark.target) {
         (WorldMapMarkKind::Town { standing, kind, .. }, _) => {
             (kind.glyph(), standing_color(*standing))
         }

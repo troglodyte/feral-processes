@@ -47,7 +47,15 @@ pub fn plan(pack: &[Entity], world: &World) -> Vec<Piece> {
     let mut by_species: std::collections::HashMap<SpeciesId, Vec<Entity>> =
         std::collections::HashMap::new();
     let mut speciesless: Vec<Entity> = Vec::new();
+    // A bounty quarry is never folded into a squad: its death is the
+    // contract's verdict, and a squad dies as one block. It leads the
+    // pieces, as the bumped body does everywhere else.
+    let mut marked: Vec<Entity> = Vec::new();
     for &entity in pack {
+        if world.get::<crate::components::BountyMark>(entity).is_some() {
+            marked.push(entity);
+            continue;
+        }
         match world.get::<Creature>(entity).map(|c| c.species.clone()) {
             Some(species) => {
                 by_species
@@ -68,7 +76,7 @@ pub fn plan(pack: &[Entity], world: &World) -> Vec<Piece> {
     let mut by_size: Vec<usize> = (0..FORMATIONS.len()).collect();
     by_size.sort_by_key(|&i| std::cmp::Reverse(FORMATIONS[i].members));
 
-    let mut pieces = Vec::new();
+    let mut pieces: Vec<Piece> = marked.into_iter().map(Piece::Single).collect();
     for species in order {
         let mut members = by_species.remove(&species).unwrap_or_default();
         loop {

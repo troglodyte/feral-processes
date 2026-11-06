@@ -12,6 +12,7 @@ pub mod battle;
 pub mod behaviours;
 pub mod bench;
 pub mod bonds;
+pub mod bounty;
 pub mod breeding;
 pub mod caravans;
 pub mod classes;
@@ -79,10 +80,10 @@ pub mod views;
 pub mod weapon_tree;
 pub mod world;
 
-use crate::tuning::{
-    BASE_PET_CAPACITY, MAX_INDIVIDUAL_ROLL, MAX_PARTY_SIZE, MIN_INDIVIDUAL_ROLL,
-    ZONE_PORTAL_COST_GROWTH_PERCENT,
-};
+use crate::tuning::{BASE_PET_CAPACITY, MAX_PARTY_SIZE, ZONE_PORTAL_COST_GROWTH_PERCENT};
+// Only the tests reach these through `crate::*`.
+#[cfg(test)]
+use crate::tuning::{MAX_INDIVIDUAL_ROLL, MIN_INDIVIDUAL_ROLL};
 use std::collections::HashMap;
 use std::path::Path;
 

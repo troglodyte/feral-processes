@@ -98,6 +98,13 @@ place to edit.
 | `Standing(band: Warm)` | any settlement holds you at that band or better |
 | `Perform(deed: Examined)` | you do that particular thing once |
 
+A tenth kind, `Bounty`, is not in this table because it **cannot be authored
+here**. It is rolled by code (`bounty::roll`) onto the run's own Broker board
+from sector 2, and carries its quarry, escort, anchor and reward inside the
+contract. A `.ron` file naming `Bounty(...)` is not a way to add one: the
+quarry's name, species and roster come from the roll, not from a file
+(ADR 0044).
+
 `Terminate` names a species id from `assets/species/`; `Deliver` an item id from
 `assets/items/`; `Build` a structure id from `assets/structures/`; `Configure`
 an item id some machine lists as a recipe (the shipped set is checked for it).

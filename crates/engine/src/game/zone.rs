@@ -822,6 +822,7 @@ impl Game {
         self.clear_local_wild();
         self.ensure_local_population();
         self.ensure_local_settlements();
+        self.ensure_bounty_quarry();
     }
 
     /// Breaches forward until the party is standing in `zone`, for the

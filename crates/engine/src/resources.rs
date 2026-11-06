@@ -1372,6 +1372,10 @@ pub struct ActiveContract {
 pub struct ActiveContracts {
     pub active: Vec<ActiveContract>,
     pub done: Vec<crate::contracts::ContractId>,
+    /// Rolled bounty ids the quarry got away from, so a failed bounty is not
+    /// re-offered by the same epoch's board. Pruned to the current epoch's
+    /// roll whenever the board is read, so it never outgrows one entry.
+    pub failed: Vec<crate::contracts::ContractId>,
 }
 
 /// What the base has been told to hold, front-first.

@@ -273,6 +273,22 @@ impl Potential {
         extraction_roll: 1.0,
     };
 
+    /// Six independent rolls, each uniform in
+    /// `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL`, drawn in field order.
+    /// `Game::roll_potential` is this over the run's stream; a caller with a
+    /// stream of its own (a bounty's quarry) passes that instead.
+    pub fn roll(rng: &mut impl rand::RngExt) -> Potential {
+        let mut one = || rng.random_range(MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL);
+        Potential {
+            hp_roll: one(),
+            atk_roll: one(),
+            def_roll: one(),
+            growth_roll: one(),
+            assembly_roll: one(),
+            extraction_roll: one(),
+        }
+    }
+
     /// A single 0-100 "how good is this individual" percentile: averages
     /// the four *combat* rolls and maps
     /// `MIN_INDIVIDUAL_ROLL..=MAX_INDIVIDUAL_ROLL` onto 0-100. Purely a

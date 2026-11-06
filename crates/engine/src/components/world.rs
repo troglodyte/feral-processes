@@ -204,6 +204,19 @@ pub struct NestGuardian {
     pub nest: Entity,
 }
 
+/// Marks the one wild program a held bounty contract names (ADR 0044).
+///
+/// A projection of the contract and never the source of truth: the anchor and
+/// tether are copied off `BountyQuarry` at spawn so `wander_ai_system` can
+/// leash it without reading `ActiveContracts`, and the whole mark is rebuilt
+/// from the contract whenever the entity is missing.
+#[derive(Component, Clone, Debug, PartialEq, Eq)]
+pub struct BountyMark {
+    pub contract: crate::contracts::ContractId,
+    pub anchor: (i32, i32),
+    pub tether: i32,
+}
+
 /// Tethers a wild program to the town that fielded it — Phase 7b's second
 /// tether, `NestGuardian`'s sibling.
 ///

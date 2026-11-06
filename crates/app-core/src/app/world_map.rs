@@ -99,7 +99,7 @@ impl App {
     /// Points the compass at `mark`, or refuses when the mark is map-only.
     /// The refusal is a row fragment, `ability_unavailable`'s convention.
     pub(crate) fn steer_compass_at(&mut self, mark: &WorldMapMark) {
-        let Some(target) = mark.target else {
+        let Some(target) = mark.target.clone() else {
             self.refuse("a nest is not a destination");
             return;
         };

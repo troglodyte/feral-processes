@@ -437,6 +437,39 @@ mod tests {
         );
     }
 
+    /// The `bounty` template exists so a session opens holding a bounty, with
+    /// the compass row to point at and a quarry standing to walk into. A save
+    /// that loaded without either would test nothing.
+    #[test]
+    fn the_bounty_template_holds_a_bounty_with_its_quarry_on_the_compass() {
+        let out = std::env::temp_dir().join("feral_processes_template_bounty.bin");
+        generate("bounty", &out).unwrap();
+        let mut game = Game::load(&out, &assets_dir()).unwrap();
+        let _ = std::fs::remove_file(&out);
+
+        let rows = game.compass_targets();
+        assert!(
+            rows.iter().any(|r| r.label.starts_with("Bounty:")),
+            "no bounty row on the compass: {:?}",
+            rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
+        );
+
+        // The quarry is the contract's to respawn, so the save must not also
+        // carry it as an ordinary creature: that copy loads unmarked beside
+        // the respawn. (25, 50) is the anchor the contract in the RON names.
+        let bodies: Vec<_> = game
+            .view_entities_at((25, 50), 0, 0)
+            .into_iter()
+            .filter(|e| !e.is_structure && e.sprite.is_some())
+            .collect();
+        assert_eq!(
+            bodies.len(),
+            1,
+            "exactly one body at the quarry's anchor: {:?}",
+            bodies.iter().map(|e| e.sprite.clone()).collect::<Vec<_>>()
+        );
+    }
+
     /// Loading is not the bar for `tactical` either: it exists so a session
     /// testing the second combat model opens *one keypress from a fight*,
     /// and a wandering encounter is otherwise something you walk until you
@@ -549,15 +582,15 @@ mod tests {
         let tally_view = around(&mut game, tally);
         let kernel_view = around(&mut game, kernel);
         let outpost_view = around(&mut game, outpost);
-        let named = |view: &feral_processes_engine::views::WorldMapView, target| {
+        let named = |view: &feral_processes_engine::views::WorldMapView, target: CompassTarget| {
             view.marks
                 .iter()
-                .find(|m| m.target == Some(target))
+                .find(|m| m.target == Some(target.clone()))
                 .unwrap_or_else(|| panic!("{target:?} is not on the map"))
                 .kind
         };
 
-        let town = |view: &_, target| match named(view, target) {
+        let town = |view: &_, target: CompassTarget| match named(view, target.clone()) {
             WorldMapMarkKind::Town {
                 standing,
                 kind,

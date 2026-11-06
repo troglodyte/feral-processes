@@ -59,6 +59,7 @@ fn the_rows_run_home_then_settlements_then_links_each_nearest_first() {
             CompassTarget::Town(_) => "town",
             CompassTarget::Link(_) => "link",
             CompassTarget::Outpost(_) => "outpost",
+            CompassTarget::Bounty(_) => "bounty",
         })
         .collect();
     assert_eq!(
@@ -272,7 +273,10 @@ fn an_outpost_is_a_compass_row_after_the_links_nearest_first() {
         .filter(|r| matches!(r.target, CompassTarget::Outpost(_)))
         .collect();
     assert_eq!(
-        outposts.iter().map(|r| r.target).collect::<Vec<_>>(),
+        outposts
+            .iter()
+            .map(|r| r.target.clone())
+            .collect::<Vec<_>>(),
         vec![
             CompassTarget::Outpost((px + 12, py)),
             CompassTarget::Outpost((px + 30, py))

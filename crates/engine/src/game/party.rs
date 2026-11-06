@@ -609,6 +609,12 @@ impl Game {
             .is_some_and(|s| s.is_boss)
     }
 
+    /// Whether a decompile may not be aimed at `entity`: a boss or a lair
+    /// guardian. The one rule both combat models' capture doors read.
+    pub(crate) fn beyond_decompiling(&self, entity: Entity) -> bool {
+        self.is_boss_creature(entity) || self.is_lair_guardian(entity)
+    }
+
     pub(crate) fn companion_info(&self, entity: Entity) -> Option<CompanionInfo> {
         let stats = self.world.get::<Stats>(entity)?;
         Some(CompanionInfo {

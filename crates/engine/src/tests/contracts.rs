@@ -322,6 +322,8 @@ fn every_objective_variant_ships_at_least_once() {
             Objective::Perform { .. } => 6,
             Objective::Standing { .. } => 7,
             Objective::Configure { .. } => 8,
+            // Rolled by code and refused from a file, so nothing ships it.
+            Objective::Bounty(_) => continue,
         };
         seen[slot] = true;
     }

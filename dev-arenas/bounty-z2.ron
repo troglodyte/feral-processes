@@ -1,0 +1,33 @@
+// The lowest sector a Broker rolls a bounty in (ADR 0044), fought as the game
+// fights it: a rolled quarry at its grade with its whole escort on the field
+// from the first turn. `bounty: true` rolls it from the player's zone and the
+// seed, so every rep is a different name, species and roster; `opponents` and
+// `encounter` are refused beside it.
+//
+// The party is the player at the zone's level cap with the standard-band kit
+// and three median-grade companions (Scrapper) in arc lances and hardened
+// shells, which is a run that kitted the player first. `Watch` counts a win as
+// every hostile down, which is stricter than the contract: a bounty pays when
+// the quarry falls whether or not the escort does.
+(
+    player: Fresh(level: 11, zone: 2),
+    equip: [
+        (item: "plasma_router", tier: 0),
+        (item: "bastion_lattice", tier: 0),
+        (item: "singularity_matrix", tier: 0),
+    ],
+    party: [
+        (species: "scrapper", level: 11, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 11, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+        (species: "scrapper", level: 11, equip: [
+            (item: "arc_lance"), (item: "hardened_shell"),
+        ]),
+    ],
+    bounty: true,
+    reps: 50,
+    seed: 1,
+)

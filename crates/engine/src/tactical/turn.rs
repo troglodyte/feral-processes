@@ -1377,7 +1377,8 @@ impl Game {
     /// **The refusal and the resolution both read this**, so a blast the door
     /// accepts is the blast that rolls. A body is capturable when it is
     /// `Hostile` and not `Summoned` (`roster_parts` never asks, so a raised
-    /// body would join the roster and be swept from under the player); a
+    /// body would join the roster and be swept from under the player) and
+    /// not `beyond_decompiling`, the group model's rule for a boss; a
     /// squad is one body however many cells it covers.
     fn capture_targets(&self, actor: Entity, ability: &AbilityDef, aim: (i32, i32)) -> Vec<Entity> {
         let battle = self.world.resource::<TacticalBattle>();
@@ -1400,6 +1401,7 @@ impl Game {
                         .world
                         .get::<crate::components::Summoned>(body)
                         .is_none()
+                    && !self.beyond_decompiling(body)
             })
             .filter_map(|body| {
                 let footprint = battle.cells_of(body);
@@ -2366,6 +2368,7 @@ impl Game {
                 crate::game::spawning::SpawnPins {
                     rarity: Some(snapshot.rarity),
                     routines: Some(Vec::new()),
+                    ..Default::default()
                 },
             ) else {
                 continue;

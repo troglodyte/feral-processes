@@ -426,3 +426,293 @@ fn a_commit_rerecords_the_shelf() {
         }
     ));
 }
+
+// ---- views ----
+
+fn name_town(game: &mut Game, key: SettlementKey, name: &str, visited: bool) {
+    let mut towns = game.world.resource_mut::<crate::resources::Settlements>();
+    let known = towns.0.get_mut(&key).unwrap();
+    known.def.name = name.to_string();
+    known.visited = visited;
+}
+
+fn add_town(game: &mut Game, key: SettlementKey, name: &str, visited: bool, at: (i32, i32)) {
+    place_settlement(game, key, at.0, at.1);
+    name_town(game, key, name, visited);
+}
+
+fn add_outpost(game: &mut Game, tile: (i32, i32)) {
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .insert(
+            tile,
+            crate::outposts::Outpost::new(
+                crate::world::Biome::Deadlock,
+                crate::tuning::OUTPOST_MAX_INTEGRITY,
+            ),
+        );
+}
+
+#[test]
+fn the_rail_lists_visited_towns_by_name_then_outposts_by_name() {
+    use crate::sites::SiteSection;
+    let mut game = game();
+    add_town(
+        &mut game,
+        SettlementKey { rx: 1, ry: 0 },
+        "Zeta",
+        true,
+        (600, 0),
+    );
+    add_town(
+        &mut game,
+        SettlementKey { rx: 2, ry: 0 },
+        "Alpha",
+        true,
+        (700, 0),
+    );
+    add_outpost(&mut game, (900, 900));
+    add_outpost(&mut game, (800, 800));
+
+    let rail = game.site_rail();
+
+    let names: Vec<&str> = rail.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(names[0], "Alpha");
+    assert_eq!(names[1], "Zeta");
+    assert!(
+        names[2].contains("800") && names[3].contains("900"),
+        "{names:?}"
+    );
+    assert_eq!(rail[0].section, SiteSection::Settlements);
+    assert_eq!(rail[0].glyph, 's');
+    assert_eq!(rail[2].section, SiteSection::Outposts);
+}
+
+#[test]
+fn two_towns_with_one_name_stay_in_key_order() {
+    let mut game = game();
+    let (a, b) = (
+        SettlementKey { rx: 5, ry: 0 },
+        SettlementKey { rx: 3, ry: 0 },
+    );
+    add_town(&mut game, a, "Twin", true, (600, 0));
+    add_town(&mut game, b, "Twin", true, (700, 0));
+
+    let sites: Vec<RouteDestinationId> = game.site_rail().iter().map(|e| e.site).collect();
+
+    assert_eq!(sites, vec![town_site(b), town_site(a)]);
+}
+
+#[test]
+fn an_unvisited_town_is_not_on_the_rail() {
+    let mut game = game();
+    add_town(
+        &mut game,
+        SettlementKey { rx: 1, ry: 0 },
+        "Hidden",
+        false,
+        (600, 0),
+    );
+    assert!(game.site_rail().is_empty());
+}
+
+#[test]
+fn a_hostile_town_and_a_damaged_outpost_are_marked() {
+    let mut game = game();
+    let calm = SettlementKey { rx: 1, ry: 0 };
+    let angry = SettlementKey { rx: 2, ry: 0 };
+    add_town(&mut game, calm, "Calm", true, (600, 0));
+    add_town(&mut game, angry, "Angry", true, (700, 0));
+    set_standing(&mut game, angry, crate::tuning::SETTLEMENT_HOSTILE_STANDING);
+    add_outpost(&mut game, (800, 800));
+    add_outpost(&mut game, (900, 900));
+    game.world
+        .resource_mut::<crate::resources::Outposts>()
+        .0
+        .get_mut(&(900, 900))
+        .unwrap()
+        .integrity = 3;
+
+    let marks: Vec<bool> = game.site_rail().iter().map(|e| e.attention).collect();
+
+    assert_eq!(
+        marks,
+        vec![true, false, false, true],
+        "Angry, Calm, then the damaged outpost"
+    );
+}
+
+#[test]
+fn reach_is_base_beside_a_site_or_neither() {
+    use crate::sites::SiteReach;
+    let mut game = game();
+    let anchor = game.anchor_position().unwrap();
+    game.dev_lay_floor([anchor]);
+
+    assert_eq!(
+        game.site_reach(),
+        SiteReach {
+            on_base: true,
+            beside: None
+        }
+    );
+
+    // Beside a town that is also next to the base floor: both hold.
+    let key = SettlementKey { rx: 0, ry: 0 };
+    place_settlement(&mut game, key, anchor.0 + 1, anchor.1);
+    name_town(&mut game, key, "Close", true);
+    let reach = game.site_reach();
+    assert!(reach.on_base);
+    assert_eq!(reach.beside, Some(town_site(key)));
+
+    // Far from everything: the hub does not open.
+    let mut pos = game
+        .world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap();
+    pos.x += 400;
+    let reach = game.site_reach();
+    assert!(!reach.on_base && reach.beside.is_none() && !reach.opens());
+}
+
+#[test]
+fn town_status_reads_the_same_from_base_and_beside() {
+    let mut game = game();
+    let anchor = game.anchor_position().unwrap();
+    game.dev_lay_floor([anchor]);
+    let key = SettlementKey { rx: 0, ry: 0 };
+    place_settlement(&mut game, key, anchor.0 + 1, anchor.1);
+    name_town(&mut game, key, "Close", true);
+    set_standing(&mut game, key, crate::tuning::SETTLEMENT_ALLIED_STANDING);
+    assert_eq!(game.site_reach().beside, Some(town_site(key)));
+    let beside = game.town_status(key).unwrap();
+
+    let mut pos = game
+        .world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap();
+    pos.x += 400;
+    assert_eq!(game.site_reach().beside, None);
+
+    assert_eq!(game.town_status(key).unwrap(), beside);
+    assert_eq!(beside.standing, "Allied");
+    assert!(!beside.hostile);
+    assert!(
+        beside.condition.is_some(),
+        "a town reads its growth outlook"
+    );
+    assert!(!beside.meaning.is_empty());
+}
+
+#[test]
+fn a_route_line_carries_no_tick_figure() {
+    let (mut game, item, key) = super::routes::a_dispatch_ready_base(7000, 300);
+    game.dispatch_route(key, vec![(item, 300)], false)
+        .expect("a legal dispatch");
+
+    for lines in [game.site_routes(town_site(key)), game.routes_in_flight()] {
+        assert_eq!(lines.len(), 1);
+        let line = &lines[0];
+        assert_eq!(line.leg, "Outbound");
+        assert!(line.cargo.starts_with("300 "), "{}", line.cargo);
+        assert!(
+            !line.due.chars().any(|c| c.is_ascii_digit()),
+            "{}",
+            line.due
+        );
+    }
+    assert!(
+        game.site_routes(RouteDestinationId::Outpost((1, 1)))
+            .is_empty()
+    );
+}
+
+fn market_base(game: &mut Game) {
+    game.lay_test_pocket();
+    for (kind, x) in [("home", 0), ("market", 2)] {
+        game.world.spawn((
+            crate::components::Structure {
+                kind: kind.to_string(),
+            },
+            Position { x, y: 0 },
+            crate::components::Glyph {
+                ch: '!',
+                color: crate::components::GlyphColor::Yellow,
+            },
+        ));
+    }
+    stand_in_base_at(game, 1, 1);
+}
+
+#[test]
+fn the_next_trader_is_named_and_banded() {
+    let mut game = game();
+    skip_tutorial(&mut game);
+    assert_eq!(game.caravan_schedule().next, None, "no market, no trader");
+    market_base(&mut game);
+    let visit = game.visit_at(game.visit_index()).unwrap();
+    set_tick(&mut game, visit.arrival_tick.saturating_sub(10));
+    if visit.arrival_tick < 10 {
+        return;
+    }
+
+    let schedule = game.caravan_schedule();
+
+    assert_eq!(schedule.docked, None);
+    let (name, when) = schedule.next.expect("a visit is coming");
+    assert!(!name.is_empty());
+    assert_eq!(when, "any moment");
+}
+
+#[test]
+fn a_docked_trader_says_how_long_it_stays() {
+    let mut game = game();
+    skip_tutorial(&mut game);
+    market_base(&mut game);
+    let visit = game.visit_at(game.visit_index()).unwrap();
+    set_tick(&mut game, visit.arrival_tick);
+    assert_eq!(game.caravan_schedule().docked.unwrap().1, "a while yet");
+    set_tick(&mut game, visit.depart_tick - 100);
+
+    let schedule = game.caravan_schedule();
+
+    let (_, leaves) = schedule.docked.expect("the trader is in");
+    assert_eq!(leaves, "soon");
+    let next = schedule.next.expect("and another is coming");
+    assert!(!next.1.chars().any(|c| c.is_ascii_digit()));
+}
+
+#[test]
+fn town_contracts_hold_only_that_towns_jobs() {
+    let mut game = game();
+    let key = town_east_of_player(&mut game, 0);
+    let id = game.settlement_board(key).unwrap()[0].id.clone();
+    assert!(game.town_contracts(key).is_empty());
+
+    game.accept_contract(&id, Some(key)).unwrap();
+
+    let rows = game.town_contracts(key);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, id);
+    assert!(
+        game.town_contracts(SettlementKey { rx: 9, ry: 9 })
+            .is_empty()
+    );
+}
+
+#[test]
+fn the_log_reads_newest_first_with_banded_ages() {
+    let mut game = game();
+    let site = town_site(SettlementKey { rx: 1, ry: 1 });
+    game.note_site(site, SiteLogKind::Visit, "First.".into());
+    set_tick(&mut game, 10_000);
+    game.note_site(site, SiteLogKind::Trade, "Second.".into());
+
+    let log = game.site_log(site);
+
+    assert_eq!(log[0].text, "Second.");
+    assert_eq!(log[0].age, "just now");
+    assert_eq!(log[1].text, "First.");
+    assert_eq!(log[1].age, "long ago");
+}

@@ -171,6 +171,10 @@ pub use resources::{
     RoutineCue, SlotShift, SpeechCue, SwingOutcome, TacticalFxCue, TacticalFxKind, TransitCue,
     Visit, VisualEffect, condense,
 };
+pub use sites::{
+    CaravanSchedule, RouteLine, SeenOffer, SiteLogLine, SiteRailEntry, SiteReach, SiteSection,
+    TimeBand, TownGoods, TownStatus, time_band,
+};
 use species::{Affinities, SpeciesDb, SpeciesDef, SpeciesId};
 pub use statuses::{StatusBehaviour, StatusDb, StatusId};
 use structures::{StructureDb, StructureDef, StructureId, TradeDef};

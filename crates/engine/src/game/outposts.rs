@@ -406,7 +406,7 @@ impl Game {
     /// Whether the player is standing at (or diagonally beside) `tile` —
     /// the shared "at the outpost" reach `post_to_outpost` and
     /// `take_from_outpost` both refuse without.
-    fn standing_at_outpost(&self, tile: (i32, i32)) -> bool {
+    pub(crate) fn standing_at_outpost(&self, tile: (i32, i32)) -> bool {
         let player = self.player_entity();
         let Some(pos) = self.world.get::<Position>(player) else {
             return false;

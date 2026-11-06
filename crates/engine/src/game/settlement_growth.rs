@@ -17,6 +17,17 @@ use crate::tuning::{
     SETTLEMENT_RADIUS_THRIVING,
 };
 
+/// `Game::growth_reading`'s answer.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct GrowthReading {
+    /// Cities only.
+    pub vitality: Option<Vitality>,
+    /// Cities only: which way commerce is heading.
+    pub trend: Option<growth::TownTrend>,
+    /// Towns only: how near growth is, in words.
+    pub outlook: Option<growth::GrowthOutlook>,
+}
+
 impl Game {
     /// What this settlement *is* right now — the catalogue's answer, or a
     /// `Mainframe` if the run has grown it there.
@@ -47,6 +58,40 @@ impl Game {
         } else {
             SettlementKind::Server
         })
+    }
+
+    /// What a town's commerce says about it as of now: a city's vitality and
+    /// trend, or a town's growth outlook. The one derivation the world map
+    /// and the Sites hub share, so the two cannot word one town differently.
+    /// Settles the drift on a copy of the relation and writes nothing.
+    pub(crate) fn growth_reading(&self, key: SettlementKey) -> GrowthReading {
+        let Some(kind) = self.settlement_kind(key) else {
+            return GrowthReading::default();
+        };
+        let standing = self.standing_band(key);
+        let relation = self
+            .world
+            .resource::<crate::resources::Standings>()
+            .0
+            .get(&key)
+            .copied()
+            .unwrap_or_default();
+        let now = self.current_tick();
+        let settled = growth::settle_commerce(
+            &relation,
+            now / crate::tuning::SETTLEMENT_COMMERCE_DECAY_TICKS,
+            standing == Standing::Hostile,
+        );
+        let mainframe = kind == SettlementKind::Mainframe;
+        let seed = self.world.resource::<crate::world::WorldMap>().seed();
+        GrowthReading {
+            vitality: self
+                .settlement_vitality(key)
+                .map(|_| growth::vitality_with_floor(settled.commerce, relation.traded, standing)),
+            trend: mainframe.then(|| growth::trend(settled.commerce, settled.commerce_at_epoch)),
+            outlook: (!mainframe)
+                .then(|| growth::outlook(now, growth::due_with_pull(seed, key, settled.commerce))),
+        }
     }
 
     /// How well this city is doing, or `None` if it is not a city.

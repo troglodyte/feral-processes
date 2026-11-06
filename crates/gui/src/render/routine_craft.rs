@@ -146,8 +146,12 @@ pub(super) fn build_page_rows(
         } else {
             TEXT
         };
-        if let Some(why) = row.unavailable {
-            rows.extend(slot_with_reason(row.slot, why, i == selected));
+        if row.unavailable.is_some() {
+            rows.push(colored_item_row(
+                format!("{}: n/a", row.slot),
+                i == selected,
+                TEXT_DIM,
+            ));
             continue;
         }
         let count = game.build_part_options(row.slot, &draft.parts).len();
@@ -172,26 +176,6 @@ pub(super) fn build_page_rows(
     };
     rows.push(colored_item_row("Compile", selected == 7, color));
     (rows, preview_rows(&preview))
-}
-
-/// A slot the Core takes nothing in: the reason inline when the column has
-/// room for it, else on a dim line under the row.
-fn slot_with_reason(slot: &str, why: &str, selected: bool) -> Vec<Row> {
-    let inline = format!("{slot}: {why}");
-    if inline.chars().count() <= HUB_COLUMN_WRAP_COLUMNS {
-        return vec![colored_item_row(inline, selected, TEXT_DIM)];
-    }
-    let mut rows = vec![colored_item_row(
-        format!("{slot}: not this Core"),
-        selected,
-        TEXT_DIM,
-    )];
-    rows.extend(
-        continuation_lines_within(why, HUB_COLUMN_WRAP_COLUMNS)
-            .into_iter()
-            .map(|line| colored_item_row(line, false, TEXT_DIM)),
-    );
-    rows
 }
 
 /// The name row of either build page.

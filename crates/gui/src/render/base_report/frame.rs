@@ -125,6 +125,27 @@ pub(super) fn paint_frame(
     content
 }
 
+/// One line of the rail: a section header, which the cursor never lands on,
+/// or a page by its index.
+#[derive(Debug, PartialEq, Eq)]
+enum RailLine<'a> {
+    Section(&'a str),
+    Page(usize),
+}
+
+/// The rail as lines: a header line comes before the first page that
+/// carries one.
+fn rail_lines(pages: &[HubPage]) -> Vec<RailLine<'_>> {
+    let mut lines = Vec::with_capacity(pages.len());
+    for (i, page) in pages.iter().enumerate() {
+        if let Some(section) = page.section {
+            lines.push(RailLine::Section(section));
+        }
+        lines.push(RailLine::Page(i));
+    }
+    lines
+}
+
 /// The current page always carries the caret; the highlight bar is the
 /// cursor, drawn only while the rail has it and in the rows' own
 /// `SELECT_BG`, so it reads as the one cursor moving rather than a second.
@@ -157,7 +178,12 @@ fn draw_rail(
             painter.ui_bold(tail, x, base, m.small(), hud::palette::PANE_TITLE);
         }
     }
-    let w = rail_window(pages.len(), selected, rail.fits());
+    let lines = rail_lines(pages);
+    let selected_line = lines
+        .iter()
+        .position(|l| *l == RailLine::Page(selected))
+        .unwrap_or(0);
+    let w = rail_window(lines.len(), selected_line, rail.fits());
     let mut slot = 0;
     let more = |slot: usize, arrow: char, n: usize| {
         painter.ui(
@@ -172,9 +198,24 @@ fn draw_rail(
         more(slot, '↑', w.above);
         slot += 1;
     }
-    for (page, entry) in pages.iter().enumerate().take(w.end).skip(w.start) {
+    for line in &lines[w.start..w.end] {
         let top = rail.rows.y + slot as f32 * rail.row_h;
         let base = top + rail.row_h * 0.85;
+        slot += 1;
+        let page = match line {
+            RailLine::Section(name) => {
+                painter.ui(
+                    name,
+                    rail.rows.x,
+                    base,
+                    m.small(),
+                    hud::palette::FAINT,
+                );
+                continue;
+            }
+            RailLine::Page(page) => *page,
+        };
+        let entry = &pages[page];
         let current = page == selected;
         if current && focused {
             painter.rect(rail.rows.x, top, rail.rows.w, rail.row_h, SELECT_BG);
@@ -188,16 +229,25 @@ fn draw_rail(
                 hud::palette::PANE_TITLE,
             );
         }
+        let ink = if current {
+            hud::palette::PANE_TITLE
+        } else {
+            hud::palette::EMPHASIS
+        };
+        let mut title_x = rail.rows.x + char_w * 2.0;
+        if let Some(glyph) = entry.glyph {
+            painter.ui(glyph.to_string(), title_x, base, m.font_size, ink);
+            title_x += char_w * 2.0;
+        }
+        // The `!` keeps its two cells whether or not it is drawn, so a long
+        // title gives way to it and never the other way round.
+        let room = rail.rows.x + rail.rows.w - char_w * 2.0 - title_x;
         painter.ui(
-            &entry.title,
-            rail.rows.x + char_w * 2.0,
+            elided_to_fit(painter, &entry.title, m.font_size, room),
+            title_x,
             base,
             m.font_size,
-            if current {
-                hud::palette::PANE_TITLE
-            } else {
-                hud::palette::EMPHASIS
-            },
+            ink,
         );
         if entry.marked {
             painter.ui_bold(
@@ -208,7 +258,6 @@ fn draw_rail(
                 hud::palette::ATTENTION,
             );
         }
-        slot += 1;
     }
     if w.below > 0 {
         more(slot, '↓', w.below);
@@ -516,5 +565,99 @@ mod tests {
             !drawn.iter().any(|t| t.contains(&name)),
             "the name was not elided: {drawn:?}"
         );
+    }
+
+    fn page(title: &str, section: Option<&'static str>, marked: bool) -> HubPage {
+        HubPage {
+            key: feral_processes_app_core::HubPageKey::Named("test"),
+            title: title.to_string(),
+            glyph: None,
+            section,
+            screens: &[Mode::Alerts],
+            marked,
+        }
+    }
+
+    fn rail_text(pages: &[HubPage], selected: usize, h: f32) -> Vec<String> {
+        let m = ui_metrics(h);
+        let (_, shapes) = with_painter(|p| {
+            paint_frame(
+                &FrameView {
+                    title: ("HUB", ""),
+                    pages,
+                    page: selected,
+                    screen: 0,
+                    extra_keys: &[],
+                },
+                None,
+                true,
+                None,
+                p,
+                &m,
+            );
+        });
+        crate::paint::painted_text(&shapes)
+    }
+
+    #[test]
+    fn a_section_header_draws_above_its_first_page() {
+        let pages = [
+            page("Aa", Some("Towns and cities"), false),
+            page("Bb", None, false),
+            page("Cc", Some("Outposts"), false),
+        ];
+        let drawn = rail_text(&pages, 0, 720.0);
+        let at = |t: &str| drawn.iter().position(|d| d.trim() == t).unwrap();
+        assert!(at("Towns and cities") < at("Aa"), "{drawn:?}");
+        assert!(at("Outposts") < at("Cc"), "{drawn:?}");
+        assert!(at("Bb") < at("Outposts"), "{drawn:?}");
+    }
+
+    #[test]
+    fn a_long_rail_title_is_elided_and_keeps_its_mark() {
+        let name = "W".repeat(80);
+        let mut long = page(&name, None, true);
+        long.glyph = Some('M');
+        let pages = [long, page("Short", None, false)];
+        let drawn = rail_text(&pages, 1, 720.0);
+        assert!(!drawn.iter().any(|t| t.contains(&name)), "{drawn:?}");
+        assert!(drawn.iter().any(|t| t == "!"), "{drawn:?}");
+        assert!(drawn.iter().any(|t| t == "M"), "{drawn:?}");
+        let m = ui_metrics(720.0);
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let title = drawn.iter().find(|t| t.contains('W')).unwrap();
+            // Caret, glyph and `!` take four cells of the rail.
+            assert!(
+                p.measure_ui_advance(title, m.font_size) + char_w * 4.0
+                    <= RAIL_CELLS as f32 * char_w + 0.5,
+                "{title:?} runs past the rail"
+            );
+        });
+    }
+
+    #[test]
+    fn the_selected_page_stays_in_view_when_sections_take_rows() {
+        let sections = ["One", "Two", "Three"];
+        let pages: Vec<HubPage> = (0..30)
+            .map(|i| {
+                page(
+                    &format!("Site {i}"),
+                    (i % 10 == 0).then(|| sections[i / 10]),
+                    false,
+                )
+            })
+            .collect();
+        let drawn = rail_text(&pages, 29, 720.0);
+        assert!(drawn.iter().any(|t| t == "▸"), "{drawn:?}");
+        assert!(drawn.iter().any(|t| t == "Site 29"), "{drawn:?}");
+    }
+
+    #[test]
+    fn a_fixed_rail_draws_exactly_as_before() {
+        let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
+        let lines = rail_lines(&pages);
+        assert_eq!(lines.len(), pages.len());
+        assert!(lines.iter().all(|l| matches!(l, RailLine::Page(_))));
     }
 }

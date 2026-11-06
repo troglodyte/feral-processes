@@ -240,21 +240,19 @@ pub(super) fn draw_outpost_name(
 }
 
 pub(super) fn outpost_name_rows(field: &feral_processes_app_core::TextField) -> Vec<Row> {
-    vec![
-        text_row(format!(
+    name_field_rows(
+        format!(
             "Name the outpost (up to {} characters)",
             feral_processes_engine::tuning::OUTPOST_NAME_MAX
-        )),
-        text_row(""),
-        text_entry_row(field),
-        text_row(""),
-        text_row(key_hints(&[
+        ),
+        field,
+        &[
             "Type a name",
             "Left/Right move",
             "Enter rename",
             "Esc cancel",
-        ])),
-    ]
+        ],
+    )
 }
 
 /// `Mode::OutpostPost`'s staff picker — every base-staff program, Enter

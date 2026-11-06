@@ -153,7 +153,7 @@ pub const GEAR_PART_ID_PREFIX: &str = "weapon_part/";
 /// A design's name length, in characters.
 pub const GEAR_NAME_MIN: usize = 1;
 /// See `GEAR_NAME_MIN`.
-pub const GEAR_NAME_MAX: usize = 24;
+pub const GEAR_NAME_MAX: usize = super::CRAFT_NAME_MAX;
 
 /// What a weapon part is worth in trade currency: above the material it
 /// costs, so a part is never a cheaper way to a Credit than the bench.

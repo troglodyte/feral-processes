@@ -233,17 +233,11 @@ pub(super) fn pick_rows(
 }
 
 pub(super) fn name_rows(draft: &DesignDraft) -> Vec<Row> {
-    vec![
-        text_row("Name the design (1-24 characters)"),
-        text_row(""),
-        text_entry_row(&draft.name),
-        text_row(""),
-        text_row(key_hints(&[
-            "Type a name",
-            "Left/Right move",
-            "Enter or Esc finish",
-        ])),
-    ]
+    name_field_rows(
+        "Name the design (1-24 characters)".to_string(),
+        &draft.name,
+        &["Type a name", "Left/Right move", "Enter or Esc finish"],
+    )
 }
 
 /// The Salvage page: authored weapons in the pack.

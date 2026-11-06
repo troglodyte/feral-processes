@@ -407,6 +407,16 @@ fn caret_lit(now: Option<f64>) -> bool {
     now.is_none_or(|t| ((t / CARET_BLINK_SECS) as u64).is_multiple_of(2))
 }
 
+pub(super) fn name_field_rows(prompt: String, field: &TextField, hints: &[&str]) -> Vec<Row> {
+    vec![
+        text_row(prompt),
+        text_row(""),
+        text_entry_row(field),
+        text_row(""),
+        text_row(key_hints(hints)),
+    ]
+}
+
 pub(super) fn text_row(s: impl Into<String>) -> Row {
     Row::Text(s.into())
 }

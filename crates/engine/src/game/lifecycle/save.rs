@@ -797,10 +797,12 @@ impl Game {
         // **Nor is a bounty fight's escort.** Battles are not saved, so the
         // roster it fielded would load as untethered wild creatures with no
         // fight around them, and a second bump would field another escort.
+        // Only the still-hostile: a member the player has captured is a
+        // companion on the same entity, and an autosave must keep it.
         let creature_ids = match self.world.get_resource::<BountyFight>() {
             Some(fight) => creature_ids
                 .into_iter()
-                .filter(|e| *e != fight.quarry && !fight.escort.contains(e))
+                .filter(|e| !fight.owns_hostile(&self.world, *e))
                 .collect(),
             None => creature_ids,
         };

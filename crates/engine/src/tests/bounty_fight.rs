@@ -540,3 +540,33 @@ fn no_second_quarry_is_spawned_while_the_fight_is_open() {
         "the fight's own teardown settles the quarry, not a respawn under it"
     );
 }
+
+/// Creatures of `species` that are not hostile: the companions among them.
+fn friendly_of(game: &mut Game, species: &str) -> usize {
+    let mut q = game.world.query_filtered::<&Creature, Without<Hostile>>();
+    q.iter(&game.world).filter(|c| c.species == species).count()
+}
+
+#[test]
+fn an_escort_member_captured_mid_fight_survives_an_autosave() {
+    let (mut game, _) = game_in(false);
+    bump_the_quarry(&mut game);
+    let (_, escort) = roster(&game);
+    let captured = escort[0];
+    let species = game
+        .world
+        .get::<Creature>(captured)
+        .unwrap()
+        .species
+        .clone();
+    // The state `decompile_body` leaves a captured body in.
+    game.world.entity_mut(captured).remove::<Hostile>();
+    let parts = game.roster_parts(&species);
+    game.world.entity_mut(captured).insert(parts);
+    game.install_innate_routines(captured);
+    game.seat_derived(captured);
+    let before = friendly_of(&mut game, &species);
+    assert!(before >= 1);
+    let mut loaded = save_and_load(&mut game, "captured_escort");
+    assert_eq!(friendly_of(&mut loaded, &species), before);
+}

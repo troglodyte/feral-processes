@@ -33,6 +33,16 @@ pub(crate) struct BountyFight {
     pub(crate) quarry_down: bool,
 }
 
+impl BountyFight {
+    /// Whether `body` is one of this fight's bodies and still hostile: the
+    /// one rule for what the fight owns. A body a capture turned is a
+    /// companion now and belongs to the run, so the teardown spares it and
+    /// a save keeps it.
+    pub(crate) fn owns_hostile(&self, world: &World, body: Entity) -> bool {
+        (body == self.quarry || self.escort.contains(&body)) && world.get::<Hostile>(body).is_some()
+    }
+}
+
 impl Game {
     /// Opens the fight a bump on the quarry starts: the quarry first, then
     /// its escort spawned beside it, in whichever model `fights_tactically`
@@ -222,10 +232,11 @@ impl Game {
         // Only what is still hostile: a body a capture turned is a companion
         // now, and its mark comes off so the fail door's sweep spares it.
         for e in fight.escort.iter().chain([&fight.quarry]) {
+            let hostile = fight.owns_hostile(&self.world, *e);
             let Ok(mut body) = self.world.get_entity_mut(*e) else {
                 continue;
             };
-            if body.contains::<Hostile>() {
+            if hostile {
                 body.despawn();
             } else {
                 body.remove::<BountyMark>();

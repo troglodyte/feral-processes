@@ -263,6 +263,8 @@ fn sample_data() -> SaveData {
         outposts: Vec::new(),
         outpost_routes: Vec::new(),
         storyline: Default::default(),
+        site_logs: Vec::new(),
+        seen_shelves: Vec::new(),
     }
 }
 
@@ -987,4 +989,46 @@ fn a_save_without_a_storyline_field_loads_dormant() {
     assert!(!older.contains("Claiming"), "the block was removed");
     let loaded = from_ron(&older).expect("an absent field must still parse");
     assert_eq!(loaded.storyline, crate::storyline::Storyline::default());
+}
+
+/// A save written before the Sites stores existed carries neither field and
+/// must load with both empty. The lines are deleted from the text rather
+/// than trusting the derive.
+#[test]
+fn a_save_without_site_records_loads_empty() {
+    use crate::RouteDestinationId;
+    use crate::sites::{SiteLogEntry, SiteLogKind, SiteLogSave};
+    let mut data = sample_data();
+    data.site_logs = vec![SiteLogSave {
+        site: RouteDestinationId::Outpost((1, 2)),
+        entries: vec![SiteLogEntry {
+            kind: SiteLogKind::Founded,
+            tick: 5,
+            text: "Founded.".into(),
+        }],
+    }];
+    let text = to_ron(&data).unwrap();
+    assert!(
+        text.contains("Founded."),
+        "the fixture must write the field"
+    );
+    let mut skipping = false;
+    let older: String = text
+        .lines()
+        .filter(|line| {
+            if line.starts_with("    site_logs:") || line.starts_with("    seen_shelves:") {
+                skipping = true;
+            }
+            let keep = !skipping;
+            if skipping && (*line == "    ]," || line.ends_with("[],")) {
+                skipping = false;
+            }
+            keep
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(!older.contains("Founded."), "the block was removed");
+    assert!(!older.contains("seen_shelves"), "both fields were removed");
+    let loaded = from_ron(&older).expect("absent fields must still parse");
+    assert!(loaded.site_logs.is_empty() && loaded.seen_shelves.is_empty());
 }

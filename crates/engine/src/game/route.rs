@@ -8,6 +8,7 @@
 //! throughout, since both features dispatch from the same Relay.
 
 use rand::RngExt;
+use serde::{Deserialize, Serialize};
 
 use crate::Game;
 use crate::components::GlyphColor;
@@ -57,7 +58,7 @@ pub enum RouteRefusal {
 /// stores. Widening this rather than `RouteEnd` itself is what let outposts
 /// join the hub without touching the dispatch/predation machinery in this
 /// module's lower half.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum RouteDestinationId {
     Settlement(SettlementKey),
     Outpost((i32, i32)),

@@ -122,6 +122,10 @@ impl Game {
             data.spawn_point,
         );
         let mut game = assemble_game(world, storyline, load_warnings, dropped_player_routines);
+        game.sites = crate::sites::SiteRecords {
+            log: crate::sites::SiteLog::from_save(std::mem::take(&mut data.site_logs)),
+            seen: crate::sites::SeenShelves::from_save(std::mem::take(&mut data.seen_shelves)),
+        };
         let nest_positions = restore_nests_to_build_sites(
             &mut game,
             data.nests,
@@ -685,6 +689,7 @@ fn assemble_game(
         world,
         schedule,
         storyline,
+        sites: Default::default(),
         dev_storyline: None,
     };
     // Derived values are not trusted from the file: gear, `BoughtStats`

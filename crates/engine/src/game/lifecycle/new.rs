@@ -307,6 +307,7 @@ impl Game {
             world,
             schedule,
             storyline: Default::default(),
+            sites: Default::default(),
             dev_storyline: None,
         };
         game.apply_character_choice(choice);

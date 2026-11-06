@@ -71,6 +71,7 @@ pub(super) fn set_sites(
         data.creatures.retain(|c| c.position != *tile);
         data.nests.retain(|n| n.position != *tile);
         data.outposts.push(save::OutpostSave {
+            name: String::new(),
             tile: *tile,
             biome: feral_processes_engine::world::Biome::Deadlock,
             growth: 0,
@@ -794,4 +795,105 @@ fn an_unvisited_town_refuses_its_beside_only_actions_from_the_base() {
         app.status_line.as_deref(),
         Some("Walk over to Test Settlement to trade.")
     );
+}
+
+fn type_text(app: &mut App, text: &str) {
+    for c in text.chars() {
+        app.handle_key(GameKey::Char(c));
+    }
+}
+
+#[test]
+fn n_opens_the_field_holding_the_current_name() {
+    let mut app = app_with_far_sites(7140);
+    let tile = (520, 500);
+    app.game
+        .as_mut()
+        .unwrap()
+        .rename_outpost(tile, "Quarry")
+        .unwrap();
+    let page = HubPageKey::Site(RouteDestinationId::Outpost(tile));
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, page, Mode::OutpostStatus);
+    app.hub_on_rail = false;
+
+    app.handle_key(GameKey::Char('N'));
+
+    assert_eq!(app.mode, Mode::OutpostName);
+    assert_eq!(app.outpost_name.as_str(), "Quarry");
+    app.handle_key(GameKey::Backspace);
+    assert_eq!(
+        app.outpost_name.as_str(),
+        "Quarr",
+        "cursor starts at the end"
+    );
+}
+
+#[test]
+fn renaming_from_sites_returns_to_that_outposts_status_tab() {
+    let mut app = app_with_far_sites(7141);
+    let (first, second) = ((520, 500), (530, 500));
+    let page = HubPageKey::Site(RouteDestinationId::Outpost(second));
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, page.clone(), Mode::OutpostStatus);
+    app.hub_on_rail = false;
+    let before = tick(&app);
+
+    app.handle_key(GameKey::Char('N'));
+    for _ in 0..40 {
+        app.handle_key(GameKey::Backspace);
+    }
+    type_text(&mut app, "Ridge");
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(
+        (app.mode, app.hub_page()),
+        (Mode::OutpostStatus, Some(&page))
+    );
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(game.outpost_destination_name(second), "Ridge");
+    assert_ne!(game.outpost_destination_name(first), "Ridge");
+    assert_eq!(tick(&app), before, "naming never advances the game");
+}
+
+#[test]
+fn esc_in_the_sites_name_field_keeps_the_name_and_returns() {
+    let mut app = app_with_far_sites(7142);
+    let tile = (520, 500);
+    let page = HubPageKey::Site(RouteDestinationId::Outpost(tile));
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, page.clone(), Mode::OutpostStatus);
+    app.hub_on_rail = false;
+    let name = app.game.as_ref().unwrap().outpost_destination_name(tile);
+
+    app.handle_key(GameKey::Char('N'));
+    type_text(&mut app, "zzz");
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(
+        (app.mode, app.hub_page()),
+        (Mode::OutpostStatus, Some(&page))
+    );
+    assert_eq!(
+        app.game.as_ref().unwrap().outpost_destination_name(tile),
+        name
+    );
+}
+
+#[test]
+fn the_rail_shows_the_new_name() {
+    let mut app = app_with_far_sites(7143);
+    let tile = (520, 500);
+    app.game
+        .as_mut()
+        .unwrap()
+        .rename_outpost(tile, "Quarry")
+        .unwrap();
+    let titles: Vec<String> = rail(&app).into_iter().map(|(t, _, _)| t).collect();
+    assert!(titles.iter().any(|t| t == "Quarry"), "{titles:?}");
+}
+
+#[test]
+fn the_status_tab_lists_rename_in_its_keybar() {
+    assert!(sites_screen_keys(Mode::OutpostStatus).contains(&("N", "rename")));
 }

@@ -2014,7 +2014,7 @@ impl Game {
             if outpost.integrity == 0 {
                 rows.push(AttentionRow {
                     kind: AttentionKind::OutpostDark,
-                    text: format!("outpost at ({}, {}) is dark", tile.0, tile.1),
+                    text: format!("{} is dark", self.outpost_destination_name(tile)),
                     key: 'b',
                     threat: true,
                 });
@@ -2031,9 +2031,8 @@ impl Game {
                 rows.push(AttentionRow {
                     kind: AttentionKind::OutpostTrend,
                     text: format!(
-                        "outpost at ({}, {}): {}",
-                        tile.0,
-                        tile.1,
+                        "{}: {}",
+                        self.outpost_destination_name(tile),
                         trend.reason(&outpost, crew, tier)
                     ),
                     key: 'b',

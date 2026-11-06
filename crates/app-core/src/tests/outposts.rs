@@ -306,6 +306,7 @@ fn place_outpost_with_stock(app: &mut App, stock: &[(&str, u32)]) -> (i32, i32) 
     data.link_sites.retain(|&site| site != target);
     data.settlements.0.retain(|_, s| s.tile != target);
     data.outposts.push(save::OutpostSave {
+        name: String::new(),
         tile: target,
         biome: feral_processes_engine::world::Biome::Deadlock,
         growth: 0,
@@ -322,4 +323,52 @@ fn place_outpost_with_stock(app: &mut App, stock: &[(&str, u32)]) -> (i32, i32) 
     app.game = Some(Game::load(&path, &assets_dir).unwrap());
     let _ = std::fs::remove_file(&path);
     target
+}
+
+#[test]
+fn n_on_the_visit_page_opens_the_field_and_enter_renames_and_returns() {
+    let mut app = test_app(980);
+    let tile = place_outpost_east_of_player(&mut app);
+    walk(&mut app, GameKey::Right);
+    let before = app.game.as_ref().unwrap().current_tick();
+
+    app.handle_key(GameKey::Char('N'));
+    assert_eq!(app.mode, Mode::OutpostName);
+    let default = app.game.as_ref().unwrap().outpost_destination_name(tile);
+    assert_eq!(app.outpost_name.as_str(), default);
+    for _ in 0..default.chars().count() {
+        app.handle_key(GameKey::Backspace);
+    }
+    for c in "Mine".chars() {
+        app.handle_key(GameKey::Char(c));
+    }
+    app.handle_key(GameKey::Enter);
+
+    assert_eq!(app.mode, Mode::OutpostVisit);
+    assert_eq!(app.pending_outpost, Some(tile));
+    let game = app.game.as_ref().unwrap();
+    assert_eq!(game.outpost_destination_name(tile), "Mine");
+    assert_eq!(
+        game.current_tick(),
+        before,
+        "naming never advances the game"
+    );
+}
+
+#[test]
+fn esc_in_the_visit_pages_name_field_leaves_the_name() {
+    let mut app = test_app(981);
+    let tile = place_outpost_east_of_player(&mut app);
+    walk(&mut app, GameKey::Right);
+    let default = app.game.as_ref().unwrap().outpost_destination_name(tile);
+
+    app.handle_key(GameKey::Char('N'));
+    app.handle_key(GameKey::Char('x'));
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::OutpostVisit);
+    assert_eq!(
+        app.game.as_ref().unwrap().outpost_destination_name(tile),
+        default
+    );
 }

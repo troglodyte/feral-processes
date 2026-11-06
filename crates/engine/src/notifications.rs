@@ -397,7 +397,7 @@ impl NotificationKind {
             },
             NotificationKind::OutpostTierReached => NotificationDef {
                 title: "Outpost Grown",
-                body: "Your outpost at ({x}, {y}) has grown into a {label} outpost, and its crew can work richer yields.",
+                body: "{name} has grown into a {label} outpost, and its crew can work richer yields.",
                 sprite: None,
                 glyph: '^',
                 color: GlyphColor::Green,

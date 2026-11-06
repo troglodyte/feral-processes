@@ -4,6 +4,7 @@
 //! every figure on the page comes from `Game::outpost_report`.
 
 use crate::*;
+use feral_processes_engine::tuning::OUTPOST_NAME_MAX;
 
 /// One base-staff candidate on `Mode::OutpostPost`'s list — `SortieSquadRow`
 /// one field narrower: posting is a single action rather than a squad built
@@ -85,6 +86,7 @@ impl App {
                 let outcome = game.recall_from_outpost(entity);
                 self.report(outcome);
             }
+            GameKey::Char('N') => self.open_outpost_name(tile, false),
             // `[R]` repairs — design spec §8.
             GameKey::Char('R') => {
                 let Some(game) = &mut self.game else { return };
@@ -92,6 +94,47 @@ impl App {
                 self.report(outcome);
             }
             _ => {}
+        }
+    }
+
+    /// Opens the name field holding the outpost's current name. From the
+    /// Sites hub the tab is remembered so Enter and Esc come back to it.
+    pub(crate) fn open_outpost_name(&mut self, tile: (i32, i32), from_hub: bool) {
+        let Some(game) = &self.game else { return };
+        let name = game.outpost_destination_name(tile);
+        self.outpost_name.set(name);
+        self.pending_outpost = Some(tile);
+        if from_hub {
+            self.launch_from_site(Mode::OutpostName);
+        } else {
+            self.status_line = None;
+            self.mode = Mode::OutpostName;
+        }
+    }
+
+    pub(crate) fn handle_outpost_name_key(&mut self, key: GameKey) {
+        let Some(tile) = self.pending_outpost else {
+            self.mode = Mode::Playing;
+            return;
+        };
+        match key {
+            GameKey::Esc => {
+                self.status_line = None;
+                self.leave_site_screen(Mode::OutpostVisit);
+            }
+            GameKey::Enter => {
+                let Some(game) = &mut self.game else { return };
+                match game.rename_outpost(tile, self.outpost_name.as_str()) {
+                    Ok(()) => {
+                        self.status_line = None;
+                        self.leave_site_screen(Mode::OutpostVisit);
+                    }
+                    Err(e) => self.refuse(e),
+                }
+            }
+            key => {
+                self.outpost_name.edit(key, OUTPOST_NAME_MAX);
+            }
         }
     }
 

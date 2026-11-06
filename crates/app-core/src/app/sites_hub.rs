@@ -91,7 +91,7 @@ pub fn sites_screen_keys(mode: Mode) -> &'static [(&'static str, &'static str)] 
         ],
         Mode::SiteJobs => &[("↑/↓", "select"), ("A", "abandon"), ("Enter", "board")],
         Mode::SiteLog => &[("↑/↓", "scroll")],
-        Mode::OutpostStatus => &[("R", "repair")],
+        Mode::OutpostStatus => &[("R", "repair"), ("N", "rename")],
         Mode::OutpostCrew => &[("↑/↓", "select"), ("U", "recall"), ("P", "post")],
         Mode::OutpostStock => &[
             ("↑/↓", "select"),
@@ -188,7 +188,7 @@ impl App {
     }
 
     /// Opens a screen the hub launches, remembering the tab to come back to.
-    fn launch_from_site(&mut self, to: Mode) {
+    pub(crate) fn launch_from_site(&mut self, to: Mode) {
         self.remember_site_tab();
         self.status_line = None;
         self.mode = to;
@@ -330,6 +330,9 @@ impl App {
                 if let Some(outcome) = outcome {
                     self.report(outcome);
                 }
+            }
+            (Mode::OutpostStatus, Some(RouteDestinationId::Outpost(t)), GameKey::Char('N')) => {
+                self.open_outpost_name(t, true)
             }
             (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Char('U')) => {
                 let Some(game) = &mut self.game else { return };

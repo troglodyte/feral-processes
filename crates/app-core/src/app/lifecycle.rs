@@ -140,6 +140,7 @@ impl App {
             memories_return_row: 0,
             pending_settlement: None,
             pending_outpost: None,
+            outpost_name: TextField::default(),
             pending_erase: None,
             erase_quantity_input: String::new(),
             pending_downed_program_index: None,

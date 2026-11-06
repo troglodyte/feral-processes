@@ -657,22 +657,27 @@ fn stale_posts_its_own_alert_kind() {
 // ---------------------------------------------------------------------
 
 /// A declining outpost earns an `AttentionKind::OutpostTrend` row, worded
-/// with its tile — `Game::attention`'s own row-per-outpost rule.
+/// with its name — `Game::attention`'s own row-per-outpost rule.
 #[test]
 fn a_declining_outpost_earns_an_attention_row() {
     let mut game = Game::new(7044, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let tile = (400, 400);
-    game.world
-        .resource_mut::<Outposts>()
-        .0
-        .insert(tile, Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY));
+    game.world.resource_mut::<Outposts>().0.insert(
+        tile,
+        Outpost {
+            name: "Quarry camp".to_string(),
+            ..Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY)
+        },
+    );
 
     let rows = game.attention();
 
     assert!(
         rows.iter()
-            .any(|r| r.kind == crate::views::AttentionKind::OutpostTrend && r.text.contains("400")),
-        "a crewless, declining outpost must earn an attention row naming its tile: {rows:?}"
+            .any(|r| r.kind == crate::views::AttentionKind::OutpostTrend
+                && r.text.contains("Quarry camp")
+                && !r.text.contains("400")),
+        "a crewless, declining outpost must earn an attention row naming it, not its tile: {rows:?}"
     );
 }
 

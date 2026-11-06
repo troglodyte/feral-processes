@@ -60,6 +60,7 @@ fn sites_app() -> App {
     }
     for tile in [(520, 500), (530, 500)] {
         data.outposts.push(save::OutpostSave {
+            name: String::new(),
             tile,
             biome: feral_processes_engine::world::Biome::Deadlock,
             growth: 0,
@@ -377,4 +378,42 @@ fn every_sites_tab_draws_a_refusal_once() {
     ] {
         assert!(modes.contains(mode), "never reached {mode}: {modes:?}");
     }
+}
+
+/// The longest name a player can type, with the glyph and the `!` the rail
+/// adds, is elided to the rail rather than overflowing it.
+#[test]
+fn the_rail_elides_a_longest_outpost_name_and_no_coordinates_show() {
+    let mut app = sites_app();
+    let longest = "W".repeat(feral_processes_engine::tuning::OUTPOST_NAME_MAX);
+    app.game
+        .as_mut()
+        .unwrap()
+        .rename_outpost((520, 500), &longest)
+        .unwrap();
+    app.handle_key(GameKey::Char('w'));
+    let mut fx = Fx::new();
+    let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
+    let text = crate::paint::painted_text(&shapes);
+    assert!(
+        text.iter()
+            .any(|t| t.starts_with("WWWW") && t.contains('…')),
+        "the longest name is elided to the rail's width: {text:?}"
+    );
+    assert!(
+        text.iter().all(|t| !t.contains("(520, 500)")),
+        "no outpost is named by its coordinates: {text:?}"
+    );
+}
+
+#[test]
+fn the_outpost_name_popup_fits() {
+    let field = feral_processes_app_core::TextField::from(
+        "W".repeat(feral_processes_engine::tuning::OUTPOST_NAME_MAX)
+            .as_str(),
+    );
+    assert_rows_fit(
+        &crate::render::outposts::outpost_name_rows(&field),
+        "outpost name",
+    );
 }

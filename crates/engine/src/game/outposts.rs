@@ -394,13 +394,12 @@ impl Game {
                 crate::outposts::tier_label(tier as usize)
             ),
         );
-        let (x, y) = (tile.0.to_string(), tile.1.to_string());
+        let name = self.outpost_destination_name(tile);
         self.notify_with(
             NotificationKind::OutpostTierReached,
             NotifyArgs {
                 fills: &[
-                    ("x", &x),
-                    ("y", &y),
+                    ("name", &name),
                     ("label", crate::outposts::tier_label(tier as usize)),
                 ],
                 subject: Some(NotificationSubject::Tile(tile)),

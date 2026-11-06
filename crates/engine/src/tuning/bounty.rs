@@ -44,3 +44,14 @@ pub const BOUNTY_PLATINUM_ZONE: u32 = 6;
 /// Chance, per board refresh, that the Broker adds a bounty once the sector
 /// allows one.
 pub const BOUNTY_BOARD_ODDS: f64 = 0.35;
+
+/// Distance, in tiles, between the concentric rings a bounty's anchor is
+/// sampled from across `BOUNTY_ANCHOR_BAND`.
+pub const BOUNTY_ANCHOR_RING_STEP: i32 = 5;
+/// Points sampled around each ring. A fixed lattice rather than a scan of the
+/// whole band: the board is read every frame and has to be stable, so the
+/// candidates cannot depend on where the party has walked.
+pub const BOUNTY_ANCHOR_RING_SAMPLES: i32 = 16;
+/// Tiles of clearance kept from a derived settlement site, on top of the
+/// largest footprint, to cover the walk-out `standable_near` does.
+pub const BOUNTY_SETTLEMENT_MARGIN: i32 = 12;

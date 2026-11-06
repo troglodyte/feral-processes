@@ -14,6 +14,7 @@ pub(crate) mod base;
 pub(crate) mod base_pages;
 pub(crate) mod base_report;
 pub(crate) mod base_space;
+pub(crate) mod bounty;
 pub(crate) mod breeding;
 pub(crate) mod caravan;
 pub(crate) mod catalog;

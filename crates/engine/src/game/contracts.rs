@@ -599,6 +599,18 @@ impl Game {
                 defs.push(tier.swap_remove(rng.random_range(0..tier.len())));
             }
         }
+        // After the draw above, and from its own RNG, so a bounty takes a
+        // slot without moving which of the others were drawn. It is the
+        // Broker's alone: a town posts no bounties.
+        if issuer.is_none()
+            && let Some(bounty) = self.board_bounty(seed)
+        {
+            if defs.len() < slots {
+                defs.push(bounty);
+            } else if let Some(last) = defs.last_mut() {
+                *last = bounty;
+            }
+        }
         Some(defs)
     }
 
@@ -614,6 +626,15 @@ impl Game {
         key: crate::settlements::SettlementKey,
     ) -> Option<Vec<crate::contracts::ContractDef>> {
         self.board_defs(Some(key))
+    }
+
+    /// The Broker's board as defs, for a test that reads a rolled
+    /// contract's `Objective` back. `settlement_board_defs_for_test`'s twin.
+    #[cfg(test)]
+    pub(crate) fn broker_board_defs_for_test(
+        &mut self,
+    ) -> Option<Vec<crate::contracts::ContractDef>> {
+        self.board_defs(None)
     }
 
     /// What the town at `key` is good for, or `None` if the run has not
@@ -796,13 +817,23 @@ impl Game {
         self.offerable(def)
     }
 
-    fn offerable(&self, def: &crate::contracts::ContractDef) -> bool {
+    pub(crate) fn offerable(&self, def: &crate::contracts::ContractDef) -> bool {
         let zone = self.world.resource::<ZoneLevel>().0;
         let held = self.world.resource::<ActiveContracts>();
         if def.min_zone > zone {
             return false;
         }
         if held.active.iter().any(|c| c.def.id == def.id) {
+            return false;
+        }
+        // One bounty at a time, and never the one that already got away.
+        if matches!(def.objective, Objective::Bounty(_))
+            && (held
+                .active
+                .iter()
+                .any(|c| matches!(c.def.objective, Objective::Bounty(_)))
+                || held.failed.contains(&def.id))
+        {
             return false;
         }
         if held.done.contains(&def.id) && !def.repeatable {
@@ -1371,6 +1402,7 @@ impl Game {
             MessageKind::Outcome,
             format!("Contract taken: {name}{from}."),
         );
+        self.ensure_bounty_quarry();
         if let Some(key) = issuer {
             self.note_site(
                 crate::RouteDestinationId::Settlement(key),
@@ -1401,6 +1433,7 @@ impl Game {
         let given_back = held.active.remove(idx);
         let name = given_back.def.name;
         let issuer = given_back.issuer;
+        self.drop_bounty_quarry(id);
         self.log_kind(MessageKind::Outcome, format!("Contract abandoned: {name}."));
         // Below the removal, `complete_contract`'s ordering: the announcement
         // `adjust_standing` may make is about the town, not about the job,

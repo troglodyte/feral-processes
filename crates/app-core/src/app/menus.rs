@@ -296,7 +296,7 @@ impl App {
         let Some(idx) = self.selected_index(key, rows.len()) else {
             return;
         };
-        let Some(target) = rows.get(idx).map(|r| r.target) else {
+        let Some(target) = rows.get(idx).map(|r| r.target.clone()) else {
             return;
         };
         if let Some(game) = self.game.as_mut() {

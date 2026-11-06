@@ -549,15 +549,15 @@ mod tests {
         let tally_view = around(&mut game, tally);
         let kernel_view = around(&mut game, kernel);
         let outpost_view = around(&mut game, outpost);
-        let named = |view: &feral_processes_engine::views::WorldMapView, target| {
+        let named = |view: &feral_processes_engine::views::WorldMapView, target: CompassTarget| {
             view.marks
                 .iter()
-                .find(|m| m.target == Some(target))
+                .find(|m| m.target == Some(target.clone()))
                 .unwrap_or_else(|| panic!("{target:?} is not on the map"))
                 .kind
         };
 
-        let town = |view: &_, target| match named(view, target) {
+        let town = |view: &_, target: CompassTarget| match named(view, target.clone()) {
             WorldMapMarkKind::Town {
                 standing,
                 kind,

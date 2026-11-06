@@ -1032,6 +1032,11 @@ impl Game {
                 .resource::<crate::resources::ActiveContracts>()
                 .done
                 .clone(),
+            contracts_failed: self
+                .world
+                .resource::<crate::resources::ActiveContracts>()
+                .failed
+                .clone(),
             work_orders: self.work_orders().to_vec(),
             alerts: self
                 .world

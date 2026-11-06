@@ -1192,7 +1192,7 @@ impl Game {
     /// evicts whole chunks *outside* the margin, which is exactly the ground
     /// this covers the complement of.
     ///
-    /// **Two kinds of wild are kept, and the rule is the same one twice: an
+    /// **Three kinds of wild are kept, and the rule is the same each time: an
     /// anonymous body is stock, and a named one is not.**
     ///
     /// - A `NestGuardian` belongs to a place. Its tier re-rolls when the
@@ -1204,7 +1204,11 @@ impl Game {
     ///   breach, which is precisely what the persistent world exists to
     ///   stop.
     ///
-    /// Neither exception is held by the compiler. Both have a test.
+    /// - A bounty's quarry is a named individual the contract owns, and
+    ///   `ensure_bounty_quarry` would respawn it at its anchor anyway;
+    ///   sparing it keeps its grade and its place.
+    ///
+    /// None of the exceptions is held by the compiler. Each has a test.
     pub(crate) fn clear_local_wild(&mut self) {
         let pos = *self.world.get::<Position>(self.player_entity()).unwrap();
         let (px, py) = (pos.x.div_euclid(CHUNK_SIZE), pos.y.div_euclid(CHUNK_SIZE));
@@ -1214,6 +1218,7 @@ impl Game {
                 Without<NestGuardian>,
                 Without<Nemesis>,
                 Without<crate::components::NemesisFollower>,
+                Without<crate::components::BountyMark>,
             )>();
             query
                 .iter(&self.world)
@@ -1564,12 +1569,15 @@ impl Game {
                 // skipped at the despawn below: a victim chunk holding only
                 // them would never shrink the count and the loop would not
                 // end. They are exempt because a grudge that the cap could
-                // delete never gets to gather a band.
+                // delete never gets to gather a band. A bounty's quarry is
+                // filtered for the same reason: the contract's quarry must not
+                // be evicted for the cap and respawned in a loop.
                 let mut query = self.world.query_filtered::<(Entity, &Position), (
                     With<Hostile>,
                     Without<crate::components::Besieger>,
                     Without<Nemesis>,
                     Without<crate::components::NemesisFollower>,
+                    Without<crate::components::BountyMark>,
                 )>();
                 query
                     .iter(&self.world)

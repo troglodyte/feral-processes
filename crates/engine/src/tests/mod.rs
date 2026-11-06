@@ -27,6 +27,7 @@ mod battle_timeline;
 mod behaviours;
 mod bench_stores;
 mod bonds;
+mod bounty;
 mod breeding;
 mod breeding_visit;
 mod building;

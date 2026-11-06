@@ -39,13 +39,13 @@ fn compass_rows(
     rows.iter()
         .enumerate()
         .map(|(i, row)| {
-            let mark = if Some(row.target) == selected {
+            let mark = if Some(&row.target) == selected.as_ref() {
                 " «"
             } else {
                 ""
             };
             let text = format!("{}{mark}", destination_line(row));
-            let (glyph, color) = target_glyph(row.target);
+            let (glyph, color) = target_glyph(&row.target);
             with_icon(item_row(text, i == highlight), glyph, color)
         })
         .collect()
@@ -58,7 +58,7 @@ fn compass_rows(
 /// A settlement's kind is not on the row, so both kinds take the Mainframe's
 /// `M`: the picker is about *where*, and the scale cue is something the map
 /// already carries at the tile itself.
-pub(super) fn target_glyph(target: CompassTarget) -> (char, Color) {
+pub(super) fn target_glyph(target: &CompassTarget) -> (char, Color) {
     match target {
         CompassTarget::Home => ('#', hud::palette::glyph(GlyphColor::Gray)),
         CompassTarget::Town(_) => (
@@ -67,6 +67,7 @@ pub(super) fn target_glyph(target: CompassTarget) -> (char, Color) {
         ),
         CompassTarget::Link(_) => ('>', hud::palette::glyph(GlyphColor::Magenta)),
         CompassTarget::Outpost(_) => ('⌂', hud::palette::glyph(GlyphColor::Green)),
+        CompassTarget::Bounty(_) => ('!', hud::palette::glyph(GlyphColor::Red)),
     }
 }
 

@@ -2166,6 +2166,12 @@ impl Game {
             rows.push(row(CompassTarget::Outpost(tile), label, true, tile));
         }
 
+        // Last: it moves, so its place in the list is the one least worth
+        // learning. Built from the live quarry, so the bearing follows it.
+        if let Some((target, label, tile)) = self.bounty_compass_target() {
+            rows.push(row(target, label, true, tile));
+        }
+
         rows
     }
 
@@ -2174,7 +2180,11 @@ impl Game {
     /// exists, so a party out in the field always has a way back; `None`
     /// only off the surface or before there is a home.
     pub fn compass_bearing(&mut self) -> Option<CompassRow> {
-        let selected = self.world.resource::<crate::resources::CompassBearing>().0;
+        let selected = self
+            .world
+            .resource::<crate::resources::CompassBearing>()
+            .0
+            .clone();
         let mut rows = self.compass_targets();
         let at = selected
             .and_then(|s| rows.iter().position(|r| r.target == s))

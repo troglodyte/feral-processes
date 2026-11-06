@@ -303,7 +303,27 @@ pub fn needs_drain_system(
 /// The per-creature state `wander_ai_system` walks. Aliased rather than
 /// written inline because the tuple is long enough to trip clippy's
 /// `type_complexity` lint — same reasoning as `CronjobWorker` below.
-type Wanderer<'w> = (&'w mut Position, &'w mut WanderAi, Option<&'w NestGuardian>);
+type Wanderer<'w> = (
+    &'w mut Position,
+    &'w mut WanderAi,
+    Option<&'w NestGuardian>,
+    Option<&'w crate::components::BountyMark>,
+);
+
+/// Whether a step is refused by a tether of `radius`, given the Chebyshev
+/// distance the step would leave the creature at (`dist`) and where it stands
+/// now (`current`).
+///
+/// Refuses only a step that both leaves the tether *and* doesn't close on the
+/// anchor. A creature dragged outside its radius — by a chase, or by a test
+/// placing it there — would otherwise have no legal move at all and stand
+/// frozen for the rest of the run. `>=`, not `>`: a lateral step that holds
+/// distance constant is still refused, so a displaced creature makes
+/// monotonic progress home rather than orbiting. Shared by the nest
+/// guardian's tether and the bounty quarry's.
+fn tether_refuses_step(dist: i32, current: i32, radius: i32) -> bool {
+    dist > radius && dist >= current
+}
 
 /// Who is left to wander: not the player, not a chaser, and not a nemesis's
 /// follower, which trails its leader instead (`Game::nemesis_muster`).
@@ -320,7 +340,7 @@ pub fn wander_ai_system(
     floor: Res<crate::base_grid::BaseGrid>,
     mut rng: ResMut<GameRng>,
 ) {
-    for (mut pos, mut ai, guardian) in &mut query {
+    for (mut pos, mut ai, guardian, bounty) in &mut query {
         if ai.cooldown > 0 {
             ai.cooldown -= 1;
             continue;
@@ -339,14 +359,16 @@ pub fn wander_ai_system(
         {
             let dist = (nx - nest_pos.x).abs().max((ny - nest_pos.y).abs());
             let current = (pos.x - nest_pos.x).abs().max((pos.y - nest_pos.y).abs());
-            // Refuse only a step that both leaves the tether *and* doesn't
-            // close on the nest. A guardian dragged outside its radius — by
-            // a chase, or by a test placing it there — would otherwise have
-            // no legal move at all and stand frozen for the rest of the
-            // run. `>=`, not `>`: a lateral step that holds distance
-            // constant is still refused, so a displaced guardian makes
-            // monotonic progress home rather than orbiting.
-            if dist > NEST_TETHER_RADIUS && dist >= current {
+            if tether_refuses_step(dist, current, NEST_TETHER_RADIUS) {
+                continue;
+            }
+        }
+        if let Some(mark) = bounty {
+            let dist = (nx - mark.anchor.0).abs().max((ny - mark.anchor.1).abs());
+            let current = (pos.x - mark.anchor.0)
+                .abs()
+                .max((pos.y - mark.anchor.1).abs());
+            if tether_refuses_step(dist, current, mark.tether) {
                 continue;
             }
         }

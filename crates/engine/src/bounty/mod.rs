@@ -5,6 +5,8 @@
 //! so the roll is testable without a `Game`.
 
 mod names;
+mod place;
+mod reconcile;
 mod roll;
 #[cfg(test)]
 mod tests;
@@ -13,6 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::components::Rarity;
 
+pub use place::anchor_samples;
+pub use reconcile::{Reconcile, reconcile};
 pub use roll::{BountyInput, RolledBounty, roll};
 
 /// The individual a bounty names, fixed at roll time.

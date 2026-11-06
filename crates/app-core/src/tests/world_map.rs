@@ -121,7 +121,7 @@ fn c_points_at_the_highlighted_place_under_either_focus() {
         let (idx, target) = marks
             .iter()
             .enumerate()
-            .find_map(|(i, m)| m.target.map(|t| (i, t)))
+            .find_map(|(i, m)| m.target.clone().map(|t| (i, t)))
             .expect("a mark with a target");
         app.menu_selected = idx;
         if focused {
@@ -194,7 +194,7 @@ fn c_on_a_target_row_sets_the_compass() {
     let (idx, target) = marks
         .iter()
         .enumerate()
-        .find_map(|(i, m)| m.target.map(|t| (i, t)))
+        .find_map(|(i, m)| m.target.clone().map(|t| (i, t)))
         .expect("a mark with a target");
     app.menu_selected = idx;
     app.handle_key(GameKey::Char('C'));

@@ -2081,6 +2081,11 @@ pub struct SaveData {
     /// contract's terms back.
     #[serde(default)]
     pub contracts_done: Vec<crate::contracts::ContractId>,
+    /// Bounty ids that got away this epoch — see
+    /// `resources::ActiveContracts::failed`. Additive behind
+    /// `#[serde(default)]`: no `SAVE_FORMAT_VERSION` bump.
+    #[serde(default)]
+    pub contracts_failed: Vec<crate::contracts::ContractId>,
     /// What the base has been told to hold — see `resources::WorkOrders`.
     ///
     /// The whole of the feature's state. Which machines a line needs, who

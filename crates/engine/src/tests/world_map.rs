@@ -249,8 +249,12 @@ fn marks_carry_the_matching_compass_target_and_a_nest_has_none() {
     let view = game
         .world_map((px.div_euclid(CHUNK_SIZE), py.div_euclid(CHUNK_SIZE)), 1)
         .unwrap();
-    let target =
-        |k: fn(&WorldMapMarkKind) -> bool| view.marks.iter().find(|m| k(&m.kind)).map(|m| m.target);
+    let target = |k: fn(&WorldMapMarkKind) -> bool| {
+        view.marks
+            .iter()
+            .find(|m| k(&m.kind))
+            .map(|m| m.target.clone())
+    };
     assert_eq!(
         target(|k| matches!(k, WorldMapMarkKind::Home)),
         Some(Some(CompassTarget::Home))

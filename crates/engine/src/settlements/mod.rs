@@ -42,7 +42,7 @@ use serde::{Deserialize, Serialize};
 /// Save-stable by construction and deliberately never an `Entity` — for
 /// `SettlementKey`'s own stated reason (`placement.rs`): entity ids are not
 /// stable across a save, and the compass' selection is serialized.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum CompassTarget {
     /// The party's own anchor.
     Home,
@@ -53,6 +53,11 @@ pub enum CompassTarget {
     /// One of the party's outposts, named by its tile — `resources::Outposts`'
     /// own key. Appended last so a saved selection still parses.
     Outpost((i32, i32)),
+    /// The quarry of a held bounty, named by its contract. Appended last so a
+    /// saved selection still parses. The row is built from the live quarry's
+    /// position, so a selection whose contract has ended resolves to nothing
+    /// and falls back to Home.
+    Bounty(crate::contracts::ContractId),
 }
 
 /// How big a settlement is, and how much it can do.

@@ -2,7 +2,7 @@ use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 use super::*;
-use crate::contracts::{ContractDb, ContractDef, Objective, Reward, TemplateObjective};
+use crate::contracts::{ContractDb, ContractDef, ContractId, Objective, Reward, TemplateObjective};
 use crate::resources::ActiveContract;
 use crate::tests::support::test_assets_dir;
 use crate::tuning::*;
@@ -256,4 +256,44 @@ fn the_name_banks_hold_no_occult_words() {
             "{name} reads as occult"
         );
     }
+}
+
+fn ids(names: &[&str]) -> Vec<ContractId> {
+    names.iter().map(|n| ContractId::from(*n)).collect()
+}
+
+#[test]
+fn reconcile_spawns_one_when_the_held_bounty_has_no_quarry() {
+    let held = ContractId::from("a");
+    let plan = reconcile(Some(&held), &[]);
+    assert!(plan.spawn);
+    assert!(plan.despawn.is_empty());
+}
+
+#[test]
+fn reconcile_keeps_the_first_of_two_and_drops_the_rest_and_the_orphans() {
+    let held = ContractId::from("a");
+    let plan = reconcile(Some(&held), &ids(&["old", "a", "a"]));
+    assert!(!plan.spawn);
+    assert_eq!(plan.despawn, vec![0, 2]);
+}
+
+#[test]
+fn reconcile_clears_every_mark_when_nothing_is_held() {
+    let plan = reconcile(None, &ids(&["a", "b"]));
+    assert!(!plan.spawn);
+    assert_eq!(plan.despawn, vec![0, 1]);
+}
+
+#[test]
+fn anchor_samples_are_sorted_inside_the_band_and_repeatable() {
+    let home = (10, -4);
+    let points = anchor_samples(home);
+    assert_eq!(points, anchor_samples(home));
+    assert!(points.windows(2).all(|w| w[0] < w[1]));
+    let (near, far) = BOUNTY_ANCHOR_BAND;
+    assert!(points.iter().all(|&(x, y)| {
+        let d = (x - home.0).abs().max((y - home.1).abs());
+        (near..=far).contains(&d)
+    }));
 }

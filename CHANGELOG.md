@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.50
+
+**Outposts have names instead of coordinates.** A new outpost is named for its direction from your base, such as "Outpost north-east", and a second one in the same direction becomes "Outpost north-east 2". Press N on an outpost's Sites Status tab or its visit page to rename it; Enter keeps the new name, an empty name goes back to the default, and Esc changes nothing. The name shows on the Sites list, routes, cargo, the map, alerts and notices. Long names on the Sites list are cut short at the end. Saves load unchanged, and outposts in older saves get direction names.
+
 ## 0.21.49
 
 **A new Sites list, opened with [w] at base or beside a town or outpost, shows every town, city and outpost you know, plus the caravans.** Each town has Status, Goods, Routes, Jobs and Log tabs. Each outpost has Status, Crew, Stock and Log tabs. A Caravans entry shows the next trader and every route under way. Before, this was spread across visit pages and the Relay's Dispatch screen, and you mostly had to walk to a place to read it. Times are given in words ("soon", "a while ago"), never as numbers.

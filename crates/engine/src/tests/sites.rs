@@ -450,16 +450,19 @@ fn forget_towns(game: &mut Game) {
         .clear();
 }
 
-fn add_outpost(game: &mut Game, tile: (i32, i32)) {
+fn add_outpost(game: &mut Game, tile: (i32, i32), name: &str) {
     game.world
         .resource_mut::<crate::resources::Outposts>()
         .0
         .insert(
             tile,
-            crate::outposts::Outpost::new(
-                crate::world::Biome::Deadlock,
-                crate::tuning::OUTPOST_MAX_INTEGRITY,
-            ),
+            crate::outposts::Outpost {
+                name: name.to_string(),
+                ..crate::outposts::Outpost::new(
+                    crate::world::Biome::Deadlock,
+                    crate::tuning::OUTPOST_MAX_INTEGRITY,
+                )
+            },
         );
 }
 
@@ -482,18 +485,15 @@ fn the_rail_lists_towns_by_name_then_outposts_by_name() {
         true,
         (700, 0),
     );
-    add_outpost(&mut game, (900, 900));
-    add_outpost(&mut game, (800, 800));
+    add_outpost(&mut game, (900, 900), "Outpost south");
+    add_outpost(&mut game, (800, 800), "Outpost east");
 
     let rail = game.site_rail();
 
     let names: Vec<&str> = rail.iter().map(|e| e.name.as_str()).collect();
     assert_eq!(names[0], "Alpha");
     assert_eq!(names[1], "Zeta");
-    assert!(
-        names[2].contains("800") && names[3].contains("900"),
-        "{names:?}"
-    );
+    assert_eq!(&names[2..], ["Outpost east", "Outpost south"]);
     assert_eq!(rail[0].section, SiteSection::Settlements);
     assert_eq!(rail[0].glyph, 's');
     assert_eq!(rail[2].section, SiteSection::Outposts);
@@ -545,8 +545,8 @@ fn a_hostile_town_and_a_damaged_outpost_are_marked() {
     add_town(&mut game, calm, "Calm", true, (600, 0));
     add_town(&mut game, angry, "Angry", true, (700, 0));
     set_standing(&mut game, angry, crate::tuning::SETTLEMENT_HOSTILE_STANDING);
-    add_outpost(&mut game, (800, 800));
-    add_outpost(&mut game, (900, 900));
+    add_outpost(&mut game, (800, 800), "Camp");
+    add_outpost(&mut game, (900, 900), "Camp");
     game.world
         .resource_mut::<crate::resources::Outposts>()
         .0

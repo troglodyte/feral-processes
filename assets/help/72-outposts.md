@@ -17,6 +17,7 @@ Walking onto a founded outpost opens its own page.
 - Shift-C opens the same take-only transfer screen your Depots use, straight onto the outpost's
   stock.
 - R repairs a damaged outpost from your own pack, once it has taken a hit.
+- N renames the outpost. Each new one starts out named for the direction it lies from your base.
 
 Growth runs in three tiers — raw, processed, complex — and each tier's crew produces everything
 that tier and every tier below it can yield, one pick per cycle. Growth needs crew to keep moving;

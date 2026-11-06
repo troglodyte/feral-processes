@@ -383,6 +383,7 @@ pub(crate) fn place_outpost_with_staff_programs_east_of_player(
     data.link_sites.retain(|&site| site != target);
     data.settlements.0.retain(|_, s| s.tile != target);
     data.outposts.push(save::OutpostSave {
+        name: String::new(),
         tile: target,
         biome: feral_processes_engine::world::Biome::Deadlock,
         growth: 0,
@@ -508,6 +509,7 @@ pub(crate) fn place_outpost_with_crew_and_stock(
     data.link_sites.retain(|&site| site != target);
     data.settlements.0.retain(|_, s| s.tile != target);
     data.outposts.push(save::OutpostSave {
+        name: String::new(),
         tile: target,
         biome: feral_processes_engine::world::Biome::Deadlock,
         growth: 0,

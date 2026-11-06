@@ -128,6 +128,10 @@ impl OutpostDb {
 /// these six fields is derived on every read (tier, trend, current yields).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Outpost {
+    /// What the player calls it. Set at `Game::found_outpost` (the heading
+    /// from the base) and by `Game::rename_outpost`; never derived on read,
+    /// so founding another outpost cannot rename this one.
+    pub name: String,
     /// Read once at `Game::found_outpost` and never re-derived: the yield
     /// table is keyed by the ground the outpost was built on, not by
     /// whatever the tile classifies as on a later read.
@@ -158,6 +162,7 @@ impl Outpost {
     /// A freshly founded outpost: no growth, no stock, full integrity.
     pub fn new(biome: Biome, integrity: u32) -> Self {
         Self {
+            name: String::new(),
             biome,
             growth: 0,
             integrity,
@@ -218,8 +223,8 @@ impl Trend {
 
 /// The body of an `OutpostStale` / `OutpostDeclining` notice and its alert:
 /// one function so the two cannot word it differently.
-pub fn trend_notice_text(tile: (i32, i32), reason: &str) -> String {
-    format!("Outpost at ({}, {}): {reason}", tile.0, tile.1)
+pub fn trend_notice_text(name: &str, reason: &str) -> String {
+    format!("{name}: {reason}")
 }
 
 /// The line a landed outpost raid logs, posts and shows; `downed` names the
@@ -236,14 +241,14 @@ pub const DARK_LINE: &str = "The outpost has gone dark and needs repair.";
 
 /// The widest text each `{text}` outpost notice can carry, for a layout
 /// census to measure: every site's own formatting, called with the longest
-/// reason it can produce, a wide coordinate and a `program` name.
+/// reason it can produce, the longest outpost name and a `program` name.
 pub fn widest_notice_texts(program: &str) -> Vec<(crate::notifications::NotificationKind, String)> {
     use crate::notifications::NotificationKind as K;
-    let tile = (-1234, -1234);
+    let name = "W".repeat(crate::tuning::OUTPOST_NAME_MAX);
     let widest = |reasons: Vec<String>| {
         reasons
             .into_iter()
-            .map(|r| trend_notice_text(tile, &r))
+            .map(|r| trend_notice_text(&name, &r))
             .max_by_key(|t| t.chars().count())
             .expect("a trend always has a reason")
     };

@@ -145,8 +145,8 @@ pub enum NotificationKind {
     /// off-screen siege has no body on the map to mark and stays off this.
     BaseStaffDowned,
     /// An outpost has grown a tier — `Game::tick_one_outpost`, on a rise
-    /// above `Outpost::announced_tier`. Templated with `{x}`, `{y}` and the
-    /// tier's `{label}`.
+    /// above `Outpost::announced_tier`. Templated with the outpost's `{name}`
+    /// and the tier's `{label}`.
     OutpostTierReached,
     /// An outpost's stock is full and it has stopped growing —
     /// `Game::announce_outpost_trend`. `{text}` is the alert board's own line.
@@ -397,7 +397,7 @@ impl NotificationKind {
             },
             NotificationKind::OutpostTierReached => NotificationDef {
                 title: "Outpost Grown",
-                body: "Your outpost at ({x}, {y}) has grown into a {label} outpost, and its crew can work richer yields.",
+                body: "{name} has grown into a {label} outpost, and its crew can work richer yields.",
                 sprite: None,
                 glyph: '^',
                 color: GlyphColor::Green,

@@ -334,6 +334,7 @@ impl App {
             Mode::SettlementBoard => self.handle_settlement_board_key(key),
             Mode::OutpostVisit => self.handle_outpost_visit_key(key),
             Mode::OutpostPost => self.handle_outpost_post_key(key),
+            Mode::OutpostName => self.handle_outpost_name_key(key),
             Mode::Notification => self.handle_notification_key(key),
             Mode::LevelUp => self.handle_level_up_key(key),
             Mode::AllocateStats => self.handle_allocate_stats_key(key),

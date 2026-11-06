@@ -1546,6 +1546,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::OutpostVisit => {
             draw_outpost_visit(game, app.pending_outpost, selected, refusal, painter, m)
         }
+        Mode::OutpostName => outposts::draw_outpost_name(&app.outpost_name, refusal, painter, m),
         Mode::OutpostPost => {
             draw_outpost_post(&outpost_post_candidates, selected, refusal, painter, m)
         }

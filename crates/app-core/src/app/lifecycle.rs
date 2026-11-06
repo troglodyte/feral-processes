@@ -140,6 +140,7 @@ impl App {
             memories_return_row: 0,
             pending_settlement: None,
             pending_outpost: None,
+            outpost_name: TextField::default(),
             pending_erase: None,
             erase_quantity_input: String::new(),
             pending_downed_program_index: None,
@@ -204,6 +205,7 @@ impl App {
             creation_catalogue,
             creation_icon_editor: None,
             creation_icon_seeded: false,
+            new_game_seed: None,
             user_sprite_dir: None,
             sprite_library: HashMap::new(),
             sprite_disabled: HashMap::new(),
@@ -302,6 +304,11 @@ impl App {
         saves.into_iter().map(|(_, entry)| entry).collect()
     }
 
+    /// Fixes the world seed of the next run started from the wizard.
+    pub fn seed_next_game(&mut self, seed: u32) {
+        self.new_game_seed = Some(seed);
+    }
+
     /// A fresh, filesystem-safe save filename for a just-started game —
     /// unique enough for one-per-second play sessions, which is the only
     /// case that matters here.
@@ -318,10 +325,12 @@ impl App {
     /// applies the choice; `Game::new` keeps its own signature and is what
     /// the ~1,600 test call sites use.
     pub(crate) fn start_new_game(&mut self, difficulty: DifficultyMode, choice: &CharacterChoice) {
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs() as u32)
-            .unwrap_or(1);
+        let seed = self.new_game_seed.take().unwrap_or_else(|| {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs() as u32)
+                .unwrap_or(1)
+        });
         match Game::new_with(seed, difficulty, &self.assets_dir, choice) {
             Ok(mut game) => {
                 // Re-read rather than trusting the copy loaded at startup:

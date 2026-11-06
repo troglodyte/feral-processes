@@ -60,6 +60,7 @@ fn sites_app() -> App {
     }
     for tile in [(520, 500), (530, 500)] {
         data.outposts.push(save::OutpostSave {
+            name: String::new(),
             tile,
             biome: feral_processes_engine::world::Biome::Deadlock,
             growth: 0,
@@ -377,4 +378,90 @@ fn every_sites_tab_draws_a_refusal_once() {
     ] {
         assert!(modes.contains(mode), "never reached {mode}: {modes:?}");
     }
+}
+
+/// The longest name a player can type, with the glyph and the `!` the rail
+/// adds, is elided to the rail rather than overflowing it.
+#[test]
+fn the_rail_elides_a_longest_outpost_name_and_no_coordinates_show() {
+    let mut app = sites_app();
+    let longest = "W".repeat(feral_processes_engine::tuning::OUTPOST_NAME_MAX);
+    app.game
+        .as_mut()
+        .unwrap()
+        .rename_outpost((520, 500), &longest)
+        .unwrap();
+    app.handle_key(GameKey::Char('w'));
+    let mut fx = Fx::new();
+    let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
+    let text = crate::paint::painted_text(&shapes);
+    assert!(
+        text.iter()
+            .any(|t| t.starts_with("WWWW") && t.ends_with('…') && !t.contains("W…W")),
+        "the longest name is cut at its end to the rail's width: {text:?}"
+    );
+    assert!(
+        text.iter()
+            .all(|t| !t.contains("(520, 500)") && !t.contains("(530, 500)")),
+        "no outpost is named by its coordinates: {text:?}"
+    );
+}
+
+#[test]
+fn the_outpost_name_popup_fits() {
+    let field = feral_processes_app_core::TextField::from(
+        "W".repeat(feral_processes_engine::tuning::OUTPOST_NAME_MAX)
+            .as_str(),
+    );
+    assert_rows_fit(
+        &crate::render::outposts::outpost_name_rows(&field),
+        "outpost name",
+    );
+}
+
+/// The census tolerates a site page drawing nothing, because which pages
+/// have a site depends on its map; with towns and outposts on the rail each
+/// one must say the refusal exactly once, or a `None` handed to its popup
+/// would pass unseen.
+#[test]
+fn every_site_page_draws_a_refusal_once() {
+    let mut app = sites_app();
+    let mut fx = Fx::new();
+    app.handle_key(GameKey::Char('w'));
+    let mut seen = std::collections::BTreeSet::new();
+    // Several sites offer each tab, so `settle_hub` adopts none: walk the
+    // rail with the keys instead, holding a real page.
+    for _ in 0..8 {
+        if app.mode == Mode::Playing {
+            break;
+        }
+        app.handle_key(GameKey::Right);
+        for _ in 0..6 {
+            if !super::refusals::SITE_PAGES.contains(&app.mode) {
+                break;
+            }
+            app.status_line = Some(super::refusals::CENSUS_REFUSAL.to_string());
+            let (_, shapes) =
+                crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
+            let drawn = crate::paint::painted_text(&shapes)
+                .iter()
+                .filter(|t| t.contains(super::refusals::CENSUS_REFUSAL))
+                .count();
+            assert_eq!(drawn, 1, "{:?} painted the refusal {drawn} times", app.mode);
+            seen.insert(format!("{:?}", app.mode));
+            app.handle_key(GameKey::Right);
+        }
+        for _ in 0..8 {
+            if app.hub_on_rail {
+                break;
+            }
+            app.handle_key(GameKey::Left);
+        }
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(
+        seen.len(),
+        super::refusals::SITE_PAGES.len(),
+        "the walk reached only {seen:?}"
+    );
 }

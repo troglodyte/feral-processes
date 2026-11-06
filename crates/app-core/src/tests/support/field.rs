@@ -437,6 +437,7 @@ pub(crate) fn place_outpost_east_of_player(app: &mut App) -> (i32, i32) {
     data.link_sites.retain(|&site| site != target);
     data.settlements.0.retain(|_, s| s.tile != target);
     data.outposts.push(save::OutpostSave {
+        name: String::new(),
         tile: target,
         biome: feral_processes_engine::world::Biome::Deadlock,
         growth: 0,
@@ -471,6 +472,7 @@ pub(crate) fn place_damaged_outpost_east_of_player(app: &mut App, integrity: u32
     data.link_sites.retain(|&site| site != target);
     data.settlements.0.retain(|_, s| s.tile != target);
     data.outposts.push(save::OutpostSave {
+        name: String::new(),
         tile: target,
         biome: feral_processes_engine::world::Biome::Deadlock,
         growth: 0,

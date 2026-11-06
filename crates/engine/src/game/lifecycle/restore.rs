@@ -334,6 +334,7 @@ impl Game {
                 (
                     o.tile,
                     crate::outposts::Outpost {
+                        name: o.name,
                         biome: o.biome,
                         growth: o.growth,
                         integrity: o.integrity,
@@ -347,6 +348,7 @@ impl Game {
             })
             .collect();
         self.world.insert_resource(crate::resources::Outposts(map));
+        self.name_unnamed_outposts();
     }
 
     pub(super) fn restore_structures(

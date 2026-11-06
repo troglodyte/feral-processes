@@ -251,17 +251,14 @@ pub(super) fn pick_rows(game: &Game, draft: &RoutineDraft, selected: usize) -> V
 
 /// The name field's popup.
 pub(super) fn name_rows(draft: &RoutineDraft) -> Vec<Row> {
-    vec![
-        text_row("Name the routine (1-24 characters)"),
-        text_row(""),
-        text_entry_row(&draft.name),
-        text_row(""),
-        text_row(key_hints(&[
-            "Type a name",
-            "Left/Right move",
-            "Enter or Esc finish",
-        ])),
-    ]
+    name_field_rows(
+        format!(
+            "Name the routine (1-{} characters)",
+            feral_processes_engine::tuning::CRAFT_NAME_MAX
+        ),
+        &draft.name,
+        &["Type a name", "Left/Right move", "Enter or Esc finish"],
+    )
 }
 
 /// The Built routines page: routines waiting for a slot.

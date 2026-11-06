@@ -215,10 +215,44 @@ pub(super) fn outpost_page_rows(report: &OutpostReport, selected: usize) -> Vec<
         "[P] post",
         "[U] recall",
         "[R] repair",
+        "[N] rename",
         "[C] take stock",
         "Esc back",
     ])));
     rows
+}
+
+/// `Mode::OutpostName`'s popup: the shared one-line field, holding the name.
+pub(super) fn draw_outpost_name(
+    field: &feral_processes_app_core::TextField,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    draw_popup(
+        "Name outpost",
+        PopupSize::Large,
+        &outpost_name_rows(field),
+        refusal,
+        painter,
+        m,
+    );
+}
+
+pub(super) fn outpost_name_rows(field: &feral_processes_app_core::TextField) -> Vec<Row> {
+    name_field_rows(
+        format!(
+            "Name the outpost (up to {} characters)",
+            feral_processes_engine::tuning::OUTPOST_NAME_MAX
+        ),
+        field,
+        &[
+            "Type a name",
+            "Left/Right move",
+            "Enter rename",
+            "Esc cancel",
+        ],
+    )
 }
 
 /// `Mode::OutpostPost`'s staff picker — every base-staff program, Enter

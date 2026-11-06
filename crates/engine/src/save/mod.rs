@@ -401,6 +401,10 @@ pub struct OutpostRouteSave {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OutpostSave {
     pub tile: (i32, i32),
+    /// Empty in a save from before outposts had names; `restore_outposts`
+    /// gives those the default heading name.
+    #[serde(default)]
+    pub name: String,
     pub biome: crate::world::Biome,
     pub growth: u32,
     pub integrity: u32,

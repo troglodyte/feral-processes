@@ -1905,6 +1905,10 @@ pub enum Mode {
     /// (`Game::base_staff`) with no basket to build: posting is one action,
     /// not a set committed later.
     OutpostPost,
+    /// The name field `[N]` opens from an outpost's visit page or its Sites
+    /// Status tab, holding the current name. Enter renames, Esc leaves it;
+    /// both go back to whichever screen opened it.
+    OutpostName,
     Inventory,
     /// The inventory hub's Phase keys page: the ten key slots, read-only.
     PhaseKeys,
@@ -2589,6 +2593,8 @@ impl Mode {
             | Mode::OutpostVisit
             // Reached only by a key press from `Mode::OutpostVisit` itself.
             | Mode::OutpostPost
+            // Reached only by a key press from the same two screens.
+            | Mode::OutpostName
             | Mode::Inventory
             | Mode::PhaseKeys
             | Mode::EquipSwap
@@ -3252,6 +3258,9 @@ pub struct App {
     /// tile rather than an `Entity` because an outpost is a record with no
     /// entity at all (design spec §2), so there is nothing else to hold.
     pub pending_outpost: Option<(i32, i32)>,
+    /// The text `Mode::OutpostName` is editing, for the outpost in
+    /// `pending_outpost`.
+    pub outpost_name: TextField,
     /// The program `Mode::CompanionEquip` is showing the slots of, picked
     /// with `E` on the roster.
     pub pending_equip_program: Option<Entity>,
@@ -3601,6 +3610,10 @@ pub struct App {
     /// moment the player walked back to the Icon step and returned, since
     /// the profile's saved drawing would win the field back every time.
     creation_icon_seeded: bool,
+    /// The world seed of the next run `start_new_game` begins; `None` seeds
+    /// from the clock. Set by a test that must not depend on which map the
+    /// clock happens to draw.
+    new_game_seed: Option<u32>,
     /// Where the player's own sprites live, `None` in tests and the arena
     /// (user layer absent). app-core does no file I/O; the frontend reads and
     /// writes it.

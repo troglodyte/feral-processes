@@ -27,6 +27,7 @@ pub(super) fn a_founded_outpost() -> Outpost {
     stock.insert(ItemId("cache_grain".to_string()), 7);
     stock.insert(ItemId("static_mesh".to_string()), 3);
     Outpost {
+        name: "Far camp".to_string(),
         biome: Biome::Deadlock,
         growth: 42,
         integrity: 80,
@@ -61,6 +62,7 @@ fn a_founded_outpost_survives_a_real_save_round_trip() {
         "the founded outpost must survive the load"
     );
     let after = &outposts[&(30, -12)];
+    assert_eq!(after.name, before.name);
     assert_eq!(after.biome, before.biome);
     assert_eq!(after.growth, before.growth);
     assert_eq!(after.integrity, before.integrity);
@@ -655,22 +657,27 @@ fn stale_posts_its_own_alert_kind() {
 // ---------------------------------------------------------------------
 
 /// A declining outpost earns an `AttentionKind::OutpostTrend` row, worded
-/// with its tile — `Game::attention`'s own row-per-outpost rule.
+/// with its name — `Game::attention`'s own row-per-outpost rule.
 #[test]
 fn a_declining_outpost_earns_an_attention_row() {
     let mut game = Game::new(7044, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     let tile = (400, 400);
-    game.world
-        .resource_mut::<Outposts>()
-        .0
-        .insert(tile, Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY));
+    game.world.resource_mut::<Outposts>().0.insert(
+        tile,
+        Outpost {
+            name: "Quarry camp".to_string(),
+            ..Outpost::new(Biome::Deadlock, OUTPOST_MAX_INTEGRITY)
+        },
+    );
 
     let rows = game.attention();
 
     assert!(
         rows.iter()
-            .any(|r| r.kind == crate::views::AttentionKind::OutpostTrend && r.text.contains("400")),
-        "a crewless, declining outpost must earn an attention row naming its tile: {rows:?}"
+            .any(|r| r.kind == crate::views::AttentionKind::OutpostTrend
+                && r.text.contains("Quarry camp")
+                && !r.text.contains("400")),
+        "a crewless, declining outpost must earn an attention row naming it, not its tile: {rows:?}"
     );
 }
 
@@ -717,4 +724,39 @@ fn a_healthy_outpost_earns_no_attention_row() {
         )),
         "a single-crew, freshly founded outpost is Growing and must earn no row: {rows:?}"
     );
+}
+
+#[test]
+fn an_outpost_name_survives_save_and_load() {
+    let mut game = Game::new(7030, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let mut outpost = a_founded_outpost();
+    outpost.name = "Quarry camp".to_string();
+    game.world
+        .resource_mut::<Outposts>()
+        .0
+        .insert((30, -12), outpost);
+    let loaded = super::breeding::save_and_load(&mut game, "outpost_name");
+    assert_eq!(loaded.outpost_destination_name((30, -12)), "Quarry camp");
+}
+
+#[test]
+fn an_old_save_without_names_gets_defaults_in_tile_order() {
+    let ron = "(tile: (1, 2), biome: Deadlock, growth: 0, integrity: 5, stock: [], \
+               stale_ticks: 0, cycle_progress: 0)";
+    let parsed: crate::save::OutpostSave = ron::from_str(ron).unwrap();
+    assert!(parsed.name.is_empty());
+
+    let mut game = Game::new(7031, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let (ax, ay) = game.anchor_position().unwrap();
+    let (a, b) = ((ax + 300, ay - 300), (ax + 310, ay - 310));
+    for tile in [b, a] {
+        let mut o = a_founded_outpost();
+        o.name = String::new();
+        game.world.resource_mut::<Outposts>().0.insert(tile, o);
+    }
+    let loaded = super::breeding::save_and_load(&mut game, "outpost_old");
+    let outposts = &loaded.world.resource::<Outposts>().0;
+    let (first, second) = (a.min(b), a.max(b));
+    assert_eq!(outposts[&first].name, "Outpost north-east");
+    assert_eq!(outposts[&second].name, "Outpost north-east 2");
 }

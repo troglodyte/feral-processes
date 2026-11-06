@@ -1,6 +1,6 @@
 # Outpost Names — Design
 
-**Status:** Proposed, 2026-11-06. Lands on the `sites-hub` branch with the
+**Status:** Agreed, 2026-11-06. Lands on the `sites-hub` branch with the
 Sites hub (`2026-11-06-sites-hub-design.md`).
 
 ## Why

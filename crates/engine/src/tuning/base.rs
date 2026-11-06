@@ -473,6 +473,11 @@ pub const SIEGE_SEALED_HOLD_ROUNDS: u32 = 5;
 /// design spec §11.
 pub const MAX_OUTPOSTS: usize = 4;
 
+/// The longest outpost name a player can type, in characters: the routine
+/// name field's figure (`CRAFT_NAME_MAX`, which `GEAR_NAME_MAX` matches), so one
+/// field width serves all three.
+pub const OUTPOST_NAME_MAX: usize = super::CRAFT_NAME_MAX;
+
 /// How far out a candidate tile must be before an outpost may be founded
 /// there, in Chebyshev tiles to the base's nearest floor cell
 /// (`footprint::distance_to_floor`) — a base grown toward a spot is nearer

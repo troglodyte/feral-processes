@@ -37,6 +37,9 @@ pub struct HubPage {
     pub screens: &'static [Mode],
     /// The rail's `!`.
     pub marked: bool,
+    /// A name the rail may cut: the tail gives way ("Outpost north-e…"),
+    /// where a fixed title is elided in the middle.
+    pub name_cut_at_end: bool,
 }
 
 /// A fixed hub's table row: what `HubPage` was. Keeps the tables `const`.
@@ -54,6 +57,7 @@ impl FixedPage {
             section: None,
             screens: self.screens,
             marked: false,
+            name_cut_at_end: false,
         }
     }
 }

@@ -1,9 +1,9 @@
 //! The hub's chrome: the page rail, the title line with its screen dots, and
 //! the keybar. Returns the rect the screen's rows go in.
 
-use super::manifest::elided_to_fit;
 use super::manifest::keybar::{draw_groups, group};
 use super::manifest::layout::{RailGeom, frame_rect, rail_window};
+use super::manifest::{cut_at_end_to_fit, elided_to_fit};
 use super::*;
 use hud::log_frame::keycap;
 
@@ -236,13 +236,12 @@ fn draw_rail(
         // The `!` keeps its two cells whether or not it is drawn, so a long
         // title gives way to it and never the other way round.
         let room = rail.rows.x + rail.rows.w - char_w * 2.0 - title_x;
-        painter.ui(
-            elided_to_fit(painter, &entry.title, m.font_size, room),
-            title_x,
-            base,
-            m.font_size,
-            ink,
-        );
+        let title = if entry.name_cut_at_end {
+            cut_at_end_to_fit(painter, &entry.title, m.font_size, room)
+        } else {
+            elided_to_fit(painter, &entry.title, m.font_size, room)
+        };
+        painter.ui(title, title_x, base, m.font_size, ink);
         if entry.marked {
             painter.ui_bold(
                 "!",
@@ -582,6 +581,7 @@ mod tests {
             section,
             screens: &[Mode::Alerts],
             marked,
+            name_cut_at_end: false,
         }
     }
 

@@ -397,11 +397,12 @@ fn the_rail_elides_a_longest_outpost_name_and_no_coordinates_show() {
     let text = crate::paint::painted_text(&shapes);
     assert!(
         text.iter()
-            .any(|t| t.starts_with("WWWW") && t.contains('…')),
-        "the longest name is elided to the rail's width: {text:?}"
+            .any(|t| t.starts_with("WWWW") && t.ends_with('…') && !t.contains("W…W")),
+        "the longest name is cut at its end to the rail's width: {text:?}"
     );
     assert!(
-        text.iter().all(|t| !t.contains("(520, 500)")),
+        text.iter()
+            .all(|t| !t.contains("(520, 500)") && !t.contains("(530, 500)")),
         "no outpost is named by its coordinates: {text:?}"
     );
 }

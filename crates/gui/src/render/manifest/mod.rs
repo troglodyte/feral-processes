@@ -236,6 +236,27 @@ pub(in crate::render) fn elided_to_fit(
     String::new()
 }
 
+/// `text` cut at its end with a `…` until it measures within `room`: a name
+/// whose start is what tells it apart ("Outpost north-east…").
+pub(in crate::render) fn cut_at_end_to_fit(
+    painter: &Painter,
+    text: &str,
+    size: u16,
+    room: f32,
+) -> String {
+    if painter.measure_ui_advance(text, size) <= room {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    for keep in (0..chars.len()).rev() {
+        let candidate: String = chars[..keep].iter().chain(&['…']).collect();
+        if painter.measure_ui_advance(&candidate, size) <= room {
+            return candidate;
+        }
+    }
+    String::new()
+}
+
 /// `text` broken at spaces into lines that each measure within `room`. A
 /// single word wider than `room` is the one thing left running wide, since
 /// there is no space to break it at; callers that must not overflow

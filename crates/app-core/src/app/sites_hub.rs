@@ -63,6 +63,7 @@ impl HubKind for SitesHub {
                 section: (last != Some(entry.section)).then(|| section_title(entry.section)),
                 screens,
                 marked: entry.attention,
+                name_cut_at_end: true,
             });
             last = Some(entry.section);
         }
@@ -73,6 +74,7 @@ impl HubKind for SitesHub {
             section: Some("Traffic"),
             screens: CARAVAN_TABS,
             marked: game.route_reports().iter().any(|r| r.stalled),
+            name_cut_at_end: false,
         });
         pages
     }

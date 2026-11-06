@@ -1052,6 +1052,7 @@ impl Game {
                 .iter()
                 .map(|(&tile, o)| save::OutpostSave {
                     tile,
+                    name: o.name.clone(),
                     biome: o.biome,
                     growth: o.growth,
                     integrity: o.integrity,

@@ -1,6 +1,8 @@
 //! Founding an outpost — `crate::outposts` holds the record and the pure
 //! def/growth math; this is `&mut Game` work, `game/route.rs`'s split.
 
+use std::collections::BTreeSet;
+
 use bevy_ecs::prelude::Entity;
 use rand::RngExt;
 
@@ -24,10 +26,36 @@ use crate::systems::mining_success_chance;
 use crate::tuning::{
     MAX_OUTPOSTS, OUTPOST_CREW_CAP, OUTPOST_CYCLE_TICKS, OUTPOST_DECAY_PER_TICK,
     OUTPOST_GROWTH_PER_CREW, OUTPOST_MAX_INTEGRITY, OUTPOST_MIN_ANCHOR_DISTANCE,
-    OUTPOST_MIN_SPACING, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW, SETTLEMENT_FOOTPRINT_MAX_RADIUS,
+    OUTPOST_MIN_SPACING, OUTPOST_NAME_MAX, OUTPOST_STOCK_CAP, OUTPOST_TIER_CREW,
+    SETTLEMENT_FOOTPRINT_MAX_RADIUS,
 };
 use crate::views::{OutpostCrewRow, OutpostMark, OutpostReport, OutpostYieldRow, TransferRow};
 use crate::world::WorldMap;
+
+/// The name a new outpost takes: "Outpost" plus its compass heading from the
+/// base, numbered from 2 when another outpost already holds that exact name.
+/// Exact match, never prefix: "Outpost north" is a prefix of "Outpost
+/// north-east" and must not count as a collision.
+pub fn default_outpost_name(
+    tile: (i32, i32),
+    anchor: Option<(i32, i32)>,
+    taken: &BTreeSet<String>,
+) -> String {
+    let heading = anchor
+        .map(|(ax, ay)| crate::game::stack::heading(tile.0 - ax, tile.1 - ay))
+        .filter(|h| *h != crate::game::stack::Heading::Here);
+    let base = match heading {
+        Some(h) => format!("Outpost {}", h.label()),
+        None => "Outpost".to_string(),
+    };
+    if !taken.contains(&base) {
+        return base;
+    }
+    (2..)
+        .map(|n| format!("{base} {n}"))
+        .find(|candidate| !taken.contains(candidate))
+        .expect("an unbounded range always yields a free name")
+}
 
 impl Game {
     /// Founds an outpost at `tile` — design spec §9's refusal ladder.
@@ -99,10 +127,12 @@ impl Game {
                 "You already have {MAX_OUTPOSTS} outposts standing. That's the limit."
             ));
         }
+        let mut outpost = Outpost::new(biome, OUTPOST_MAX_INTEGRITY);
+        outpost.name = default_outpost_name(tile, self.anchor_position(), &self.outpost_names());
         self.world
             .resource_mut::<Outposts>()
             .0
-            .insert(tile, Outpost::new(biome, OUTPOST_MAX_INTEGRITY));
+            .insert(tile, outpost);
         self.note_site(
             RouteDestinationId::Outpost(tile),
             SiteLogKind::Founded,
@@ -326,7 +356,8 @@ impl Game {
         let outpost = self.world.resource::<Outposts>().0[&tile].clone();
         let reason = trend.reason(&outpost, crew, tier);
         let subject = format!("outpost@{},{}", tile.0, tile.1);
-        let text = crate::outposts::trend_notice_text(tile, &reason);
+        let text =
+            crate::outposts::trend_notice_text(&self.outpost_destination_name(tile), &reason);
         self.notify_with(
             notice,
             NotifyArgs {
@@ -608,20 +639,70 @@ impl Game {
         }
     }
 
-    /// The name a caravan destination row or an in-flight report uses for
-    /// the outpost standing at `tile` — `def.name` disambiguated by its
-    /// tile, since v1 ships one def for every outpost. Falls back to a
-    /// generic label when no outpost def is installed at all, which a
-    /// caller only reaches for a route already dispatched to a tile whose
-    /// def has since been removed.
+    /// The name the player sees for the outpost standing at `tile`: its
+    /// stored name. Falls back to a generic label for a route dispatched to a
+    /// tile whose outpost has since been destroyed.
     pub fn outpost_destination_name(&self, tile: (i32, i32)) -> String {
-        let def_name = self
+        self.world
+            .resource::<Outposts>()
+            .0
+            .get(&tile)
+            .map(|o| o.name.clone())
+            .unwrap_or_else(|| "Outpost".to_string())
+    }
+
+    fn outpost_names(&self) -> BTreeSet<String> {
+        self.world
+            .resource::<Outposts>()
+            .0
+            .values()
+            .map(|o| o.name.clone())
+            .collect()
+    }
+
+    /// Renames the outpost at `tile`. The text is trimmed and capped at
+    /// `OUTPOST_NAME_MAX`; an empty name restores the default heading name.
+    /// A rename writes no site log line: it is the player's own act.
+    pub fn rename_outpost(&mut self, tile: (i32, i32), name: &str) -> Result<(), String> {
+        if !self.world.resource::<Outposts>().0.contains_key(&tile) {
+            return Err("No outpost stands there.".into());
+        }
+        let capped: String = name.trim().chars().take(OUTPOST_NAME_MAX).collect();
+        let capped = capped.trim_end();
+        let name = if capped.is_empty() {
+            let mut taken = self.outpost_names();
+            taken.remove(&self.outpost_destination_name(tile));
+            default_outpost_name(tile, self.anchor_position(), &taken)
+        } else {
+            capped.to_string()
+        };
+        if let Some(o) = self.world.resource_mut::<Outposts>().0.get_mut(&tile) {
+            o.name = name;
+        }
+        Ok(())
+    }
+
+    /// Gives every outpost with no name its default, in tile order so the
+    /// numbering is the same on every load. Only an old save has any.
+    pub(crate) fn name_unnamed_outposts(&mut self) {
+        let anchor = self.anchor_position();
+        let mut taken = self.outpost_names();
+        taken.remove("");
+        let unnamed: Vec<(i32, i32)> = self
             .world
-            .resource::<OutpostDb>()
-            .def()
-            .map(|d| d.name.clone())
-            .unwrap_or_else(|| "Outpost".to_string());
-        format!("{def_name} ({}, {})", tile.0, tile.1)
+            .resource::<Outposts>()
+            .0
+            .iter()
+            .filter(|(_, o)| o.name.is_empty())
+            .map(|(&t, _)| t)
+            .collect();
+        for tile in unnamed {
+            let name = default_outpost_name(tile, anchor, &taken);
+            taken.insert(name.clone());
+            if let Some(o) = self.world.resource_mut::<Outposts>().0.get_mut(&tile) {
+                o.name = name;
+            }
+        }
     }
 
     /// `Mode::OutpostVisit`'s one derivation — design spec §9. `None` when
@@ -1246,6 +1327,103 @@ mod tests {
         pos.x = tile.0;
         pos.y = tile.1;
         tile
+    }
+
+    fn names(game: &Game) -> Vec<((i32, i32), String)> {
+        game.world
+            .resource::<Outposts>()
+            .0
+            .iter()
+            .map(|(&t, o)| (t, o.name.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn default_name_is_the_heading_from_base() {
+        let none = BTreeSet::new();
+        assert_eq!(
+            default_outpost_name((100, -100), Some((0, 0)), &none),
+            "Outpost north-east"
+        );
+        assert_eq!(default_outpost_name((100, -100), None, &none), "Outpost");
+        assert_eq!(default_outpost_name((0, 0), Some((0, 0)), &none), "Outpost");
+    }
+
+    #[test]
+    fn a_second_outpost_on_one_heading_is_numbered() {
+        let mut taken = BTreeSet::new();
+        taken.insert("Outpost north".to_string());
+        assert_eq!(
+            default_outpost_name((100, -100), Some((0, 0)), &taken),
+            "Outpost north-east",
+            "a prefix of the name is not a collision"
+        );
+        taken.insert("Outpost north-east".to_string());
+        assert_eq!(
+            default_outpost_name((100, -100), Some((0, 0)), &taken),
+            "Outpost north-east 2"
+        );
+        taken.insert("Outpost north-east 2".to_string());
+        assert_eq!(
+            default_outpost_name((100, -100), Some((0, 0)), &taken),
+            "Outpost north-east 3"
+        );
+    }
+
+    #[test]
+    fn founding_stores_the_default_and_never_renames_an_older_outpost() {
+        let mut game = game(3);
+        let first = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
+        game.found_outpost(first).unwrap();
+        let before = names(&game);
+        assert!(before[0].1.starts_with("Outpost"), "{before:?}");
+        assert!(!before[0].1.contains('('), "{before:?}");
+        game.rename_outpost(first, "Home camp").unwrap();
+        let second = open_tile_at_least(
+            &mut game,
+            OUTPOST_MIN_ANCHOR_DISTANCE,
+            &[first],
+            crate::tuning::OUTPOST_MIN_SPACING,
+        );
+        game.found_outpost(second).unwrap();
+        let after = names(&game);
+        let of = |t| after.iter().find(|(k, _)| *k == t).unwrap().1.clone();
+        assert_eq!(of(first), "Home camp");
+        assert_eq!(game.outpost_destination_name(first), "Home camp");
+        assert!(of(second).starts_with("Outpost"), "{after:?}");
+    }
+
+    #[test]
+    fn rename_trims_caps_and_empty_restores_the_default() {
+        let mut game = game(4);
+        let tile = open_tile_at_least(&mut game, OUTPOST_MIN_ANCHOR_DISTANCE, &[], 0);
+        game.found_outpost(tile).unwrap();
+        let default = game.outpost_destination_name(tile);
+        game.rename_outpost(tile, "  The Quarry  ").unwrap();
+        assert_eq!(game.outpost_destination_name(tile), "The Quarry");
+        game.rename_outpost(tile, &"x".repeat(60)).unwrap();
+        assert_eq!(
+            game.outpost_destination_name(tile).chars().count(),
+            crate::tuning::OUTPOST_NAME_MAX
+        );
+        game.rename_outpost(tile, "   ").unwrap();
+        assert_eq!(
+            game.outpost_destination_name(tile),
+            default,
+            "empty restores the default without counting itself as taken"
+        );
+        assert!(
+            game.sites
+                .log
+                .newest_first(RouteDestinationId::Outpost(tile))
+                .all(|e| !e.text.to_lowercase().contains("rename"))
+        );
+    }
+
+    #[test]
+    fn rename_refuses_an_unknown_tile() {
+        let mut game = game(5);
+        assert!(game.rename_outpost((1, 1), "Nope").is_err());
     }
 
     #[test]
@@ -1998,7 +2176,7 @@ mod tests {
             note.subject,
             Some(crate::notifications::NotificationSubject::Tile(tile))
         );
-        assert!(note.body.contains(&format!("({}, {})", tile.0, tile.1)));
+        assert!(note.body.contains(&game.outpost_destination_name(tile)));
     }
 
     #[test]

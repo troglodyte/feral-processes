@@ -521,6 +521,34 @@ fn the_battle_view_quotes_no_decompile_odds_against_a_boss() {
     );
 }
 
+#[test]
+fn the_battle_view_quotes_no_decompile_odds_against_a_non_boss_lair_guardian() {
+    let mut game = Game::new(3110, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+    let wild = start_battle_with_a_wild_program(&mut game);
+    set_inventory(&mut game, &[(ids::ICE_BREAKER, 1)]);
+    assert!(
+        quoted_odds(&game, 0) > 0.0,
+        "an ordinary program is quoted odds"
+    );
+    game.world.resource_mut::<BattleState>().lair = Some(crate::resources::LairFight {
+        pos: crate::game::stack::StackPos {
+            depth: 1,
+            frames: 1,
+            x: 0,
+            y: 0,
+            facing: crate::stack::Dir::North,
+            entrance: (0, 0),
+        },
+        guardian: wild,
+    });
+    let view = game.battle_view().unwrap();
+    assert!(!view.groups[0].is_boss, "the guardian here is not a boss");
+    assert!(
+        view.groups[0].decompile_chance.is_none(),
+        "a guardian can't be decompiled, so the target list must not advertise odds"
+    );
+}
+
 /// Every line the log currently holds, for the two tests below reading a
 /// specific one out.
 fn log_text(game: &Game) -> Vec<String> {

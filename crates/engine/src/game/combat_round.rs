@@ -982,10 +982,10 @@ impl Game {
             is_boss,
             engaged,
             statuses: self.status_tags(front),
-            // No odds against a boss, because there is no attempt to
+            // No odds against a boss or lair guardian, because there is no attempt to
             // make — `battle_set_action` refuses the target outright.
             decompile_chance: catalyst_potency
-                .filter(|_| !is_boss)
+                .filter(|_| !self.beyond_decompiling(front))
                 .map(|potency| taming::capture_chance(potency, resistance, bonuses)),
             charge: None,
         })

@@ -271,6 +271,43 @@ fn a_bounty_survives_the_real_save_and_load() {
     assert_eq!(bearing.target, CompassTarget::Bounty(id));
 }
 
+/// The unmarked bodies of `species` and the max HP of every body of it.
+fn bodies_of(game: &mut Game, species: &str) -> (usize, Vec<i32>) {
+    let mut q = game
+        .world
+        .query_filtered::<(&Creature, &Stats, Has<BountyMark>), Without<Party>>();
+    let found: Vec<(i32, bool)> = q
+        .iter(&game.world)
+        .filter(|(c, ..)| c.species == species)
+        .map(|(_, s, marked)| (s.max_hp, marked))
+        .collect();
+    let unmarked = found.iter().filter(|(_, m)| !m).count();
+    (unmarked, found.into_iter().map(|(hp, _)| hp).collect())
+}
+
+#[test]
+fn two_loads_leave_one_body_of_the_quarry_not_a_copy_per_load() {
+    let (mut game, _) = accepted();
+    let species = game.held_bounty().unwrap().1.species;
+    let quarry = quarries(&mut game)[0].0;
+    let quarry_hp = game.world.get::<Stats>(quarry).unwrap().max_hp;
+    let (wild_before, _) = bodies_of(&mut game, &species);
+    let mut once = save_and_load(&mut game, "twice_a");
+    let mut twice = save_and_load(&mut once, "twice_b");
+    for (n, loaded) in [(1, &mut once), (2, &mut twice)] {
+        assert_eq!(quarries(loaded).len(), 1, "load {n}: one marked quarry");
+        let (wild, hps) = bodies_of(loaded, &species);
+        assert_eq!(
+            wild, wild_before,
+            "load {n}: no unmarked copy of the quarry"
+        );
+        assert!(
+            hps.iter().filter(|&&hp| hp >= quarry_hp / 2).count() >= 1,
+            "load {n}: a quarry-grade body stands"
+        );
+    }
+}
+
 #[test]
 fn a_failed_bounty_id_survives_save_and_load() {
     let (mut game, def) = game_with_a_bounty_on_offer(3);

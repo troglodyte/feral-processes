@@ -1,7 +1,7 @@
 //! `Game::save`: the live world written out as a `SaveData`.
 
 use super::convert::{copy_to_save, worn_to_save};
-use crate::components::{Needs, Tools};
+use crate::components::{BountyMark, Needs, Tools};
 use crate::*;
 
 impl Game {
@@ -782,8 +782,15 @@ impl Game {
         // Nothing is lost by that; `tests::save_roundtrip` pins the round
         // trip as a multiset of lines and says why. Stabilising the emission
         // order is a change to the save format, not to this loop.
+        //
+        // **A bounty's quarry is not saved.** The contract owns its whole
+        // definition and `ensure_bounty_quarry` respawns it after a load
+        // (ADR 0044 section 2); saving the body too would leave an unmarked
+        // full-grade copy beside the respawn, one more per load.
         let creature_ids: Vec<Entity> = {
-            let mut q = self.world.query_filtered::<Entity, With<Creature>>();
+            let mut q = self
+                .world
+                .query_filtered::<Entity, (With<Creature>, Without<BountyMark>)>();
             q.iter(&self.world).collect()
         };
         let creatures: Vec<save::CreatureSave> = creature_ids

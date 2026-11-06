@@ -894,6 +894,7 @@ impl Game {
         };
 
         self.leave_downed_program(wild, overkill);
+        self.note_bounty_kill(wild);
 
         for (item, chance) in self.equipment_drops_for(&species) {
             let roll = {

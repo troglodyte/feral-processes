@@ -22,7 +22,7 @@ fn deploy(game: &mut Game, kind: &str, x: i32, y: i32) {
     ));
 }
 
-fn broker_game(seed: u32, zone: u32) -> Game {
+pub(super) fn broker_game(seed: u32, zone: u32) -> Game {
     let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
     skip_tutorial(&mut game);
     if zone > 1 {
@@ -35,7 +35,7 @@ fn broker_game(seed: u32, zone: u32) -> Game {
     game
 }
 
-fn board_bounty(game: &mut Game) -> Option<ContractDef> {
+pub(super) fn board_bounty(game: &mut Game) -> Option<ContractDef> {
     game.broker_board_defs_for_test()?
         .into_iter()
         .find(|d| matches!(d.objective, Objective::Bounty(_)))
@@ -44,7 +44,7 @@ fn board_bounty(game: &mut Game) -> Option<ContractDef> {
 /// The first seed whose zone-`zone` board carries a bounty. The odds are a
 /// coin flip per epoch, so this is a search over the world seed rather than
 /// a fixture pinned to one.
-fn game_with_a_bounty_on_offer(zone: u32) -> (Game, ContractDef) {
+pub(super) fn game_with_a_bounty_on_offer(zone: u32) -> (Game, ContractDef) {
     for seed in 1..200 {
         let mut game = broker_game(seed, zone);
         if let Some(def) = board_bounty(&mut game) {
@@ -54,7 +54,7 @@ fn game_with_a_bounty_on_offer(zone: u32) -> (Game, ContractDef) {
     panic!("no seed in 1..200 offers a bounty at zone {zone}");
 }
 
-fn quarries(game: &mut Game) -> Vec<(Entity, BountyMark, Position)> {
+pub(super) fn quarries(game: &mut Game) -> Vec<(Entity, BountyMark, Position)> {
     let mut q = game.world.query::<(Entity, &BountyMark, &Position)>();
     let mut found: Vec<_> = q
         .iter(&game.world)
@@ -64,13 +64,13 @@ fn quarries(game: &mut Game) -> Vec<(Entity, BountyMark, Position)> {
     found
 }
 
-fn accepted() -> (Game, ContractId) {
+pub(super) fn accepted() -> (Game, ContractId) {
     let (mut game, def) = game_with_a_bounty_on_offer(3);
     game.accept_contract(&def.id, None).unwrap();
     (game, def.id)
 }
 
-fn anchor_of(game: &Game) -> (i32, i32) {
+pub(super) fn anchor_of(game: &Game) -> (i32, i32) {
     game.held_bounty().unwrap().1.anchor
 }
 

@@ -10,6 +10,7 @@ mod reconcile;
 mod roll;
 #[cfg(test)]
 mod tests;
+mod verdict;
 
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +19,7 @@ use crate::components::Rarity;
 pub use place::anchor_samples;
 pub use reconcile::{Reconcile, reconcile};
 pub use roll::{BountyInput, RolledBounty, roll};
+pub use verdict::{BountyOutcome, verdict};
 
 /// The individual a bounty names, fixed at roll time.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

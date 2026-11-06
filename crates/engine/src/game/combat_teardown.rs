@@ -543,6 +543,11 @@ impl Game {
         for fork in forks {
             self.world.despawn(fork);
         }
+        // Before `mark_nemeses`, so a bounty's escort and quarry that
+        // outlived the fight are despawned rather than grudge-marked, and
+        // above it because the contract's verdict reads the tag, never
+        // `verdict.won`.
+        self.settle_bounty_fight();
         // Below the stray sweep and above `BattleState`'s removal a few
         // lines down — see `mark_nemeses`'s own doc for why that window is
         // narrow rather than a preference.

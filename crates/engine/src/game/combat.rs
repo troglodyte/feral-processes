@@ -427,7 +427,13 @@ impl Game {
         // passes `allow_boss: true`), so without this it would be swept into
         // whatever ordinary cluster it happened to be standing near. The
         // anchor is exempt by construction: bumping a boss has to fight it.
-        pack.extend(sweep.into_iter().filter(|&e| !self.is_boss_creature(e)));
+        // The bounty quarry is a boss, so the filter below already keeps it
+        // out; named anyway because that is its own rule: it fights only in
+        // the roster its contract built (`start_bounty_battle`).
+        pack.extend(sweep.into_iter().filter(|&e| {
+            !self.is_boss_creature(e)
+                && self.world.get::<crate::components::BountyMark>(e).is_none()
+        }));
         pack.truncate(self.group_size_ceiling() * self.enemy_group_ceiling());
         pack
     }
@@ -522,7 +528,7 @@ impl Game {
     ///
     /// `require_field` is called rather than restated. The Stack is off it,
     /// and the Stack's own model is settled.
-    fn fights_tactically(&self, pack: &[Entity]) -> bool {
+    pub(crate) fn fights_tactically(&self, pack: &[Entity]) -> bool {
         self.profile().tactical_battles
             && self.require_field().is_ok()
             && !pack

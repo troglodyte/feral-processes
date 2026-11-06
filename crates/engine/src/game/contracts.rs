@@ -1449,6 +1449,31 @@ impl Game {
         true
     }
 
+    /// The door a bounty leaves by when its quarry got away: the contract is
+    /// removed and not filed under `done`, its id goes to
+    /// `ActiveContracts::failed` so this epoch's board does not offer it
+    /// again, the quarry leaves the map and the compass, and the player is
+    /// told once. A contract that is not held does nothing, which is what
+    /// makes "once" hold however many paths reach here.
+    pub(crate) fn fail_contract(&mut self, id: &ContractId) {
+        let failed = {
+            let mut held = self.world.resource_mut::<ActiveContracts>();
+            let Some(idx) = held.active.iter().position(|c| c.def.id == *id) else {
+                return;
+            };
+            let gone = held.active.remove(idx);
+            held.failed.push(id.clone());
+            gone
+        };
+        self.drop_bounty_quarry(id);
+        if let Objective::Bounty(quarry) = &failed.def.objective {
+            self.log_kind(
+                MessageKind::Outcome,
+                format!("{} got away. Bounty failed.", quarry.name),
+            );
+        }
+    }
+
     /// Hands over as many of a `Deliver` objective's items as it still needs,
     /// and returns how many were taken.
     ///

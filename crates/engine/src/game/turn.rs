@@ -829,8 +829,16 @@ impl Game {
         let (nx, ny) = (pos.x + dx, pos.y + dy);
 
         if let Some(target) = self.find_wild_creature_at(nx, ny) {
-            let pack = self.gather_pack(target);
-            self.start_battle(pack);
+            if self
+                .world
+                .get::<crate::components::BountyMark>(target)
+                .is_some()
+            {
+                self.start_bounty_battle(target);
+            } else {
+                let pack = self.gather_pack(target);
+                self.start_battle(pack);
+            }
             self.tick();
             return (0, 0);
         }

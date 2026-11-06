@@ -297,3 +297,9 @@ fn anchor_samples_are_sorted_inside_the_band_and_repeatable() {
         (near..=far).contains(&d)
     }));
 }
+
+#[test]
+fn the_verdict_reads_only_whether_the_quarry_fell() {
+    assert_eq!(verdict(true), BountyOutcome::Complete);
+    assert_eq!(verdict(false), BountyOutcome::Fail);
+}

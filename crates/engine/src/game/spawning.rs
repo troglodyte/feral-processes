@@ -2088,7 +2088,7 @@ impl Game {
     /// tile already known to be legal — `try_spawn_habitat_creature` already
     /// refused a footprint cell for it, so `find_settlement_at` here only
     /// ever turns away the *scattered* offset, never the fallback.
-    fn scatter_open_tile(&mut self, x: i32, y: i32, radius: i32) -> (i32, i32) {
+    pub(crate) fn scatter_open_tile(&mut self, x: i32, y: i32, radius: i32) -> (i32, i32) {
         let (ox, oy) = {
             let mut rng = self.world.resource_mut::<GameRng>();
             (

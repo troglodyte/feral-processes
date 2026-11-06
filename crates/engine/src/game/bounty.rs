@@ -7,8 +7,9 @@ use bevy_ecs::prelude::*;
 use rand::prelude::*;
 
 use crate::Game;
+use crate::battle::{self, EnemyGroup};
 use crate::bounty::{self, BountyInput, BountyQuarry};
-use crate::components::{BountyMark, Position, Stats};
+use crate::components::{BountyMark, Creature, Position, Stats};
 use crate::contracts::{ContractDef, ContractId, Objective};
 use crate::game::contracts::fold;
 use crate::game::spawning::SpawnPins;
@@ -16,7 +17,140 @@ use crate::resources::{ActiveContracts, CompassBearing, ZoneLevel};
 use crate::settlements::CompassTarget;
 use crate::tuning::*;
 
+/// The bounty a live fight was opened against.
+///
+/// A resource of its own rather than a field on `BattleState`: the tactical
+/// model has no `BattleState`, and both models must answer the same verdict.
+/// Never serialised, `LairFight`'s argument: battles are not saved.
+#[derive(Resource)]
+pub(crate) struct BountyFight {
+    pub(crate) contract: ContractId,
+    pub(crate) quarry: Entity,
+    /// Spawned for this fight, so all of it is despawned when it ends.
+    pub(crate) escort: Vec<Entity>,
+    /// Set by the kill path (`note_bounty_kill`) and read, alone, by
+    /// `bounty::verdict`.
+    pub(crate) quarry_down: bool,
+}
+
 impl Game {
+    /// Opens the fight a bump on the quarry starts: the quarry first, then
+    /// its escort spawned beside it, in whichever model `fights_tactically`
+    /// picks.
+    ///
+    /// **The only door that skips the pack ceilings.** The roster is what the
+    /// contract promised, and a ceiling that trimmed it would leave members
+    /// standing on the map to be met on a later bump, which a bounty fight
+    /// cannot have. The abstract model gets one group per species; the
+    /// tactical one is handed the roster as it stands, since its ceilings
+    /// live in `gather_pack`/`group_pack` and not in the opening.
+    pub(crate) fn start_bounty_battle(&mut self, quarry: Entity) {
+        let Some(mark) = self.world.get::<BountyMark>(quarry).cloned() else {
+            return;
+        };
+        let Some((id, held)) = self.held_bounty() else {
+            return;
+        };
+        let Some(at) = self.world.get::<Position>(quarry).copied() else {
+            return;
+        };
+        if id != mark.contract {
+            return;
+        }
+        let mut escort = Vec::new();
+        for (species, count) in &held.escort {
+            for _ in 0..*count {
+                let (x, y) = self.scatter_open_tile(at.x, at.y, BOUNTY_ESCORT_SCATTER);
+                if let Some(e) = self.spawn_wild_creature_scaled(species, x, y, 1.0, false) {
+                    escort.push(e);
+                }
+            }
+        }
+        let pack: Vec<Entity> = std::iter::once(quarry)
+            .chain(escort.iter().copied())
+            .collect();
+        self.world.insert_resource(BountyFight {
+            contract: id,
+            quarry,
+            escort,
+            quarry_down: false,
+        });
+        if self.fights_tactically(&pack) {
+            self.open_tactical_battle(pack);
+        } else {
+            let groups = self.species_groups(&pack);
+            self.begin_battle(groups);
+        }
+    }
+
+    /// One group per species in first-appearance order, with no ceiling.
+    fn species_groups(&self, pack: &[Entity]) -> Vec<EnemyGroup> {
+        let mut groups: Vec<EnemyGroup> = Vec::new();
+        for &entity in pack {
+            let Some(species) = self
+                .world
+                .get::<Creature>(entity)
+                .map(|c| c.species.clone())
+            else {
+                continue;
+            };
+            match groups.iter_mut().find(|g| g.species == species) {
+                Some(group) => group.members.push(entity),
+                None => groups.push(EnemyGroup::new(
+                    battle::GroupId::new(groups.len() as u32),
+                    species,
+                    vec![entity],
+                )),
+            }
+        }
+        groups
+    }
+
+    /// The kill path's half of the verdict: the quarry going down is the one
+    /// fact the contract is settled on. Also marks the contract met, so the
+    /// ordinary door can pay it as soon as the next tick if the fight runs on.
+    pub(crate) fn note_bounty_kill(&mut self, victim: Entity) {
+        let Some(mut fight) = self.world.get_resource_mut::<BountyFight>() else {
+            return;
+        };
+        if fight.quarry != victim || fight.quarry_down {
+            return;
+        }
+        fight.quarry_down = true;
+        let id = fight.contract.clone();
+        let mut held = self.world.resource_mut::<ActiveContracts>();
+        if let Some(c) = held.active.iter_mut().find(|c| c.def.id == id) {
+            c.progress = c.def.objective.target();
+        }
+    }
+
+    /// The bounty fight's ending, from `finish_fight`: despawns what the
+    /// fight spawned and settles the contract by `bounty::verdict`.
+    ///
+    /// Completion is by id and only for a contract still held: the ordinary
+    /// door may already have paid it mid-fight, and a teardown that paid it
+    /// again, or paid whatever sat at its old index, would be a second
+    /// payout.
+    pub(crate) fn settle_bounty_fight(&mut self) {
+        let Some(fight) = self.world.remove_resource::<BountyFight>() else {
+            return;
+        };
+        for e in fight.escort.iter().chain([&fight.quarry]) {
+            if let Ok(body) = self.world.get_entity_mut(*e) {
+                body.despawn();
+            }
+        }
+        match bounty::verdict(fight.quarry_down) {
+            bounty::BountyOutcome::Complete => {
+                let held = self.world.resource::<ActiveContracts>();
+                if let Some(idx) = held.active.iter().position(|c| c.def.id == fight.contract) {
+                    self.complete_contract(idx);
+                }
+            }
+            bounty::BountyOutcome::Fail => self.fail_contract(&fight.contract),
+        }
+    }
+
     /// The bounty the run holds, if any. At most one is ever held: the board
     /// offers none while one is.
     pub(crate) fn held_bounty(&self) -> Option<(ContractId, BountyQuarry)> {

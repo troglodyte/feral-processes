@@ -55,3 +55,6 @@ pub const BOUNTY_ANCHOR_RING_SAMPLES: i32 = 16;
 /// Tiles of clearance kept from a derived settlement site, on top of the
 /// largest footprint, to cover the walk-out `standable_near` does.
 pub const BOUNTY_SETTLEMENT_MARGIN: i32 = 12;
+
+/// How far from the quarry its escort is placed when the fight opens.
+pub const BOUNTY_ESCORT_SCATTER: i32 = 2;

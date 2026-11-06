@@ -960,9 +960,11 @@ impl Game {
             .world
             .get::<Creature>(front)
             .and_then(|c| self.world.resource::<SpeciesDb>().get(&c.species));
-        let species_name = species
-            .map(|s| self.zone_tagged_name(front, s.name.clone()))
-            .unwrap_or_default();
+        let species_name = self.bounty_quarry_name(front).unwrap_or_else(|| {
+            species
+                .map(|s| self.zone_tagged_name(front, s.name.clone()))
+                .unwrap_or_default()
+        });
         let resistance = self.target_resistance(front)?;
         let is_boss = species.is_some_and(|s| s.is_boss);
         Some(EnemyGroupView {

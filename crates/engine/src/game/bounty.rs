@@ -83,6 +83,25 @@ impl Game {
         }
     }
 
+    /// The quarry's generated name while `entity` is the quarry of the
+    /// fight now open, else `None`. The one place a battle surface asks, so
+    /// the roster row, the tactical label and the intercept line agree.
+    pub(crate) fn bounty_quarry_name(&self, entity: Entity) -> Option<String> {
+        let fight = self.world.get_resource::<BountyFight>()?;
+        if fight.quarry != entity {
+            return None;
+        }
+        let mark = self.world.get::<BountyMark>(entity)?;
+        self.world
+            .resource::<ActiveContracts>()
+            .active
+            .iter()
+            .find_map(|c| match &c.def.objective {
+                Objective::Bounty(q) if c.def.id == mark.contract => Some(q.name.clone()),
+                _ => None,
+            })
+    }
+
     /// One group per species in first-appearance order, with no ceiling.
     fn species_groups(&self, pack: &[Entity]) -> Vec<EnemyGroup> {
         let mut groups: Vec<EnemyGroup> = Vec::new();

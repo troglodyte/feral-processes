@@ -877,7 +877,9 @@ impl Game {
     }
 
     pub(crate) fn entity_label(&self, entity: Entity) -> String {
-        if let Some(name) = self.squad_label(entity) {
+        if let Some(name) = self.bounty_quarry_name(entity) {
+            name
+        } else if let Some(name) = self.squad_label(entity) {
             name
         } else if let Some(name) = self.creature_name(entity) {
             self.zone_tagged_name(entity, name)

@@ -67,7 +67,9 @@ pub(super) fn target_glyph(target: &CompassTarget) -> (char, Color) {
         ),
         CompassTarget::Link(_) => ('>', hud::palette::glyph(GlyphColor::Magenta)),
         CompassTarget::Outpost(_) => ('⌂', hud::palette::glyph(GlyphColor::Green)),
-        CompassTarget::Bounty(_) => ('!', hud::palette::glyph(GlyphColor::Red)),
+        // `$` is in both fonts. Yellow because every other row already owns
+        // its hue (grey, orange, magenta, green) and red is the map's threat.
+        CompassTarget::Bounty(_) => ('$', hud::palette::glyph(GlyphColor::Yellow)),
     }
 }
 
@@ -174,5 +176,34 @@ mod tests {
         let rows = compass_rows(&[], None, 0);
         assert_eq!(rows.len(), 1);
         assert!(!text_of(&rows[0]).is_empty());
+    }
+
+    #[test]
+    fn a_bounty_row_has_its_own_glyph_and_hue() {
+        let bounty = CompassTarget::Bounty(feral_processes_engine::contracts::ContractId::from(
+            "bounty_x".to_string(),
+        ));
+        let (glyph, color) = target_glyph(&bounty);
+        let others = [
+            CompassTarget::Home,
+            CompassTarget::Town(feral_processes_engine::settlements::SettlementKey {
+                rx: 0,
+                ry: 0,
+            }),
+            CompassTarget::Link((0, 0)),
+            CompassTarget::Outpost((0, 0)),
+        ];
+        for other in others {
+            let (g, c) = target_glyph(&other);
+            assert!(
+                g != glyph && c != color,
+                "{other:?} shares the bounty's look"
+            );
+        }
+        let mut r = row("Bounty: Vesk the Long Wire", 42, true);
+        r.target = bounty;
+        let rows = compass_rows(&[r], None, 0);
+        assert_eq!(rows.len(), 1);
+        assert!(text_of(&rows[0]).contains("Vesk the Long Wire"));
     }
 }

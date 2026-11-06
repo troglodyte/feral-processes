@@ -966,7 +966,7 @@ impl Game {
                 .unwrap_or_default()
         });
         let resistance = self.target_resistance(front)?;
-        let is_boss = species.is_some_and(|s| s.is_boss);
+        let is_boss = self.is_boss_creature(front);
         Some(EnemyGroupView {
             // A group model overwrites this with the group's own id; on a
             // grid there are no groups, so the body's position stands in.

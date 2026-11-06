@@ -504,3 +504,24 @@ fn a_tamed_body_is_not_deleted_by_the_bounty_teardown() {
             .contains(&id)
     );
 }
+
+#[test]
+fn the_group_roster_flags_the_quarry_as_a_boss_and_quotes_no_odds() {
+    let (mut game, _) = game_in(false);
+    set_inventory(&mut game, &[(items::ids::ICE_BREAKER, 50)]);
+    bump_the_quarry(&mut game);
+    let view = game.battle_view().unwrap();
+    let quarry = &view.groups[0];
+    assert!(quarry.is_boss, "a rolled boss wears the badge");
+    assert_eq!(
+        quarry.decompile_chance, None,
+        "no odds on the unattemptable"
+    );
+    assert!(
+        view.groups
+            .iter()
+            .skip(1)
+            .any(|g| g.decompile_chance.is_some()),
+        "the control: the escort is still quoted"
+    );
+}

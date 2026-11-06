@@ -12,6 +12,7 @@ pub mod battle;
 pub mod behaviours;
 pub mod bench;
 pub mod bonds;
+pub mod bounty;
 pub mod breeding;
 pub mod caravans;
 pub mod classes;

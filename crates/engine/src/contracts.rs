@@ -257,6 +257,14 @@ pub enum Objective {
         #[serde(default = "one")]
         count: u32,
     },
+    /// Bring down one named elite program. Rolled by `bounty::roll` and
+    /// never authored: a bounty cannot exist without a placed quarry, and
+    /// only the roll places one (ADR 0044). `load_dir` refuses a file naming
+    /// it.
+    ///
+    /// Event-shaped: the fight that kills the quarry completes it, so
+    /// `contract_system` never advances it.
+    Bounty(crate::bounty::BountyQuarry),
 }
 
 /// A deed job asks for one unless it says otherwise.
@@ -327,7 +335,8 @@ impl Objective {
             | Objective::Build { .. }
             | Objective::Configure { .. }
             | Objective::Standing { .. }
-            | Objective::Hold { .. } => 1,
+            | Objective::Hold { .. }
+            | Objective::Bounty(_) => 1,
         }
     }
 
@@ -348,7 +357,8 @@ impl Objective {
             | Objective::Breach { .. }
             | Objective::Build { .. }
             | Objective::Configure { .. }
-            | Objective::Standing { .. } => false,
+            | Objective::Standing { .. }
+            | Objective::Bounty(_) => false,
         }
     }
 
@@ -377,7 +387,7 @@ impl Objective {
         match self {
             // Event-shaped, so never *already* true: a board would otherwise
             // refuse to offer one forever.
-            Objective::Terminate { .. } | Objective::Deliver { .. } => false,
+            Objective::Terminate { .. } | Objective::Deliver { .. } | Objective::Bounty(_) => false,
             // Five of the six deeds are events too and answer the same way.
             // The sixth, `PostedStaff`, is a standing condition — see
             // `Deed::already_true`.
@@ -916,6 +926,13 @@ fn complaint(def: &ContractDef) -> Option<String> {
              separates a template from the parameters a roll filled in, and an \
              authored id carrying one could collide with a rolled contract"
         ));
+    }
+    if matches!(def.objective, Objective::Bounty(_)) {
+        return Some(
+            "a Bounty is rolled by code and cannot be authored: it needs a placed \
+             quarry, and only the roll places one"
+                .to_string(),
+        );
     }
     if def.reward.is_empty() {
         return Some(

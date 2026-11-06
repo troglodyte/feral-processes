@@ -125,6 +125,8 @@ pub fn contract_system(
             }
             // Not here — see the module doc.
             Objective::Deliver { .. } => 0,
+            // Completed by the fight that kills the quarry, not polled.
+            Objective::Bounty(_) => 0,
             // The state-shaped ones advance by exactly the predicate
             // `Game::offerable` refuses a board slot on, so a contract cannot
             // be offered in a state that would finish it and then fail to
@@ -1092,6 +1094,8 @@ impl Game {
             // "Terminate 3 wild programs" names the whole errand.
             Objective::Terminate { .. } => None,
 
+            Objective::Bounty(_) => Some("Walk into it to start the fight.".to_string()),
+
             // A deed decides for itself: the six that name the key they are
             // performed with need nothing, and the seven that name a
             // subsystem say where it is. See `Deed::hint`.
@@ -1237,6 +1241,7 @@ impl Game {
                 species: None,
                 count,
             } => format!("Terminate {count} wild programs"),
+            Objective::Bounty(quarry) => format!("Bring down {}", quarry.name),
             Objective::Deliver { item, count } => {
                 format!("Deliver {count} {}", self.item_name(item))
             }

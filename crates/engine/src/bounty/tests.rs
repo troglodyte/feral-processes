@@ -73,21 +73,16 @@ fn a_different_seed_rolls_a_different_bounty() {
 }
 
 #[test]
-fn danger_and_pay_never_fall_with_the_zone_and_are_higher_at_zone_6_than_2() {
+fn escort_and_pay_never_fall_with_the_zone_and_are_higher_at_zone_6_than_2_at_one_grade() {
     for seed in 0..10 {
-        let mut prev: Option<(u32, u32, u32, u32)> = None;
+        let mut prev: Option<(u32, u32, u32)> = None;
         for zone in BOUNTY_MIN_ZONE..=10 {
             let def = rolled(zone, seed);
             let q = quarry(&def);
-            let now = (
-                q.grade_pct,
-                q.escort_size(),
-                credits_of(&def.reward),
-                xp_of(&def.reward),
-            );
+            let now = (q.escort_size(), credits_of(&def.reward), xp_of(&def.reward));
             if let Some(p) = prev {
                 assert!(
-                    now.0 >= p.0 && now.1 >= p.1 && now.2 >= p.2 && now.3 >= p.3,
+                    now.0 >= p.0 && now.1 >= p.1 && now.2 >= p.2,
                     "zone {zone} fell from {p:?} to {now:?}"
                 );
             }
@@ -95,7 +90,7 @@ fn danger_and_pay_never_fall_with_the_zone_and_are_higher_at_zone_6_than_2() {
         }
         let (low, high) = (rolled(2, seed), rolled(6, seed));
         let (lq, hq) = (quarry(&low), quarry(&high));
-        assert!(hq.grade_pct > lq.grade_pct);
+        assert_eq!(hq.grade_pct, lq.grade_pct);
         assert!(hq.escort_size() > lq.escort_size());
         assert!(hq.rarity >= lq.rarity);
         assert!(credits_of(&high.reward) > credits_of(&low.reward));

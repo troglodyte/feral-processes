@@ -139,8 +139,9 @@ Findings from the code (verify before relying on them):
   `squads::plan`) gets the same uncapped roster. `gather_pack` must exclude the quarry, the way it
   already drops other bosses.
 - **Elite stats:** stats are baked at spawn (`spawn_wild_creature_pinned`: base × zone × depth ×
-  `BOSS_STAT_MULT` × rarity × potential). The grade is a sector-scaled multiplier on that path, with
-  a raised `Rarity`. `spawn_pack`/`pick_escort_species` (`spawning.rs:2007/2057`) is the existing
+  `BOSS_STAT_MULT` × rarity × potential). The grade is one flat multiplier (`BOUNTY_GRADE_PCT`) on that path, with
+  a raised `Rarity`; the zone multiplier alone scales it with the sector, so the curve stays linear
+  (a grade that also rose per sector made it super-linear). `spawn_pack`/`pick_escort_species` (`spawning.rs:2007/2057`) is the existing
   boss-plus-escort precedent for picking escort species.
 - **Outcome:** `finish_fight` (`game/combat_teardown.rs`) is the one teardown for both combat models,
   with `FightVerdict{won, …}`. Tag the battle (`BattleState.lair` is the precedent) so teardown knows it

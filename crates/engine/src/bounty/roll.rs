@@ -87,7 +87,7 @@ pub fn roll(input: &BountyInput, rng: &mut impl Rng) -> Option<RolledBounty> {
     let quarry = BountyQuarry {
         name,
         species,
-        grade_pct: BOUNTY_GRADE_BASE_PCT + BOUNTY_GRADE_PER_ZONE_PCT * up,
+        grade_pct: BOUNTY_GRADE_PCT,
         rarity: rarity_for(input.zone),
         escort,
         anchor,

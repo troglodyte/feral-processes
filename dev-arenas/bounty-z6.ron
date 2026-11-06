@@ -1,5 +1,5 @@
 // The deepest bounty the tuning names a rarity for (`BOUNTY_PLATINUM_ZONE`):
-// a Platinum quarry at the sector-6 grade with the sector-6 escort. See
+// a Platinum quarry at the flat bounty grade (sector-6 zone multiplier) with the sector-6 escort. See
 // `bounty-z2.ron` for what `bounty: true` rolls and what a win means here.
 // The party is mid-run for the sector, not at its cap of 51: the player and
 // three median-grade companions at level 40, kitted the same way.

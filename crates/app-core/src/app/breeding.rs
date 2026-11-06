@@ -131,8 +131,9 @@ impl App {
         });
         if let Some(page) = info {
             self.enter_structure_page(page);
-        } else if self.hub_for(Mode::Breed).is_some() {
-            self.enter_hub_at(Hub::Base, HubPageKey::Named("Breed"), Mode::Breed);
+        } else if let Some((hub, page, _)) = self.hub_for(Mode::Breed) {
+            let key = hub.kind().pages(self)[page].key.clone();
+            self.enter_hub_at(hub, key, Mode::Breed);
         } else {
             self.close_screen();
         }

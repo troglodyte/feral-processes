@@ -3610,6 +3610,10 @@ pub struct App {
     /// moment the player walked back to the Icon step and returned, since
     /// the profile's saved drawing would win the field back every time.
     creation_icon_seeded: bool,
+    /// The world seed of the next run `start_new_game` begins; `None` seeds
+    /// from the clock. Set by a test that must not depend on which map the
+    /// clock happens to draw.
+    new_game_seed: Option<u32>,
     /// Where the player's own sprites live, `None` in tests and the arena
     /// (user layer absent). app-core does no file I/O; the frontend reads and
     /// writes it.

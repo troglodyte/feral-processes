@@ -1,5 +1,9 @@
 use super::*;
 
+/// The world seed `census_app` starts from, so no census depends on which
+/// map the clock draws.
+pub(super) const CENSUS_SEED: u32 = 1;
+
 pub(super) fn census_app() -> feral_processes_app_core::App {
     let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     // Keyed by a counter as well as the pid: six tests call this, the
@@ -24,6 +28,7 @@ pub(super) fn census_app() -> feral_processes_app_core::App {
     // cheapest legal way — there is no key that skips it, and the two
     // steps that hand out an allowance will not be left until it is
     // spent.
+    app.seed_next_game(CENSUS_SEED);
     app.handle_key(feral_processes_app_core::GameKey::Char('n'));
     for step in feral_processes_app_core::CreationStep::ALL {
         match step {

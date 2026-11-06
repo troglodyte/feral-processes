@@ -231,32 +231,9 @@ impl Game {
     /// Exactly one routine. A carrier is a prize, and a second would need a
     /// slot policy at capture time that nothing else in the design needs.
     pub(crate) fn roll_wild_routine(&mut self) -> Vec<crate::abilities::AbilityId> {
-        let carries = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_bool(WILD_ROUTINE_CHANCE)
-        };
-        if !carries {
-            return Vec::new();
-        }
-        let pool: Vec<(crate::abilities::AbilityId, u32)> = self
-            .world
-            .resource::<AbilityDb>()
-            .wild_pool()
-            .into_iter()
-            .map(|(def, weight)| (def.id.clone(), weight))
-            .collect();
-        let total: u32 = pool.iter().map(|(_, w)| w).sum();
-        if total == 0 {
-            return Vec::new();
-        }
-        let roll = {
-            let mut rng = self.world.resource_mut::<GameRng>();
-            rng.0.random_range(0..total)
-        };
-        let weights: Vec<u32> = pool.iter().map(|(_, w)| *w).collect();
-        crate::abilities::weighted_pick(&weights, roll)
-            .map(|index| vec![pool[index].0.clone()])
-            .unwrap_or_default()
+        self.world.resource_scope(|world, mut rng: Mut<GameRng>| {
+            pick_wild_routine(world.resource::<AbilityDb>(), &mut rng.0)
+        })
     }
 
     /// An unscaled spawn: `spawn_wild_creature_scaled` at x1, no boss.
@@ -2240,4 +2217,31 @@ pub(crate) fn ring_tiles(from: (i32, i32), min_band: i32, max_band: i32) -> Vec<
         }
     }
     out
+}
+
+/// `Game::roll_wild_routine` over a stream of the caller's choosing, as
+/// `Potential::roll` is to `Game::roll_potential`: a body that must be the
+/// same one every time (a bounty's quarry) draws from its own seeded stream.
+/// The draw order is the run's: the carry chance, then the pool pick.
+pub(crate) fn pick_wild_routine(
+    abilities: &AbilityDb,
+    rng: &mut impl rand::RngExt,
+) -> Vec<crate::abilities::AbilityId> {
+    if !rng.random_bool(WILD_ROUTINE_CHANCE) {
+        return Vec::new();
+    }
+    let pool: Vec<(crate::abilities::AbilityId, u32)> = abilities
+        .wild_pool()
+        .into_iter()
+        .map(|(def, weight)| (def.id.clone(), weight))
+        .collect();
+    let total: u32 = pool.iter().map(|(_, w)| w).sum();
+    if total == 0 {
+        return Vec::new();
+    }
+    let roll = rng.random_range(0..total);
+    let weights: Vec<u32> = pool.iter().map(|(_, w)| *w).collect();
+    crate::abilities::weighted_pick(&weights, roll)
+        .map(|index| vec![pool[index].0.clone()])
+        .unwrap_or_default()
 }

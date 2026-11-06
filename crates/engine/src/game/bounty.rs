@@ -7,12 +7,13 @@ use bevy_ecs::prelude::*;
 use rand::prelude::*;
 
 use crate::Game;
+use crate::abilities::{AbilityDb, AbilityId};
 use crate::battle::{self, EnemyGroup};
 use crate::bounty::{self, BountyInput, BountyQuarry};
-use crate::components::{BountyMark, Creature, Hostile, Position, Stats};
+use crate::components::{BountyMark, Creature, Hostile, Position, Potential, Stats};
 use crate::contracts::{ContractDef, ContractId, Objective};
 use crate::game::contracts::fold;
-use crate::game::spawning::SpawnPins;
+use crate::game::spawning::{SpawnPins, pick_wild_routine};
 use crate::resources::{ActiveContracts, CompassBearing, ZoneLevel};
 use crate::settlements::CompassTarget;
 use crate::tuning::*;
@@ -31,6 +32,20 @@ pub(crate) struct BountyFight {
     /// Set by the kill path (`note_bounty_kill`) and read, alone, by
     /// `bounty::verdict`.
     pub(crate) quarry_down: bool,
+}
+
+/// The quarry's rolls, drawn from a stream seeded by the contract's id alone:
+/// potential, then the wild routine.
+pub(crate) fn quarry_individual(
+    id: &ContractId,
+    abilities: &AbilityDb,
+) -> (Potential, Vec<AbilityId>) {
+    let mut rng = StdRng::seed_from_u64(crate::derive::fold_bytes(
+        crate::derive::FNV_BASIS,
+        id.as_str().as_bytes(),
+    ));
+    let potential = Potential::roll(&mut rng);
+    (potential, pick_wild_routine(abilities, &mut rng))
 }
 
 impl BountyFight {
@@ -403,20 +418,21 @@ impl Game {
     /// pinned, then scaled by the grade. The grade is applied to the baked
     /// stats afterwards rather than threaded through the spawn: it is the one
     /// thing no other spawn has, and `Stats` is what a fight reads.
-    fn spawn_bounty_quarry(&mut self, id: &ContractId, quarry: &BountyQuarry) -> Option<Entity> {
+    pub(crate) fn spawn_bounty_quarry(
+        &mut self,
+        id: &ContractId,
+        quarry: &BountyQuarry,
+    ) -> Option<Entity> {
         // Everything that varies between two spawns is pinned to the
-        // contract: the zone it was rolled in, an individual seeded from
-        // its id, and no wild routine (that roll is a `GameRng` draw). A
-        // load, a breach or a re-accept then brings back the same body, and
-        // the respawn costs the run's stream nothing.
-        let mut rng = StdRng::seed_from_u64(crate::derive::fold_bytes(
-            crate::derive::FNV_BASIS,
-            id.as_str().as_bytes(),
-        ));
+        // contract: the zone it was rolled in and an individual (potential
+        // and wild routine) seeded from its id. A load, a breach or a
+        // re-accept then brings back the same body, and the respawn costs
+        // the run's stream nothing.
+        let (potential, routines) = quarry_individual(id, self.world.resource::<AbilityDb>());
         let pins = SpawnPins {
             rarity: Some(quarry.rarity),
-            routines: Some(Vec::new()),
-            potential: Some(crate::components::Potential::roll(&mut rng)),
+            routines: Some(routines),
+            potential: Some(potential),
             zone: Some(quarry.zone).filter(|z| *z > 0),
         };
         let entity = self.spawn_wild_creature_pinned(

@@ -435,3 +435,26 @@ fn a_bounty_does_not_move_which_other_contracts_the_board_draws() {
         "{others:?} vs {without:?}"
     );
 }
+
+#[test]
+fn the_quarry_carries_the_wild_routine_its_contract_seed_implies_and_keeps_it() {
+    let (mut game, _) = accepted();
+    let quarry = game.held_bounty().unwrap().1;
+    let mut carried = 0;
+    // The routine is a 6% roll, so probe contract ids until some carry one.
+    for i in 0..300 {
+        let id = ContractId::from(format!("probe_{i}").as_str());
+        let (_, expected) = crate::game::bounty::quarry_individual(
+            &id,
+            game.world.resource::<crate::abilities::AbilityDb>(),
+        );
+        for _ in 0..2 {
+            let e = game.spawn_bounty_quarry(&id, &quarry).unwrap();
+            let held = game.world.get::<Routines>(e).unwrap().0.clone();
+            assert_eq!(held, expected, "{id:?}");
+            game.world.despawn(e);
+        }
+        carried += usize::from(!expected.is_empty());
+    }
+    assert!(carried > 0, "no probe carried a routine");
+}

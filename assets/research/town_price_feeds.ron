@@ -1,0 +1,12 @@
+(
+    id: "town_price_feeds",
+    name: "Price Feeds",
+    description: "Towns you have visited post their shelves to your Sites list, so you can see what each one sells now. Buying still means going there.",
+    cost: 80,
+    materials: [("core_fragment", 60), ("bytecode_block", 10)],
+    min_zone: 2,
+    requires_subject: true,
+    // Behind the Relay, which is what links a base to a town. Tier 1's
+    // column is already the widest the research screen is sized for.
+    requires: ["dispatch"],
+)

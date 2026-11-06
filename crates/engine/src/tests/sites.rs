@@ -309,3 +309,120 @@ fn no_log_write_draws_rng() {
 
     assert_eq!(draw(&mut game), expected, "a log write moved the stream");
 }
+
+// ---- shelf capture and the live shelf ----
+
+fn set_tick(game: &mut Game, tick: u64) {
+    game.world
+        .resource_mut::<crate::resources::GameClock>()
+        .tick = tick;
+}
+
+fn visit(game: &mut Game) {
+    game.move_player(1, 0);
+    game.take_visit();
+}
+
+#[test]
+fn bumping_a_town_records_its_shelf_as_seen() {
+    use crate::sites::{TownGoods, seen_offers};
+    let mut game = game();
+    let key = town_east_of_player(&mut game, 0);
+
+    visit(&mut game);
+
+    let expected = seen_offers(&game.settlement_view(key).unwrap().offers);
+    assert!(!expected.is_empty(), "the premise: the town has a shelf");
+    assert_eq!(
+        game.town_goods(key),
+        TownGoods::Seen {
+            offers: expected,
+            age: "just now"
+        }
+    );
+}
+
+#[test]
+fn a_seen_shelf_keeps_its_prices_after_the_shelf_turns() {
+    use crate::sites::TownGoods;
+    let mut game = game();
+    let key = town_east_of_player(&mut game, 0);
+    visit(&mut game);
+    let TownGoods::Seen { offers: before, .. } = game.town_goods(key) else {
+        panic!("seen after a visit");
+    };
+
+    let now = game.current_tick();
+    set_tick(
+        &mut game,
+        now + 4 * crate::tuning::SETTLEMENT_MARKET_ROTATION_TICKS + 5000,
+    );
+
+    let TownGoods::Seen { offers, age } = game.town_goods(key) else {
+        panic!("still seen");
+    };
+    assert_eq!(offers, before);
+    assert_eq!(age, "long ago");
+}
+
+#[test]
+fn a_town_never_reached_is_not_seen() {
+    let mut game = game();
+    let key = town_east_of_player(&mut game, 0);
+    assert_eq!(game.town_goods(key), crate::sites::TownGoods::NotSeen);
+}
+
+#[test]
+fn the_research_shows_every_known_towns_live_shelf() {
+    use crate::sites::{TownGoods, seen_offers};
+    let mut game = game();
+    let key = town_east_of_player(&mut game, 0);
+    assert!(!game.live_shelf_known());
+    assert_eq!(game.town_goods(key), TownGoods::NotSeen);
+    // Before reading the shelf beside the town: the chain raises the zone,
+    // and prices follow the zone.
+    unlock_research_chain(&mut game, crate::tuning::LIVE_SHELF_RESEARCH);
+    assert!(game.live_shelf_known());
+    let beside = seen_offers(&game.settlement_view(key).unwrap().offers);
+    // Far from the town, with no visit ever recorded.
+    let mut pos = game
+        .world
+        .get_mut::<Position>(game.player_entity())
+        .unwrap();
+    pos.x += 400;
+    assert!(game.settlement_view(key).is_none(), "out of reach");
+    assert_eq!(game.town_goods(key), TownGoods::Live { offers: beside });
+}
+
+#[test]
+fn a_commit_rerecords_the_shelf() {
+    use crate::sites::TownGoods;
+    let mut game = game();
+    let key = town_east_of_player(&mut game, 0);
+    visit(&mut game);
+    let now = game.current_tick();
+    set_tick(&mut game, now + 10_000);
+    let scrap = crate::items::ItemId::from(crate::items::ids::CORE_FRAGMENT);
+    game.world
+        .get_mut::<Inventory>(game.player_entity())
+        .unwrap()
+        .add(scrap.clone(), 2);
+    assert!(matches!(
+        game.town_goods(key),
+        TownGoods::Seen {
+            age: "long ago",
+            ..
+        }
+    ));
+
+    game.commit_settlement_basket(key, vec![(GearCopy::plain(scrap), 2)], Vec::new())
+        .expect("the basket commits");
+
+    assert!(matches!(
+        game.town_goods(key),
+        TownGoods::Seen {
+            age: "just now",
+            ..
+        }
+    ));
+}

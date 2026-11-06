@@ -13,10 +13,12 @@
 mod log;
 mod seen;
 mod time;
+mod view;
 
 pub use log::*;
 pub use seen::*;
 pub use time::*;
+pub use view::*;
 
 /// Everything the Sites hub remembers that the world does not.
 #[derive(Clone, Debug, Default)]

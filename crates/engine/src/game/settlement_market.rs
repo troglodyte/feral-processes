@@ -213,6 +213,23 @@ impl Game {
         .round() as u32
     }
 
+    /// The shelf as the market screen lists it: `settlement_shelf` for this
+    /// epoch, grouped for the eye. The one place that grouping is done, so
+    /// the Sites hub's live shelf and the counter cannot list differently.
+    ///
+    /// Grouped here and never in `settlement_shelf`, the caravan screen's own
+    /// rule: the shelf's round-robin lead would stop rotating if sorted in
+    /// place.
+    pub(crate) fn settlement_shelf_grouped(
+        &mut self,
+        key: SettlementKey,
+    ) -> Vec<views::CaravanOffer> {
+        let epoch = self.settlement_epoch();
+        let mut offers = self.settlement_shelf(key, epoch);
+        offers.sort_by_key(|offer| (self.caravan_group(&offer.kind).0, offer.index));
+        offers
+    }
+
     /// A settlement's own counter — see `Game::caravan_view`'s contract,
     /// carried over: `None` answers both "is anyone trading here" and
     /// spares every caller a second reach check.
@@ -241,12 +258,7 @@ impl Game {
                 closed,
             });
         }
-        let epoch = self.settlement_epoch();
-        let mut offers = self.settlement_shelf(key, epoch);
-        // Grouped for the eye here and never in `settlement_shelf`, the
-        // caravan screen's own rule: the shelf's round-robin lead would
-        // stop rotating if sorted in place.
-        offers.sort_by_key(|offer| (self.caravan_group(&offer.kind).0, offer.index));
+        let offers = self.settlement_shelf_grouped(key);
         let currency = self.trade_currency();
         let credits = self
             .world
@@ -387,6 +399,7 @@ impl Game {
         });
         if settled.is_ok() {
             self.credit_trade_volume(key, volume);
+            self.record_shelf_seen(key);
             self.note_deed(crate::contracts::Deed::TradedWithTown);
             self.note_site(
                 crate::RouteDestinationId::Settlement(key),

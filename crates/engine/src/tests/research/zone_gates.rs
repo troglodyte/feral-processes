@@ -29,7 +29,10 @@ fn no_research_node_is_left_unlocking_nothing() {
                         .any(|p| p.recipe.research.as_deref() == Some(node.id.as_str()))
                 })
                 || !def.unlocks_tools.is_empty()
-                || def.decompiler.is_some(),
+                || def.decompiler.is_some()
+                // Code-gated, not data-gated: `Game::live_shelf_known`
+                // reads this node, so it unlocks the Sites hub's live shelf.
+                || node.id == tuning::LIVE_SHELF_RESEARCH,
             "{} unlocks nothing and is dead weight in the tree",
             node.id
         );

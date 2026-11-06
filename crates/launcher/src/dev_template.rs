@@ -453,6 +453,21 @@ mod tests {
             "no bounty row on the compass: {:?}",
             rows.iter().map(|r| r.label.as_str()).collect::<Vec<_>>()
         );
+
+        // The quarry is the contract's to respawn, so the save must not also
+        // carry it as an ordinary creature: that copy loads unmarked beside
+        // the respawn. (25, 50) is the anchor the contract in the RON names.
+        let bodies: Vec<_> = game
+            .view_entities_at((25, 50), 0, 0)
+            .into_iter()
+            .filter(|e| !e.is_structure && e.sprite.is_some())
+            .collect();
+        assert_eq!(
+            bodies.len(),
+            1,
+            "exactly one body at the quarry's anchor: {:?}",
+            bodies.iter().map(|e| e.sprite.clone()).collect::<Vec<_>>()
+        );
     }
 
     /// Loading is not the bar for `tactical` either: it exists so a session

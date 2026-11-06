@@ -204,13 +204,7 @@ fn draw_rail(
         slot += 1;
         let page = match line {
             RailLine::Section(name) => {
-                painter.ui(
-                    name,
-                    rail.rows.x,
-                    base,
-                    m.small(),
-                    hud::palette::FAINT,
-                );
+                painter.ui(name, rail.rows.x, base, m.small(), hud::palette::FAINT);
                 continue;
             }
             RailLine::Page(page) => *page,

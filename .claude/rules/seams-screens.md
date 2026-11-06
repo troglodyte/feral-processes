@@ -56,10 +56,16 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   that isn't drawn.
 - **A group menu's rows are hidden dynamically**, so `command_rows`
   must be the *only* source of them, for the base's pages and the party's.
-- **Every hub — `b`, `i` and `c` — walks one nav rule,
+- **Every hub — `b`, `i`, `c`, `w` and Esc's game menu — walks one nav rule,
   `App::handle_hub_nav`, `App::screen_claims` is the one place a page
   takes an arrow or `Esc` back from it, and what a hub is lives in its
-  `HubKind` impl, never in a `match hub`.**
+  `HubKind` impl, never in a `match hub`; the rail is `HubKind::pages` and
+  nothing else, the page is held in `App` by `HubPageKey` and checked
+  against the `Mode` (`hub_at` is `None` off the held page's screens),
+  `App::enter_hub_at` names the page and `settle_hub` is only the default
+  for a jump that names none (it adopts a page only when exactly one offers
+  the screen), and the `shared_screens_are_pinned` census forces the
+  explicit door for any screen several pages share.**
 - **A Broker's board is derived, never stored** — seeded off `(world seed,
   zone, epoch)`.
 - **Reading a Broker's board and signing it are two questions, and

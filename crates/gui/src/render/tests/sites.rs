@@ -418,3 +418,50 @@ fn the_outpost_name_popup_fits() {
         "outpost name",
     );
 }
+
+/// The census tolerates a site page drawing nothing, because which pages
+/// have a site depends on its map; with towns and outposts on the rail each
+/// one must say the refusal exactly once, or a `None` handed to its popup
+/// would pass unseen.
+#[test]
+fn every_site_page_draws_a_refusal_once() {
+    let mut app = sites_app();
+    let mut fx = Fx::new();
+    app.handle_key(GameKey::Char('w'));
+    let mut seen = std::collections::BTreeSet::new();
+    // Several sites offer each tab, so `settle_hub` adopts none: walk the
+    // rail with the keys instead, holding a real page.
+    for _ in 0..8 {
+        if app.mode == Mode::Playing {
+            break;
+        }
+        app.handle_key(GameKey::Right);
+        for _ in 0..6 {
+            if !super::refusals::SITE_PAGES.contains(&app.mode) {
+                break;
+            }
+            app.status_line = Some(super::refusals::CENSUS_REFUSAL.to_string());
+            let (_, shapes) =
+                crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
+            let drawn = crate::paint::painted_text(&shapes)
+                .iter()
+                .filter(|t| t.contains(super::refusals::CENSUS_REFUSAL))
+                .count();
+            assert_eq!(drawn, 1, "{:?} painted the refusal {drawn} times", app.mode);
+            seen.insert(format!("{:?}", app.mode));
+            app.handle_key(GameKey::Right);
+        }
+        for _ in 0..8 {
+            if app.hub_on_rail {
+                break;
+            }
+            app.handle_key(GameKey::Left);
+        }
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(
+        seen.len(),
+        super::refusals::SITE_PAGES.len(),
+        "the walk reached only {seen:?}"
+    );
+}

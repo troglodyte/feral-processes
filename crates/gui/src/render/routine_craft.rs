@@ -252,7 +252,10 @@ pub(super) fn pick_rows(game: &Game, draft: &RoutineDraft, selected: usize) -> V
 /// The name field's popup.
 pub(super) fn name_rows(draft: &RoutineDraft) -> Vec<Row> {
     name_field_rows(
-        "Name the routine (1-24 characters)".to_string(),
+        format!(
+            "Name the routine (1-{} characters)",
+            feral_processes_engine::tuning::CRAFT_NAME_MAX
+        ),
         &draft.name,
         &["Type a name", "Left/Right move", "Enter or Esc finish"],
     )

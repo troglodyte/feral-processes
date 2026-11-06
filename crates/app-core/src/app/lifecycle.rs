@@ -325,7 +325,7 @@ impl App {
     /// applies the choice; `Game::new` keeps its own signature and is what
     /// the ~1,600 test call sites use.
     pub(crate) fn start_new_game(&mut self, difficulty: DifficultyMode, choice: &CharacterChoice) {
-        let seed = self.new_game_seed.unwrap_or_else(|| {
+        let seed = self.new_game_seed.take().unwrap_or_else(|| {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs() as u32)

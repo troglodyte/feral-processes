@@ -190,7 +190,7 @@ const ALL_MODES: [Mode; 183] = [
     Mode::SpriteEditor,
 ];
 
-const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
+pub(super) const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
 
 /// The modes whose screen needs state a fresh run has not got — a
 /// pending trade, a program picked to fuse, a routine chosen to extract.
@@ -265,7 +265,7 @@ const NEEDS_PENDING_STATE: [Mode; 42] = [
 
 /// The Sites hub's site pages: they draw only when the rail holds a site,
 /// which is the map's doing and not the census's.
-const SITE_PAGES: [Mode; 5] = [
+pub(super) const SITE_PAGES: [Mode; 5] = [
     Mode::SiteStatus,
     Mode::SiteGoods,
     Mode::SiteRoutes,
@@ -306,7 +306,8 @@ fn every_screen_draws_a_refusal_exactly_once() {
         if SITE_PAGES.contains(&mode) {
             // Which site pages have a site to draw depends on the map: a
             // seed with a town on the rail draws the refusal, one without
-            // draws nothing. Twice is the defect.
+            // draws nothing. Twice is the defect; once with a site on the
+            // rail is pinned by `sites::every_site_page_draws_a_refusal_once`.
             assert!(drawn <= 1, "{mode:?} painted the refusal {drawn} times");
         } else if NEEDS_PENDING_STATE.contains(&mode) {
             assert_eq!(drawn, 0, "{mode:?} draws nothing here, so it cannot say it");

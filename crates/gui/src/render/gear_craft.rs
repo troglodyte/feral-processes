@@ -234,7 +234,10 @@ pub(super) fn pick_rows(
 
 pub(super) fn name_rows(draft: &DesignDraft) -> Vec<Row> {
     name_field_rows(
-        "Name the design (1-24 characters)".to_string(),
+        format!(
+            "Name the design (1-{} characters)",
+            feral_processes_engine::tuning::GEAR_NAME_MAX
+        ),
         &draft.name,
         &["Type a name", "Left/Right move", "Enter or Esc finish"],
     )

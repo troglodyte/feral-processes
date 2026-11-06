@@ -28,7 +28,7 @@ pub(super) fn town_def(name: &str) -> feral_processes_engine::settlements::Settl
     }
 }
 
-/// Rewrites the run's known sites: `towns` are visited and `Warm` (so a
+/// Rewrites the run's known sites: `towns` are visited and `Allied` (so a relay link and a
 /// standing route is allowed), `outposts` are `(tile, stock)`.
 pub(super) fn set_sites(
     app: &mut App,
@@ -58,7 +58,7 @@ pub(super) fn set_sites(
         data.standings.0.insert(
             key,
             feral_processes_engine::settlements::relations::Relation {
-                standing: feral_processes_engine::tuning::SETTLEMENT_WARM_STANDING,
+                standing: feral_processes_engine::tuning::SETTLEMENT_ALLIED_STANDING,
                 trade_credits: 0,
                 ..Default::default()
             },
@@ -218,7 +218,10 @@ fn turning_pages_keeps_the_site_when_tabs_share_a_mode() {
         Some(&HubPageKey::Site(RouteDestinationId::Settlement(TOWN_A)))
     );
     // The held key, not the mode, says which of two towns this is.
-    assert_eq!(app.held_site(), Some(RouteDestinationId::Settlement(TOWN_A)));
+    assert_eq!(
+        app.held_site(),
+        Some(RouteDestinationId::Settlement(TOWN_A))
+    );
 }
 
 #[test]
@@ -295,7 +298,10 @@ fn row_counts_follow_each_tab() {
         &[(TOWN_A, "Alder", FAR_TILE)],
         &[(
             (520, 500),
-            vec![(ItemId::from("cache_grain"), 3), (ItemId::from("raw_trace"), 1)],
+            vec![
+                (ItemId::from("cache_grain"), 3),
+                (ItemId::from("raw_trace"), 1),
+            ],
         )],
     );
     app.handle_key(GameKey::Char('w'));
@@ -315,8 +321,250 @@ fn row_counts_follow_each_tab() {
     app.enter_hub_at(Hub::Sites, HubPageKey::Site(post), Mode::OutpostStock);
     assert_eq!(app.outpost_stock_split(), (2, 0));
     assert_eq!(app.sites_row_count(), 3);
-    let routes = app.game.as_mut().unwrap().dispatch_outpost_route((520, 500), false);
+    let routes = app
+        .game
+        .as_mut()
+        .unwrap()
+        .dispatch_outpost_route((520, 500), false);
     assert!(routes.is_ok(), "{routes:?}");
     assert_eq!(app.outpost_stock_split(), (2, 1));
     assert_eq!(app.sites_row_count(), 4);
+}
+
+// ----- actions and "came from" -----
+
+fn site(key: SettlementKey) -> HubPageKey {
+    HubPageKey::Site(RouteDestinationId::Settlement(key))
+}
+
+/// At base with "Alder" (A) far away and "Birch" (B) beside the party.
+fn app_beside_birch(seed: u32) -> App {
+    let mut app = app_at_a_relay(seed, &ItemId::from("cache_grain"), 40);
+    set_sites(
+        &mut app,
+        &[
+            (TOWN_A, "Alder", FAR_TILE),
+            (TOWN_B, "Birch", NEAR_TOWN_TILE),
+        ],
+        &[],
+    );
+    app
+}
+
+fn open_beside(app: &mut App, tab: Mode) {
+    app.handle_key(GameKey::Char('w'));
+    let page = app.hub_page().cloned().expect("the hub opened");
+    app.enter_hub_at(Hub::Sites, page, tab);
+    app.hub_on_rail = false;
+}
+
+#[test]
+fn esc_from_the_market_returns_to_the_goods_tab_of_that_town() {
+    let mut app = app_beside_birch(7120);
+    open_beside(&mut app, Mode::SiteGoods);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::SettlementMarket, "{:?}", app.status_line);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::SiteGoods);
+    assert_eq!(app.hub_page(), Some(&site(TOWN_B)));
+    assert!(!app.hub_on_rail);
+}
+
+#[test]
+fn opening_the_market_from_the_hub_remembers_the_shelf() {
+    let mut app = app_beside_birch(7121);
+    open_beside(&mut app, Mode::SiteGoods);
+    assert_eq!(app.sites_row_count(), 0, "never seen");
+    app.handle_key(GameKey::Enter);
+    app.handle_key(GameKey::Esc);
+    assert!(app.sites_row_count() > 0, "the shelf was captured");
+}
+
+#[test]
+fn esc_from_the_market_opened_on_the_visit_page_still_returns_there() {
+    let mut app = app_beside_birch(7122);
+    app.pending_settlement = Some(TOWN_B);
+    app.mode = Mode::Settlement;
+    app.handle_key(GameKey::Char('M'));
+    assert_eq!(app.mode, Mode::SettlementMarket);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Settlement);
+}
+
+#[test]
+fn the_board_returns_to_the_jobs_tab() {
+    let mut app = app_beside_birch(7123);
+    open_beside(&mut app, Mode::SiteJobs);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::SettlementBoard);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        (app.mode, app.hub_page()),
+        (Mode::SiteJobs, Some(&site(TOWN_B)))
+    );
+}
+
+#[test]
+fn route_cargo_returns_to_its_routes_tab() {
+    let mut app = app_beside_birch(7124);
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::RouteCargo, "{:?}", app.status_line);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        (app.mode, app.hub_page()),
+        (Mode::SiteRoutes, Some(&site(TOWN_A)))
+    );
+    assert!(!app.hub_on_rail);
+}
+
+#[test]
+fn the_post_picker_and_the_take_return_to_their_tabs() {
+    let mut app = app_at_a_relay(7125, &ItemId::from("cache_grain"), 40);
+    let tile = (0, -2);
+    set_sites(
+        &mut app,
+        &[],
+        &[(tile, vec![(ItemId::from("cache_grain"), 4)])],
+    );
+    let post = HubPageKey::Site(RouteDestinationId::Outpost(tile));
+    open_beside(&mut app, Mode::OutpostCrew);
+    app.handle_key(GameKey::Char('P'));
+    assert_eq!(app.mode, Mode::OutpostPost, "{:?}", app.status_line);
+    app.handle_key(GameKey::Esc);
+    assert_eq!((app.mode, app.hub_page()), (Mode::OutpostCrew, Some(&post)));
+
+    app.enter_hub_at(Hub::Sites, post.clone(), Mode::OutpostStock);
+    app.handle_key(GameKey::Char('C'));
+    assert_eq!(app.mode, Mode::Transfer, "{:?}", app.status_line);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        (app.mode, app.hub_page()),
+        (Mode::OutpostStock, Some(&post))
+    );
+}
+
+#[test]
+fn an_at_site_action_is_refused_on_another_sites_entry() {
+    let mut app = app_beside_birch(7126);
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteGoods);
+    app.hub_on_rail = false;
+    let before = tick(&app);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::SiteGoods);
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Walk over to Alder to trade.")
+    );
+    assert_eq!(tick(&app), before);
+}
+
+#[test]
+fn base_actions_work_beside_a_site_next_to_the_floor() {
+    let mut app = app_beside_birch(7127);
+    app.handle_key(GameKey::Char('w'));
+    assert_eq!(
+        app.held_site(),
+        Some(RouteDestinationId::Settlement(TOWN_B))
+    );
+    // Another site's route still dispatches from the base floor.
+    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::RouteCargo);
+}
+
+#[test]
+fn stop_repeating_clears_standing_and_keeps_the_trip() {
+    let mut app = app_beside_birch(7128);
+    let sent = app.game.as_mut().unwrap().dispatch_route(
+        TOWN_A,
+        vec![(ItemId::from("cache_grain"), 3)],
+        true,
+    );
+    assert!(sent.is_ok(), "{sent:?}");
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(app.status_line, None);
+    let reports = app.game.as_ref().unwrap().route_reports();
+    assert_eq!(reports.len(), 1);
+    assert!(!reports[0].standing);
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("There's no standing route there to cut.")
+    );
+}
+
+#[test]
+fn abandon_from_the_hub_drops_the_contract() {
+    let mut app = app_beside_birch(7129);
+    let game = app.game.as_mut().unwrap();
+    let rows = game.settlement_board(TOWN_B).expect("beside the counter");
+    let row = rows.iter().find(|r| !r.tutorial).expect("a giveable job");
+    let accepted = game.accept_contract(&row.id, Some(TOWN_B));
+    assert!(accepted.is_ok(), "{accepted:?}");
+    open_beside(&mut app, Mode::SiteJobs);
+    assert_eq!(app.sites_row_count(), 1);
+    app.handle_key(GameKey::Char('A'));
+    assert_eq!(app.status_line, None);
+    assert_eq!(app.sites_row_count(), 0);
+}
+
+#[test]
+fn travel_from_the_hub_leaves_it_and_drains_the_visit() {
+    let mut app = app_beside_birch(7130);
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteStatus);
+    app.hub_on_rail = false;
+    let before = tick(&app);
+    app.handle_key(GameKey::Char('T'));
+    assert!(app.hub_at().is_none(), "{:?}", app.status_line);
+    assert!(tick(&app) > before, "{:?}", app.status_line);
+    assert!(app.game.as_mut().unwrap().take_visit().is_none());
+}
+
+#[test]
+fn every_refusal_lands_on_the_status_line_and_spends_nothing() {
+    let mut app = app_with_far_sites(7131);
+    let post = HubPageKey::Site(RouteDestinationId::Outpost((520, 500)));
+    let cases = [
+        (site(TOWN_A), Mode::SiteStatus, GameKey::Char('G')),
+        (site(TOWN_A), Mode::SiteGoods, GameKey::Enter),
+        (site(TOWN_A), Mode::SiteJobs, GameKey::Enter),
+        (site(TOWN_A), Mode::SiteJobs, GameKey::Char('A')),
+        (site(TOWN_A), Mode::SiteRoutes, GameKey::Char('S')),
+        (post.clone(), Mode::OutpostStatus, GameKey::Char('R')),
+        (post.clone(), Mode::OutpostCrew, GameKey::Char('U')),
+        (post.clone(), Mode::OutpostCrew, GameKey::Char('P')),
+        (post, Mode::OutpostStock, GameKey::Char('C')),
+    ];
+    for (page, tab, key) in cases {
+        app.handle_key(GameKey::Char('w'));
+        app.enter_hub_at(Hub::Sites, page, tab);
+        app.hub_on_rail = false;
+        app.status_line = None;
+        let before = tick(&app);
+        app.handle_key(key);
+        assert!(app.status_line.is_some(), "{tab:?} {key:?} said nothing");
+        assert_eq!(app.mode, tab, "{tab:?} {key:?} left the tab");
+        assert_eq!(tick(&app), before, "{tab:?} {key:?} spent a tick");
+    }
+}
+
+#[test]
+fn a_new_route_off_base_is_refused() {
+    let mut app = test_app(7132);
+    set_sites(&mut app, &[(TOWN_A, "Alder", FAR_TILE)], &[]);
+    app.mode = Mode::SiteRoutes;
+    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::SiteRoutes);
+    assert!(app.status_line.is_some());
 }

@@ -25,7 +25,6 @@ pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
 pub use app::crafting::{craft_list, craft_visible};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
-pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, TOWN_TABS, sites_screen_keys};
 pub use app::dev_console::{DEV_CONSOLE_KEY, DEV_CONSOLE_TICKS, DevAction, DevConsoleRow};
 pub use app::dev_item_picker::dev_item_visible;
 pub use app::dispatch::{RouteCargoBasket, SortieSquadRow};
@@ -53,6 +52,7 @@ pub use app::routine_craft::{
     BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft,
 };
 pub use app::shortcuts::{ShortcutArea, ShortcutGroup, ShortcutSheet, shortcut_sheet_for};
+pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, TOWN_TABS, sites_screen_keys};
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
     DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,

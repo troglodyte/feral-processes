@@ -211,7 +211,7 @@ impl App {
                         if game.sever_route(target) {
                             self.status_line = None;
                         } else {
-                            self.refuse("There's no standing route there to cut.");
+                            self.refuse(crate::app::sites_hub::NO_STANDING_ROUTE);
                         }
                     }
                     _ => self.refuse("Highlight a destination to cut a standing route from."),
@@ -397,7 +397,7 @@ impl App {
             self.pending_dispatch_destination = None;
             self.route_cargo_amounts.clear();
             self.status_line = None;
-            self.mode = Mode::Dispatch;
+            self.leave_site_screen(Mode::Dispatch);
             return;
         }
         match self.pending_dispatch_destination {
@@ -405,7 +405,7 @@ impl App {
                 self.handle_settlement_cargo_key(destination, key)
             }
             Some(RouteDestinationId::Outpost(tile)) => self.handle_outpost_cargo_key(tile, key),
-            None => self.mode = Mode::Dispatch,
+            None => self.leave_site_screen(Mode::Dispatch),
         }
     }
 
@@ -441,7 +441,7 @@ impl App {
                         self.route_cargo_amounts.clear();
                         self.route_standing = false;
                         self.status_line = None;
-                        self.mode = Mode::Dispatch;
+                        self.leave_site_screen(Mode::Dispatch);
                     }
                     Err(e) => {
                         let line = route_refusal_line(game, e);
@@ -467,7 +467,7 @@ impl App {
                         self.pending_dispatch_destination = None;
                         self.route_standing = false;
                         self.status_line = None;
-                        self.mode = Mode::Dispatch;
+                        self.leave_site_screen(Mode::Dispatch);
                     }
                     Err(e) => {
                         let line = route_refusal_line(game, e);

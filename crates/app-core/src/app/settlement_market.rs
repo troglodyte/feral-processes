@@ -89,7 +89,7 @@ impl App {
     pub(crate) fn handle_settlement_market_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.settlement_amounts.clear();
-            self.mode = Mode::Settlement;
+            self.leave_site_screen(Mode::Settlement);
             return;
         }
         let Some(settlement_key) = self.pending_settlement else {

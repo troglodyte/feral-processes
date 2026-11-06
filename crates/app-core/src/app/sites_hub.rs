@@ -168,9 +168,7 @@ impl App {
                 .game
                 .as_ref()
                 .map_or(0, |g| g.town_contracts(key).len()),
-            (Mode::SiteLog, Some(site)) => {
-                self.game.as_ref().map_or(0, |g| g.site_log(site).len())
-            }
+            (Mode::SiteLog, Some(site)) => self.game.as_ref().map_or(0, |g| g.site_log(site).len()),
             (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(tile))) => {
                 self.game
                     .as_mut()
@@ -182,10 +180,9 @@ impl App {
                 let (stock, routes) = self.outpost_stock_split();
                 stock + routes + 1
             }
-            (Mode::RoutesInFlight, _) => self
-                .game
-                .as_ref()
-                .map_or(0, |g| g.routes_in_flight().len()),
+            (Mode::RoutesInFlight, _) => {
+                self.game.as_ref().map_or(0, |g| g.routes_in_flight().len())
+            }
             _ => 0,
         }
     }
@@ -252,6 +249,16 @@ impl App {
         self.menu_selected = self.menu_selected.min(rows.saturating_sub(1));
         let row = self.menu_selected;
         let site = self.held_site();
+        match self.mode {
+            Mode::SiteStatus | Mode::SiteGoods | Mode::SiteJobs => {
+                self.town_tab_key(site, key, row)
+            }
+            Mode::OutpostStatus | Mode::OutpostCrew => self.outpost_tab_key(site, key, row, rows),
+            _ => self.traffic_tab_key(site, key, row),
+        }
+    }
+
+    fn town_tab_key(&mut self, site: Option<RouteDestinationId>, key: GameKey, row: usize) {
         match (self.mode, site, key) {
             (Mode::SiteStatus, Some(RouteDestinationId::Settlement(k)), GameKey::Char('T')) => {
                 self.travel_from_hub(k, Game::travel_to_settlement)
@@ -300,6 +307,63 @@ impl App {
                 game.abandon_contract(&contract.id);
                 self.status_line = None;
             }
+            _ => {}
+        }
+    }
+
+    fn outpost_tab_key(
+        &mut self,
+        site: Option<RouteDestinationId>,
+        key: GameKey,
+        row: usize,
+        rows: usize,
+    ) {
+        match (self.mode, site, key) {
+            (Mode::OutpostStatus, Some(RouteDestinationId::Outpost(t)), GameKey::Char('R')) => {
+                let outcome = self.game.as_mut().map(|g| g.repair_outpost(t));
+                if let Some(outcome) = outcome {
+                    self.report(outcome);
+                }
+            }
+            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Char('U')) => {
+                let Some(game) = &mut self.game else { return };
+                let Some(&entity) = game.outpost_crew(t).get(row) else {
+                    self.refuse("Select a crew row to recall.");
+                    return;
+                };
+                let outcome = game.recall_from_outpost(entity);
+                self.report(outcome);
+            }
+            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Char('P')) => {
+                self.post_from_hub(t)
+            }
+            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Enter) => {
+                if row + 1 == rows {
+                    self.post_from_hub(t);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn traffic_tab_key(&mut self, site: Option<RouteDestinationId>, key: GameKey, row: usize) {
+        match (self.mode, site, key) {
+            (Mode::OutpostStock, Some(RouteDestinationId::Outpost(t)), GameKey::Char('C')) => {
+                if !self.beside_held_site() {
+                    let line = walk_over(&self.held_site_name(), "to take stock");
+                    self.refuse(line);
+                    return;
+                }
+                let Some(game) = &mut self.game else { return };
+                let offer = game.outpost_transfer_offer(t);
+                if offer.is_empty() {
+                    self.refuse("There's nothing standing at this outpost to take.");
+                    return;
+                }
+                self.pending_outpost = Some(t);
+                self.remember_site_tab();
+                self.open_transfer(offer, Vec::new(), None, 0, TransferSource::Outpost(t));
+            }
             (Mode::SiteRoutes | Mode::OutpostStock, Some(s), GameKey::Char('S')) => {
                 self.sever_from_hub(s)
             }
@@ -324,45 +388,6 @@ impl App {
                 if row >= stock + routes {
                     self.new_route_from_hub(s);
                 }
-            }
-            (Mode::OutpostStatus, Some(RouteDestinationId::Outpost(t)), GameKey::Char('R')) => {
-                let outcome = self.game.as_mut().map(|g| g.repair_outpost(t));
-                if let Some(outcome) = outcome {
-                    self.report(outcome);
-                }
-            }
-            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Char('U')) => {
-                let Some(game) = &mut self.game else { return };
-                let Some(&entity) = game.outpost_crew(t).get(row) else {
-                    self.refuse("Select a crew row to recall.");
-                    return;
-                };
-                let outcome = game.recall_from_outpost(entity);
-                self.report(outcome);
-            }
-            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Char('P')) => {
-                self.post_from_hub(t)
-            }
-            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Enter) => {
-                if row + 1 == rows {
-                    self.post_from_hub(t);
-                }
-            }
-            (Mode::OutpostStock, Some(RouteDestinationId::Outpost(t)), GameKey::Char('C')) => {
-                if !self.beside_held_site() {
-                    let line = walk_over(&self.held_site_name(), "to take stock");
-                    self.refuse(line);
-                    return;
-                }
-                let Some(game) = &mut self.game else { return };
-                let offer = game.outpost_transfer_offer(t);
-                if offer.is_empty() {
-                    self.refuse("There's nothing standing at this outpost to take.");
-                    return;
-                }
-                self.pending_outpost = Some(t);
-                self.remember_site_tab();
-                self.open_transfer(offer, Vec::new(), None, 0, TransferSource::Outpost(t));
             }
             _ => {}
         }

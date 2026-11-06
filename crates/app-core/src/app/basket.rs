@@ -273,10 +273,11 @@ impl App {
     /// rather than dropping the player onto the raw map underneath it.
     pub(crate) fn leave_basket(&mut self) {
         self.clear_basket();
-        self.mode = match self.transfer_source {
+        let fallback = match self.transfer_source {
             TransferSource::Base(_) => Mode::Playing,
             TransferSource::Outpost(_) => Mode::OutpostVisit,
         };
+        self.leave_site_screen(fallback);
     }
 
     /// The basket's teardown without the exit: the structure hub turns a

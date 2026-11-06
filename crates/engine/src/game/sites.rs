@@ -77,13 +77,15 @@ impl Game {
     /// Where the party stands relative to the sites. `beside` is a settlement
     /// within `settlement_reach`, else an outpost within
     /// `standing_at_outpost`; ties go to the lowest key, then the lowest tile.
+    /// Only a visited town counts: reach is wider than the bump that marks a
+    /// visit, so an unvisited town must not open its market or board here.
     pub fn site_reach(&self) -> SiteReach {
         let town = self
             .world
             .resource::<crate::resources::Settlements>()
             .0
             .iter()
-            .find(|(key, _)| self.settlement_reach(**key))
+            .find(|(key, known)| known.visited && self.settlement_reach(**key))
             .map(|(key, _)| RouteDestinationId::Settlement(*key));
         let beside = town.or_else(|| {
             self.world
@@ -100,9 +102,9 @@ impl Game {
     }
 
     /// Every known settlement by name, then every outpost by name. A town the
-    /// party has not walked to is listed under the compass's generic noun, so
-    /// the rail leaks no name the world map keeps hidden. Ties fall to the
-    /// key, so two towns with one name stay in a stable order.
+    /// party has only discovered is listed by name too, as Dispatch's
+    /// destinations were, so its routes and relay stay reachable. Ties fall to
+    /// the key, so two towns with one name stay in a stable order.
     pub fn site_rail(&self) -> Vec<SiteRailEntry> {
         let stalled: BTreeSet<RouteDestinationId> = self
             .route_reports()
@@ -115,7 +117,7 @@ impl Game {
             .resource::<crate::resources::Settlements>()
             .0
             .iter()
-            .map(|(key, known)| (known.compass_label(), *key))
+            .map(|(key, known)| (known.def.name.clone(), *key))
             .collect();
         towns.sort();
         let mut rail = Vec::new();
@@ -176,7 +178,7 @@ impl Game {
             .0
             .get(&key)?
             .clone();
-        let name = known.compass_label();
+        let name = known.def.name.clone();
         let band = self.standing_band(key);
         let kind = self.settlement_kind(key)?;
         let reading = self.growth_reading(key);

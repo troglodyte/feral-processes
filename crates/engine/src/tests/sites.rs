@@ -516,7 +516,7 @@ fn two_towns_with_one_name_stay_in_key_order() {
 }
 
 #[test]
-fn an_unvisited_town_is_on_the_rail_without_its_name() {
+fn an_unvisited_town_is_on_the_rail_by_name() {
     let mut game = game();
     forget_towns(&mut game);
     let key = SettlementKey { rx: 1, ry: 0 };
@@ -532,8 +532,8 @@ fn an_unvisited_town_is_on_the_rail_without_its_name() {
     let rail = game.site_rail();
 
     let listed: Vec<&str> = rail.iter().map(|e| e.name.as_str()).collect();
-    assert_eq!(listed, vec!["Seen", "a settlement"]);
-    assert_eq!(rail[1].site, town_site(key));
+    assert_eq!(listed, vec!["Hidden", "Seen"]);
+    assert_eq!(rail[0].site, town_site(key));
 }
 
 #[test]
@@ -594,6 +594,17 @@ fn reach_is_base_beside_a_site_or_neither() {
     pos.x += 400;
     let reach = game.site_reach();
     assert!(!reach.on_base && reach.beside.is_none() && !reach.opens());
+}
+
+#[test]
+fn an_unvisited_town_in_reach_is_not_beside() {
+    let mut game = game();
+    let anchor = game.anchor_position().unwrap();
+    let key = SettlementKey { rx: 0, ry: 0 };
+    place_settlement(&mut game, key, anchor.0 + 1, anchor.1);
+    name_town(&mut game, key, "Unbumped", false);
+    assert!(game.settlement_reach(key));
+    assert_eq!(game.site_reach().beside, None);
 }
 
 #[test]

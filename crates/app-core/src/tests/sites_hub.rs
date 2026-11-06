@@ -731,10 +731,10 @@ fn app_at_base_with_an_unvisited_ally(seed: u32) -> (App, SettlementKey) {
 }
 
 #[test]
-fn an_unvisited_allied_town_is_on_the_rail_by_the_generic_noun() {
+fn an_unvisited_allied_town_is_on_the_rail_by_name() {
     let (app, key) = app_at_base_with_an_unvisited_ally(7150);
     let titles: Vec<String> = rail(&app).into_iter().map(|(t, _, _)| t).collect();
-    assert_eq!(titles, ["a settlement", "Caravans"]);
+    assert_eq!(titles, ["Test Settlement", "Caravans"]);
     assert_eq!(
         Hub::Sites.kind().pages(&app)[0].key,
         HubPageKey::Site(RouteDestinationId::Settlement(key))
@@ -792,6 +792,6 @@ fn an_unvisited_town_refuses_its_beside_only_actions_from_the_base() {
     assert_eq!(app.mode, Mode::SiteGoods);
     assert_eq!(
         app.status_line.as_deref(),
-        Some("Walk over to a settlement to trade.")
+        Some("Walk over to Test Settlement to trade.")
     );
 }

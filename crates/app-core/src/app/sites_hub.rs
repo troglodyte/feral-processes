@@ -231,8 +231,6 @@ impl App {
         let (Some(site), Some(game)) = (self.held_site(), self.game.as_ref()) else {
             return String::new();
         };
-        // The rail's own title, so a town the party has not visited is named
-        // by the same generic noun here as it is on the rail.
         game.site_rail()
             .into_iter()
             .find(|entry| entry.site == site)

@@ -1,7 +1,7 @@
 # 0043 A hub's rail is runtime data and its page is held, not derived
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user (the user chose this shape over a two-hook extension, 2026-11-06)
+- Status: Agreed
+- Decided by: user, on Claude's proposal (chose this shape over a two-hook extension, 2026-11-06)
 - Date: 2026-11-06
 - Pattern: Strategy (`app::hub::HubKind`), reshaped
 - Depends on: [0024](0024-code-is-organized-by-domain.md), [0014](0014-per-screen-state-and-one-screen-table.md)

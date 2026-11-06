@@ -91,11 +91,11 @@ chosen over a fixed Towns/Outposts/Caravans rail and over the
 structure hub's cycle-sites shape). The hub framework can't do this
 today: rail titles are static, rows have no glyph, and the page is found
 from the `Mode`, which every town shares. **[ADR 0043](../../adr/0043-a-hub-rail-is-runtime-data-and-its-page-is-held.md)
-(Proposed) makes every hub's rail runtime data and holds the current
+(Agreed) makes every hub's rail runtime data and holds the current
 page in `App` by key. The user chose this over a two-hook extension for
 long-term flexibility. The work is two steps: first move the four
 existing hubs onto the new model with no visible change, then build the
-Sites hub on it. Nothing is built until the ADR is Agreed.** Each rail row carries the
+Sites hub on it. ** Each rail row carries the
 glyph, the site name, and a section header (Towns and cities /
 Outposts / Traffic). Order: settlements by name, then outposts by
 name, then **Caravans**. The `!` mark (`HubKind::marks`) flags a site that

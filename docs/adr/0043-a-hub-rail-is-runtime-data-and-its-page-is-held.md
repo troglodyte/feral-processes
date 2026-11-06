@@ -30,6 +30,11 @@ They also explain the existing workarounds: the structure hub cycles structures 
 - **`App` holds where the player is in a hub:** which hub is open, its page key, and (as now) whether the cursor is on the rail.
   `HubKind::turn` writes it, `App::open_hub` restores it, and leaving the hub clears it.
   `App::hub_last` remembers a page key per hub instead of a `Mode`.
+- **The page is named when the caller knows it, and looked up only as a default** (user, 2026-11-06).
+  `App::enter_hub_at(hub, key, mode)` is the explicit door: it holds `key` and shows `mode`, which must be one of that page's screens.
+  Code that jumps onto a hub screen without naming a page (about 60 existing `self.mode = …` sites: map `D`/`N`, sub-screen returns) falls back to `App::settle_hub`, which adopts a page only when exactly one page across every hub offers that screen and otherwise keeps the page it holds — it never guesses.
+  A census lists every screen more than one page offers, pinned to an allowlist; a newly shared screen fails it until its entries go through `enter_hub_at` or a `turn`.
+  The existing jumps move to the explicit door when their code is next changed, never as a sweep.
 - **The held state is checked, never trusted blind.**
   `App::hub_at` answers from the held state only while the current `Mode` is one of the held page's `screens`, and returns `None` otherwise.
   A screen that leaves the hub by setting `mode` directly therefore falls out of the hub, exactly as it does today.

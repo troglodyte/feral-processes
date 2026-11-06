@@ -283,14 +283,16 @@ fn a_site_that_left_the_rail_reopens_on_the_first_page() {
 
 #[test]
 fn a_held_site_that_vanishes_does_not_panic() {
-    let mut app = app_with_far_sites(7110);
-    app.handle_key(GameKey::Char('w'));
-    app.handle_key(GameKey::Right);
-    set_sites(&mut app, &[], &[]);
-    assert_eq!(app.hub_at(), None);
-    assert_eq!(app.held_site(), None);
-    app.handle_key(GameKey::Down);
-    app.handle_key(GameKey::Esc);
+    for key in [GameKey::Esc, GameKey::Down, GameKey::Char('T')] {
+        let mut app = app_with_far_sites(7110);
+        app.handle_key(GameKey::Char('w'));
+        app.handle_key(GameKey::Right);
+        set_sites(&mut app, &[], &[]);
+        assert_eq!(app.hub_at(), None);
+        assert_eq!(app.held_site(), None);
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::Playing, "{key:?} must not strand the tab");
+    }
 }
 
 #[test]

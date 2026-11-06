@@ -240,6 +240,12 @@ impl App {
     }
 
     pub(crate) fn handle_sites_key(&mut self, key: GameKey) {
+        if self.hub_at().is_none() {
+            // The held site left the rail under the player; nothing on this
+            // tab is drawn any more, so leave rather than strand it.
+            self.close_screen();
+            return;
+        }
         let rows = self.sites_row_count();
         if matches!(
             key,

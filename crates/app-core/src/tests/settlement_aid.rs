@@ -1,5 +1,5 @@
 //! The two aid verbs and the keys that reach them — `[G]` and `[T]` on the
-//! town page, `[T]` on the Relay hub.
+//! town page, `[T]` on the Sites hub's Status tab.
 //!
 //! The fixtures are `tests/dispatch.rs`'s, reused rather than rebuilt: both
 //! verbs need a Relay standing, and the engine exposes no way to hand-place
@@ -17,7 +17,7 @@ use feral_processes_engine::tuning::SETTLEMENT_ALLIED_STANDING;
 
 /// Puts `key` at `standing` through a save round trip — app-core cannot
 /// reach `Game::adjust_standing`, which is `pub(crate)` on purpose.
-fn set_standing(app: &mut App, key: SettlementKey, standing: i32) {
+pub(super) fn set_standing(app: &mut App, key: SettlementKey, standing: i32) {
     let assets_dir = test_assets_dir();
     let path = scratch_path("aid_standing", standing.unsigned_abs());
     let game = app.game.as_mut().unwrap();
@@ -166,126 +166,3 @@ fn t_on_the_town_page_refuses_below_allied_and_stays_put() {
 // ---------------------------------------------------------------------------
 // `[T]` on the hub — the outbound half
 // ---------------------------------------------------------------------------
-
-/// A Relay, and one Allied destination known but never walked to.
-fn app_at_a_hub_with_an_ally(seed: u32) -> (App, SettlementKey) {
-    let mut app = app_at_a_relay(seed, &ItemId::from("cache_grain"), 10);
-    let key = SettlementKey { rx: 6, ry: 6 };
-    register_a_known_settlement(&mut app, key, (60, 60));
-    set_standing(&mut app, key, SETTLEMENT_ALLIED_STANDING);
-    app.mode = Mode::Dispatch;
-    app.menu_selected = 0;
-    (app, key)
-}
-
-/// The hub numbers sortie sites and route destinations continuously, so a
-/// destination action on a site row has to refuse — `[C]`'s own rule.
-#[test]
-fn t_on_a_site_row_refuses() {
-    let (mut app, _key) = app_at_a_hub_with_an_ally(7310);
-    let (sites, _destinations) = app.dispatch_hub_sections().unwrap_or_default();
-    if sites.is_empty() {
-        return; // no site to stand on; the destination case below still runs
-    }
-    app.menu_selected = 0;
-    let before = app.game.as_ref().unwrap().player_status().position;
-
-    app.handle_key(GameKey::Char('T'));
-
-    assert_eq!(app.game.as_ref().unwrap().player_status().position, before);
-    assert!(app.status_line.is_some(), "a site row travelled");
-}
-
-/// The arrival cue must never be left queued. `travel_to_settlement` sets
-/// `PendingVisit`, and `after_world_action` is the only thing that reads it
-/// — without that call the page opened later, on some unrelated action, for
-/// a town the party had already walked away from.
-///
-/// Every assertion here is unconditional: the first version of this test
-/// branched on whether the landing happened to be in reach, and in this
-/// fixture it never was, so its interesting half was dead code.
-#[test]
-fn t_on_a_destination_row_travels_and_leaves_no_cue_dangling() {
-    let (mut app, _key) = app_at_a_hub_with_an_ally(7311);
-    let (sites, destinations) = app.dispatch_hub_sections().unwrap_or_default();
-    assert!(
-        !destinations.is_empty(),
-        "the fixture registered no destination"
-    );
-    app.menu_selected = sites.len();
-    let town = (60, 60);
-
-    app.handle_key(GameKey::Char('T'));
-
-    assert_eq!(
-        app.status_line, None,
-        "the trip was refused: {:?}",
-        app.status_line
-    );
-    let landed = app.game.as_ref().unwrap().player_status().position;
-    assert_ne!(landed, town, "the party landed on the settlement tile");
-    assert!(
-        app.game.as_mut().unwrap().take_visit().is_none(),
-        "an arrival cue was left queued for a later, unrelated action to open"
-    );
-    assert_ne!(
-        app.mode,
-        Mode::Dispatch,
-        "the hub stayed open after the trip"
-    );
-}
-
-/// And the in-reach case, forced rather than hoped for: a town just past the
-/// base's floor guarantees the band-1 landing search answers within a tile of
-/// it, because the anchor itself is walkable — the party is standing on it.
-/// So the page must open, which is the half the old test never reached.
-#[test]
-fn arriving_within_reach_opens_the_town_page() {
-    let mut app = app_at_a_relay(7313, &ItemId::from("cache_grain"), 10);
-    let key = SettlementKey { rx: 6, ry: 6 };
-    register_a_known_settlement(&mut app, key, (0, 0));
-
-    let assets_dir = test_assets_dir();
-    let path = scratch_path("aid_near", 7313);
-    app.game.as_mut().unwrap().save(&path).unwrap();
-    let mut data = save::load_from_file(&path).unwrap();
-    let anchor = data.anchor.expect("the fixture founded a base");
-    // Just past the pocket's edge, so the town's footprint clears the base.
-    data.settlements.0.get_mut(&key).unwrap().tile =
-        (anchor.0, anchor.1 - TEST_POCKET_HALF_HEIGHT - 1);
-    save::save_to_file(&path, &data).unwrap();
-    app.game = Some(Game::load(&path, &assets_dir).unwrap());
-    let _ = std::fs::remove_file(&path);
-    set_standing(&mut app, key, SETTLEMENT_ALLIED_STANDING);
-
-    app.mode = Mode::Dispatch;
-    let (sites, destinations) = app.dispatch_hub_sections().unwrap_or_default();
-    assert!(!destinations.is_empty());
-    app.menu_selected = sites.len();
-
-    app.handle_key(GameKey::Char('T'));
-
-    assert_eq!(app.status_line, None, "the trip was refused");
-    assert_eq!(
-        app.mode,
-        Mode::Settlement,
-        "arriving in reach must open the page"
-    );
-    assert_eq!(app.pending_settlement, Some(key));
-}
-
-#[test]
-fn t_on_a_destination_below_allied_refuses_and_stays_at_the_hub() {
-    let (mut app, key) = app_at_a_hub_with_an_ally(7312);
-    set_standing(&mut app, key, 0);
-    app.mode = Mode::Dispatch;
-    let (sites, _destinations) = app.dispatch_hub_sections().unwrap_or_default();
-    app.menu_selected = sites.len();
-    let before = app.game.as_ref().unwrap().player_status().position;
-
-    app.handle_key(GameKey::Char('T'));
-
-    assert_eq!(app.game.as_ref().unwrap().player_status().position, before);
-    assert_eq!(app.mode, Mode::Dispatch);
-    assert!(app.status_line.is_some());
-}

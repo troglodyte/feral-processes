@@ -7,6 +7,7 @@ use super::support::*;
 use crate::app::sites_hub::SITES_OPEN_REFUSAL;
 use crate::*;
 use feral_processes_engine::items::ItemId;
+
 use feral_processes_engine::save;
 use feral_processes_engine::settlements::SettlementKey;
 
@@ -30,10 +31,12 @@ pub(super) fn town_def(name: &str) -> feral_processes_engine::settlements::Settl
 
 /// Rewrites the run's known sites: `towns` are visited and `Allied` (so a relay link and a
 /// standing route is allowed), `outposts` are `(tile, stock)`.
+type Tile = (i32, i32);
+
 pub(super) fn set_sites(
     app: &mut App,
     towns: &[(SettlementKey, &str, (i32, i32))],
-    outposts: &[((i32, i32), Vec<(ItemId, u32)>)],
+    outposts: &[(Tile, Vec<(ItemId, u32)>)],
 ) {
     let assets_dir = test_assets_dir();
     let path = scratch_path("sites_hub", 0);
@@ -566,5 +569,146 @@ fn a_new_route_off_base_is_refused() {
     app.hub_on_rail = false;
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::SiteRoutes);
+    assert!(app.status_line.is_some());
+}
+
+// ----- what Dispatch's destination rows used to prove -----
+
+fn open_routes_tab(app: &mut App, page: HubPageKey, tab: Mode) {
+    app.handle_key(GameKey::Char('w'));
+    app.enter_hub_at(Hub::Sites, page, tab);
+    app.hub_on_rail = false;
+}
+
+/// Editing the cargo basket and dispatching with Enter reaches
+/// `Game::dispatch_route`, and the quoted figure the basket carries never
+/// disagrees with what was asked for.
+#[test]
+fn right_builds_a_manifest_and_enter_dispatches_the_route() {
+    let mut app = app_beside_birch(7140);
+    let item = ItemId::from("cache_grain");
+    open_routes_tab(&mut app, site(TOWN_A), Mode::SiteRoutes);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::RouteCargo);
+
+    let basket = app.route_cargo_basket().expect("the site is pending");
+    let row = basket
+        .stock
+        .iter()
+        .position(|r| r.item == item)
+        .expect("the depot holds cargo of this item");
+    app.menu_selected = row;
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Right);
+    let basket = app.route_cargo_basket().unwrap();
+    assert_eq!(basket.cells[row].0, 2);
+    assert!(basket.quote > 0, "two units must quote for something");
+
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::SiteRoutes, "back on the tab it came from");
+    assert!(app.pending_dispatch_destination.is_none());
+    let reports = app.game.as_ref().unwrap().route_reports();
+    assert!(
+        reports
+            .iter()
+            .any(|r| r.destination == RouteDestinationId::Settlement(TOWN_A)),
+        "the trip must be recorded in flight"
+    );
+    assert_eq!(app.sites_row_count(), 2, "the trip and New route");
+}
+
+/// `T` toggles the standing flag, and an empty basket's Enter is refused
+/// through `App::refuse` rather than silently doing nothing.
+#[test]
+fn t_toggles_standing_and_an_empty_basket_is_refused() {
+    let mut app = app_beside_birch(7141);
+    open_routes_tab(&mut app, site(TOWN_A), Mode::SiteRoutes);
+    app.handle_key(GameKey::Enter);
+    assert!(!app.route_standing);
+    app.handle_key(GameKey::Char('T'));
+    assert!(app.route_standing);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::RouteCargo);
+    assert!(app.status_line.is_some());
+}
+
+#[test]
+fn an_outpost_route_has_no_manifest_and_dispatches_from_its_stock_tab() {
+    let mut app = app_at_a_relay(7142, &ItemId::from("cache_grain"), 40);
+    let tile = (520, 500);
+    set_sites(&mut app, &[], &[(tile, Vec::new())]);
+    let post = HubPageKey::Site(RouteDestinationId::Outpost(tile));
+    open_routes_tab(&mut app, post.clone(), Mode::OutpostStock);
+    assert_eq!(app.outpost_stock_split(), (0, 0));
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::RouteCargo);
+    let basket = app.route_cargo_basket().expect("the site is pending");
+    assert!(basket.stock.is_empty(), "an outpost leg carries no cargo");
+    assert_eq!(
+        basket.outpost_carry_cap,
+        Some(feral_processes_engine::tuning::ROUTE_OUTPOST_CARRY)
+    );
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        (app.mode, app.hub_page()),
+        (Mode::OutpostStock, Some(&post))
+    );
+    assert_eq!(app.outpost_stock_split(), (0, 1));
+}
+
+#[test]
+fn stop_repeating_reaches_an_outpost_route_from_its_stock_tab() {
+    let mut app = app_at_a_relay(7143, &ItemId::from("cache_grain"), 40);
+    let tile = (520, 500);
+    set_sites(&mut app, &[], &[(tile, Vec::new())]);
+    let sent = app
+        .game
+        .as_mut()
+        .unwrap()
+        .dispatch_outpost_route(tile, true);
+    assert!(sent.is_ok(), "{sent:?}");
+    let post = HubPageKey::Site(RouteDestinationId::Outpost(tile));
+    open_routes_tab(&mut app, post, Mode::OutpostStock);
+    app.handle_key(GameKey::Char('S'));
+    assert_eq!(app.status_line, None);
+    let reports = app.game.as_ref().unwrap().route_reports();
+    assert!(!reports[0].standing);
+}
+
+/// Just past the base's floor, so the landing search answers within reach of
+/// the town and the visit page must open.
+#[test]
+fn arriving_within_reach_opens_the_town_page() {
+    let mut app = app_at_a_relay(7144, &ItemId::from("cache_grain"), 10);
+    let anchor = app
+        .game
+        .as_mut()
+        .unwrap()
+        .anchor_position()
+        .expect("a base");
+    let tile = (anchor.0, anchor.1 - TEST_POCKET_HALF_HEIGHT - 1);
+    set_sites(&mut app, &[(TOWN_A, "Alder", tile)], &[]);
+    // The party stands in reach of this one, so name the far page directly.
+    open_routes_tab(&mut app, site(TOWN_A), Mode::SiteStatus);
+    app.handle_key(GameKey::Char('T'));
+    assert_eq!(app.status_line, None, "the trip was refused");
+    assert_eq!(
+        app.mode,
+        Mode::Settlement,
+        "arriving in reach opens the page"
+    );
+    assert_eq!(app.pending_settlement, Some(TOWN_A));
+    assert!(app.game.as_mut().unwrap().take_visit().is_none());
+}
+
+#[test]
+fn travel_below_allied_refuses_and_stays_on_the_tab() {
+    let mut app = app_beside_birch(7145);
+    super::settlement_aid::set_standing(&mut app, TOWN_A, 0);
+    open_routes_tab(&mut app, site(TOWN_A), Mode::SiteStatus);
+    let before = app.game.as_ref().unwrap().player_status().position;
+    app.handle_key(GameKey::Char('T'));
+    assert_eq!(app.game.as_ref().unwrap().player_status().position, before);
+    assert_eq!(app.mode, Mode::SiteStatus);
     assert!(app.status_line.is_some());
 }

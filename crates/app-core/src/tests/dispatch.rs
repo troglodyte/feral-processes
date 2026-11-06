@@ -124,31 +124,6 @@ pub(super) fn register_a_known_settlement(app: &mut App, key: SettlementKey, til
     let _ = std::fs::remove_file(&path);
 }
 
-/// A founded outpost, standing with no player-visited history —
-/// `register_a_known_settlement`'s shape one door over.
-/// `support::place_outpost_east_of_player`'s reason for going through the
-/// save rather than `Game::found_outpost` applies here too: a route test
-/// needs the record standing at a chosen tile, not walked to.
-fn register_a_known_outpost(app: &mut App, tile: (i32, i32)) {
-    let assets_dir = test_assets_dir();
-    let path = scratch_path("dispatch_outpost", 0);
-    let game = app.game.as_mut().unwrap();
-    game.save(&path).unwrap();
-    let mut data = save::load_from_file(&path).unwrap();
-    data.outposts.push(save::OutpostSave {
-        tile,
-        biome: feral_processes_engine::world::Biome::Deadlock,
-        growth: 0,
-        integrity: feral_processes_engine::tuning::OUTPOST_MAX_INTEGRITY,
-        stock: Vec::new(),
-        stale_ticks: 0,
-        cycle_progress: 0,
-    });
-    save::save_to_file(&path, &data).unwrap();
-    app.game = Some(Game::load(&path, &assets_dir).unwrap());
-    let _ = std::fs::remove_file(&path);
-}
-
 /// A relay, a stocked depot, a known destination and one base-staff program
 /// — everything `Mode::Dispatch`'s two pickers need. `app_owning_distant_programs`
 /// already gives a program with no party slot and no wield, which is
@@ -182,7 +157,7 @@ fn a_dispatch_ready_app(seed: u32) -> (App, ItemId, SettlementKey) {
 /// fresh run with no Relay standing sees no row, and one that stood a Relay
 /// up does.
 #[test]
-fn the_dispatch_row_appears_only_with_a_relay() {
+fn the_dispatch_entry_appears_only_with_a_relay() {
     let mut app = test_app(2100);
     assert!(
         !command_labels_all(&mut app).contains(&"Dispatch"),
@@ -226,47 +201,12 @@ fn the_row_opens_the_hub() {
 fn s_on_a_highlighted_site_opens_the_squad_picker() {
     let (mut app, _, _) = a_dispatch_ready_app(2103);
     app.mode = Mode::Dispatch;
-    let (sites, _) = app.dispatch_hub_sections().expect("a Relay stands");
+    let sites = app.dispatch_sites().expect("a Relay stands");
     assert!(!sites.is_empty(), "the shipped catalogue offers a site");
     app.menu_selected = 0;
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::SortieSquad);
     assert_eq!(app.pending_dispatch_site, Some(sites[0].id.clone()));
-}
-
-/// `[S]` on a destination row — past every site — says what to highlight
-/// instead, rather than silently doing nothing.
-#[test]
-fn s_on_a_destination_row_refuses() {
-    let (mut app, _, _) = a_dispatch_ready_app(2104);
-    app.mode = Mode::Dispatch;
-    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
-    assert!(!destinations.is_empty(), "the fixture registered one town");
-    app.menu_selected = sites.len();
-    app.handle_key(GameKey::Char('S'));
-    assert_eq!(app.mode, Mode::Dispatch);
-    assert!(
-        app.status_line
-            .as_deref()
-            .is_some_and(|l| l.contains("Highlight")),
-        "{:?}",
-        app.status_line
-    );
-}
-
-/// `[C]` on a highlighted destination opens the cargo picker for it.
-#[test]
-fn c_on_a_highlighted_destination_opens_the_cargo_picker() {
-    let (mut app, _, key) = a_dispatch_ready_app(2105);
-    app.mode = Mode::Dispatch;
-    let (sites, _) = app.dispatch_hub_sections().expect("a Relay stands");
-    app.menu_selected = sites.len();
-    app.handle_key(GameKey::Char('C'));
-    assert_eq!(app.mode, Mode::RouteCargo);
-    assert_eq!(
-        app.pending_dispatch_destination,
-        Some(RouteDestinationId::Settlement(key))
-    );
 }
 
 /// Toggling a candidate into the squad with `[X]` and dispatching with Enter
@@ -275,7 +215,7 @@ fn c_on_a_highlighted_destination_opens_the_cargo_picker() {
 fn x_toggles_a_candidate_and_enter_dispatches_the_squad() {
     let (mut app, _, _) = a_dispatch_ready_app(2106);
     app.mode = Mode::Dispatch;
-    let (sites, _) = app.dispatch_hub_sections().expect("a Relay stands");
+    let sites = app.dispatch_sites().expect("a Relay stands");
     app.menu_selected = 0;
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.mode, Mode::SortieSquad);
@@ -314,241 +254,4 @@ fn esc_from_the_squad_picker_drops_the_pending_squad() {
     assert_eq!(app.mode, Mode::Dispatch);
     assert!(app.pending_dispatch_site.is_none());
     assert!(app.dispatch_squad.is_empty());
-}
-
-/// Editing the cargo basket and dispatching with Enter reaches
-/// `Game::dispatch_route`, and the quoted figure the basket carries never
-/// disagrees with what was asked for — `route_quote_sums_settlement_sell_price_per_line`'s
-/// property, read off the app-core side of the seam.
-#[test]
-fn right_builds_a_manifest_and_enter_dispatches_the_route() {
-    let (mut app, item, key) = a_dispatch_ready_app(2108);
-    app.mode = Mode::Dispatch;
-    let (sites, _) = app.dispatch_hub_sections().expect("a Relay stands");
-    app.menu_selected = sites.len();
-    app.handle_key(GameKey::Char('C'));
-    assert_eq!(app.mode, Mode::RouteCargo);
-
-    let basket = app
-        .route_cargo_basket()
-        .expect("the destination is pending");
-    let row = basket
-        .stock
-        .iter()
-        .position(|r| r.item == item)
-        .expect("the depot holds cargo of this item");
-    app.menu_selected = row;
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
-    let basket = app.route_cargo_basket().unwrap();
-    assert_eq!(basket.cells[row].0, 2);
-    assert!(basket.quote > 0, "two units must quote for something");
-
-    app.handle_key(GameKey::Enter);
-    assert_eq!(app.mode, Mode::Dispatch);
-    assert!(app.pending_dispatch_destination.is_none());
-    let (_, reports) = app.dispatch_trip_reports();
-    assert!(
-        reports
-            .iter()
-            .any(|r| r.destination == RouteDestinationId::Settlement(key)),
-        "the trip must be recorded in flight"
-    );
-}
-
-/// `[T]` toggles the standing flag, and an empty basket's Enter is refused
-/// through `App::refuse` rather than silently doing nothing.
-#[test]
-fn t_toggles_standing_and_an_empty_basket_is_refused() {
-    let (mut app, _, _) = a_dispatch_ready_app(2109);
-    app.mode = Mode::Dispatch;
-    let (sites, _) = app.dispatch_hub_sections().expect("a Relay stands");
-    app.menu_selected = sites.len();
-    app.handle_key(GameKey::Char('C'));
-    assert!(!app.route_standing);
-    app.handle_key(GameKey::Char('T'));
-    assert!(app.route_standing);
-
-    app.handle_key(GameKey::Enter);
-    assert_eq!(
-        app.mode,
-        Mode::RouteCargo,
-        "a refused dispatch stays on the picker"
-    );
-    assert!(app.status_line.is_some());
-}
-
-/// `[X]` on the hub severs a standing route running to the highlighted
-/// destination, and says so when there is none to cut.
-#[test]
-fn x_on_the_hub_severs_a_standing_route() {
-    let (mut app, item, key) = a_dispatch_ready_app(2110);
-    // Nothing in flight yet.
-    app.mode = Mode::Dispatch;
-    let (sites, _) = app.dispatch_hub_sections().expect("a Relay stands");
-    app.menu_selected = sites.len();
-    app.handle_key(GameKey::Char('X'));
-    assert!(
-        app.status_line
-            .as_deref()
-            .is_some_and(|l| l.contains("standing")),
-        "{:?}",
-        app.status_line
-    );
-
-    // Dispatch a standing route, then cut it.
-    let outcome = app
-        .game
-        .as_mut()
-        .unwrap()
-        .dispatch_route(key, vec![(item, 3)], true);
-    assert!(outcome.is_ok(), "{outcome:?}");
-    app.menu_selected = sites.len();
-    app.handle_key(GameKey::Char('X'));
-    assert_eq!(app.status_line, None);
-    let (_, reports) = app.dispatch_trip_reports();
-    let route = reports
-        .iter()
-        .find(|r| r.destination == RouteDestinationId::Settlement(key))
-        .unwrap();
-    assert!(
-        !route.standing,
-        "severing must clear standing and nothing else"
-    );
-}
-
-/// An outpost joins the hub's destination list after every settlement, and
-/// `[C]` on its row opens the cargo picker with no manifest to build —
-/// `RouteCargoBasket::outpost_carry_cap` in place of a settlement's stock
-/// and quote (2026-09-23 outposts plan, Part A's dispatch gap).
-#[test]
-fn c_on_an_outpost_destination_opens_the_cargo_picker_with_no_manifest() {
-    let (mut app, _, _) = a_dispatch_ready_app(2111);
-    let tile = (500, 501);
-    register_a_known_outpost(&mut app, tile);
-    app.mode = Mode::Dispatch;
-    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
-    let idx = destinations
-        .iter()
-        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
-        .expect("the outpost is listed as a destination");
-    app.menu_selected = sites.len() + idx;
-    app.handle_key(GameKey::Char('C'));
-    assert_eq!(app.mode, Mode::RouteCargo);
-    assert_eq!(
-        app.pending_dispatch_destination,
-        Some(RouteDestinationId::Outpost(tile))
-    );
-
-    let basket = app
-        .route_cargo_basket()
-        .expect("the destination is pending");
-    assert!(basket.stock.is_empty(), "an outpost leg carries no cargo");
-    assert_eq!(
-        basket.outpost_carry_cap,
-        Some(feral_processes_engine::tuning::ROUTE_OUTPOST_CARRY)
-    );
-}
-
-/// Enter on the outpost cargo picker reaches `Game::dispatch_outpost_route`
-/// and the trip shows up on the hub's own "in flight" list.
-#[test]
-fn enter_on_the_outpost_cargo_picker_dispatches_the_route() {
-    let (mut app, _, _) = a_dispatch_ready_app(2112);
-    let tile = (500, 502);
-    register_a_known_outpost(&mut app, tile);
-    app.mode = Mode::Dispatch;
-    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
-    let idx = destinations
-        .iter()
-        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
-        .expect("the outpost is listed as a destination");
-    app.menu_selected = sites.len() + idx;
-    app.handle_key(GameKey::Char('C'));
-    app.handle_key(GameKey::Enter);
-    assert_eq!(app.mode, Mode::Dispatch);
-    assert!(app.pending_dispatch_destination.is_none());
-
-    let (_, reports) = app.dispatch_trip_reports();
-    assert!(
-        reports
-            .iter()
-            .any(|r| r.destination == RouteDestinationId::Outpost(tile)),
-        "the outpost trip must be recorded in flight"
-    );
-}
-
-/// `[T]` (fast travel) refuses on an outpost row — there is no fast-travel
-/// door for a tile, only a `SettlementKey`. `[X]` on the same row with
-/// nothing dispatched yet refuses too, but for the ordinary "nothing
-/// standing" reason `Game::sever_route` gives a settlement in the same
-/// state, not because the door is closed to outposts.
-#[test]
-fn t_refuses_and_x_reports_nothing_standing_on_an_outpost_destination_row() {
-    let (mut app, _, _) = a_dispatch_ready_app(2113);
-    let tile = (500, 503);
-    register_a_known_outpost(&mut app, tile);
-    app.mode = Mode::Dispatch;
-    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
-    let idx = destinations
-        .iter()
-        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
-        .expect("the outpost is listed as a destination");
-    app.menu_selected = sites.len() + idx;
-
-    app.handle_key(GameKey::Char('T'));
-    assert!(
-        app.status_line
-            .as_deref()
-            .is_some_and(|l| l.contains("walk")),
-        "{:?}",
-        app.status_line
-    );
-    app.status_line = None;
-
-    app.handle_key(GameKey::Char('X'));
-    assert!(
-        app.status_line
-            .as_deref()
-            .is_some_and(|l| l.contains("standing")),
-        "{:?}",
-        app.status_line
-    );
-}
-
-/// `[X]` on the hub severs a *standing* route to an outpost too —
-/// `x_on_the_hub_severs_a_standing_route`'s shape, `Game::sever_route`
-/// reached through `RouteDestinationId::Outpost` rather than refused
-/// outright.
-#[test]
-fn x_on_the_hub_severs_a_standing_outpost_route() {
-    let (mut app, _, _) = a_dispatch_ready_app(2114);
-    let tile = (500, 504);
-    register_a_known_outpost(&mut app, tile);
-    let outcome = app
-        .game
-        .as_mut()
-        .unwrap()
-        .dispatch_outpost_route(tile, true);
-    assert!(outcome.is_ok(), "{outcome:?}");
-
-    app.mode = Mode::Dispatch;
-    let (sites, destinations) = app.dispatch_hub_sections().expect("a Relay stands");
-    let idx = destinations
-        .iter()
-        .position(|d| d.destination == RouteDestinationId::Outpost(tile))
-        .expect("the outpost is listed as a destination");
-    app.menu_selected = sites.len() + idx;
-    app.handle_key(GameKey::Char('X'));
-    assert_eq!(app.status_line, None);
-
-    let (_, reports) = app.dispatch_trip_reports();
-    let route = reports
-        .iter()
-        .find(|r| r.destination == RouteDestinationId::Outpost(tile))
-        .unwrap();
-    assert!(
-        !route.standing,
-        "severing must clear standing and nothing else"
-    );
 }

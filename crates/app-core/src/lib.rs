@@ -159,10 +159,10 @@ use feral_processes_engine::{
     DispatchReach, DuelComparison, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
     FieldRoutineTargetView, Game, HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine,
     MESSAGE_LOG_CAP, MachineRecipeView, MessageSource, OutpostReport, PerkPreview, PerkReport,
-    ProgramSaleOption, RigToolView, RouteDestination, RouteDestinationId, RouteRefusal,
-    RouteReport, SlotShift, SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome,
-    TransferBasket, TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder,
-    WorkOrderReport, WorkTable, condense,
+    ProgramSaleOption, RigToolView, RouteDestinationId, RouteRefusal, RouteReport, SlotShift,
+    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
+    TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport,
+    WorkTable, condense,
 };
 
 /// Chunks from the centre to the edge of the world map's grid. The grid and
@@ -2124,17 +2124,11 @@ pub enum Mode {
     /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
     /// The Relay hub, opened with the Trade page's "Dispatch" row — sortie
-    /// sites (`Game::sortie_board`), route destinations
-    /// (`Game::route_destinations`) numbered continuously in one list
-    /// (`app::dispatch::dispatch_row`, `contract_row`'s shape), and every
-    /// trip in flight (`Game::sortie_reports` / `Game::route_reports`) drawn
-    /// below as read-only status. Uppercase actions only, since lowercase is
-    /// a row selector: `[S]` opens `Mode::SortieSquad` for the highlighted
-    /// site, `[C]` opens `Mode::RouteCargo` for the highlighted destination,
-    /// `[X]` severs the standing route running to it, if one is there, and
-    /// `[T]` travels there in person through `Game::travel_to_settlement`,
-    /// closing the hub on success. The last three all resolve their row
-    /// through `dispatch_row` and refuse on a site row.
+    /// sites (`Game::sortie_board`) in one list, and every trip in flight
+    /// (`Game::sortie_reports` / `Game::route_reports`) drawn below as
+    /// read-only status. Uppercase actions only, since lowercase is a row
+    /// selector: `[S]` opens `Mode::SortieSquad` for the highlighted site.
+    /// Cargo routes are sent from the Sites hub.
     Dispatch,
     /// Multi-select over `Game::base_staff`, opened with `[S]` from
     /// `Mode::Dispatch`. `App::dispatch_squad` is the toggled set — `[X]`

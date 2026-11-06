@@ -337,10 +337,10 @@ impl App {
             (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Char('P')) => {
                 self.post_from_hub(t)
             }
-            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Enter) => {
-                if row + 1 == rows {
-                    self.post_from_hub(t);
-                }
+            (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Enter)
+                if row + 1 == rows =>
+            {
+                self.post_from_hub(t)
             }
             _ => {}
         }

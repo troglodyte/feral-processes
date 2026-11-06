@@ -1,32 +1,13 @@
 //! The Relay hub (`Mode::Dispatch`) and its two pickers — a squad
 //! (`Mode::SortieSquad`) and a cargo basket (`Mode::RouteCargo`).
 //!
-//! `app::contracts`/`app::settlement_board`'s shape: rows are numbered
-//! continuously across two sections, resolved through one function both the
-//! handler and the renderer call, so a keypress and a drawn row can never
-//! disagree about which site or destination it means. The picker screens
-//! that follow are `app::settlement_market`'s basket shape, one door over.
+//! The hub lists sortie sites alone; sending cargo, stopping a standing route
+//! and fast-travel live on the Sites hub (`app::sites_hub`), which is also
+//! the only opener of `RouteCargo`. The picker screens are
+//! `app::settlement_market`'s basket shape, one door over.
 
 use crate::app::basket::halve;
 use crate::*;
-
-/// A row on `Mode::Dispatch`'s numbered list — sortie sites first, then
-/// route destinations, `contract_row`'s own two-section shape.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum DispatchRow {
-    Site(usize),
-    Destination(usize),
-}
-
-/// Resolves a row number against the hub's two stacked sections. `None` for
-/// a row past the end.
-pub(crate) fn dispatch_row(idx: usize, sites: usize, destinations: usize) -> Option<DispatchRow> {
-    if idx < sites {
-        return Some(DispatchRow::Site(idx));
-    }
-    let idx = idx - sites;
-    (idx < destinations).then_some(DispatchRow::Destination(idx))
-}
 
 /// Why a `SortieRefusal` or `RouteRefusal` was refused, worded for the
 /// status line and the log — `app::contracts::refusal_line`'s shape, one
@@ -106,14 +87,10 @@ pub struct RouteCargoBasket {
 }
 
 impl App {
-    /// Both halves of the hub's numbered list, in the order they are
-    /// numbered — `contract_sections`' shape. `None` with no Relay standing
-    /// anywhere in the run, `sortie_board`/`route_destinations`' own gate.
-    pub fn dispatch_hub_sections(&mut self) -> Option<(Vec<SortieRow>, Vec<RouteDestination>)> {
-        let game = self.game.as_mut()?;
-        let sites = game.sortie_board()?;
-        let destinations = game.route_destinations().unwrap_or_default();
-        Some((sites, destinations))
+    /// The hub's numbered list: the sortie board. `None` with no Relay
+    /// standing anywhere in the run, `sortie_board`'s own gate.
+    pub fn dispatch_sites(&mut self) -> Option<Vec<SortieRow>> {
+        self.game.as_mut()?.sortie_board()
     }
 
     /// Every trip currently away, for the hub's read-only status list —
@@ -131,94 +108,22 @@ impl App {
             self.close_screen();
             return;
         }
-        let (sites, destinations) = self.dispatch_hub_sections().unwrap_or_default();
-        self.menu_selected = self
-            .menu_selected
-            .min((sites.len() + destinations.len()).saturating_sub(1));
+        let sites = self.dispatch_sites().unwrap_or_default();
+        self.menu_selected = self.menu_selected.min(sites.len().saturating_sub(1));
 
         match key {
-            GameKey::Char('S') => {
-                match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
-                    Some(DispatchRow::Site(i)) => {
-                        self.pending_dispatch_site = Some(sites[i].id.clone());
-                        self.dispatch_squad.clear();
-                        self.status_line = None;
-                        self.menu_selected = 0;
-                        self.mode = Mode::SortieSquad;
-                    }
-                    _ => self.refuse("Highlight a site to send a squad to."),
+            GameKey::Char('S') => match sites.get(self.menu_selected) {
+                Some(site) => {
+                    self.pending_dispatch_site = Some(site.id.clone());
+                    self.dispatch_squad.clear();
+                    self.status_line = None;
+                    self.menu_selected = 0;
+                    self.mode = Mode::SortieSquad;
                 }
-            }
-            GameKey::Char('C') => {
-                match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
-                    Some(DispatchRow::Destination(i)) => {
-                        self.pending_dispatch_destination = Some(destinations[i].destination);
-                        self.route_cargo_amounts.clear();
-                        self.route_standing = false;
-                        self.status_line = None;
-                        self.menu_selected = 0;
-                        self.mode = Mode::RouteCargo;
-                    }
-                    _ => self.refuse("Highlight a destination to send cargo to."),
-                }
-            }
-            // `[T]` for travel out. `[C]`'s row resolution exactly — a
-            // continuous numbering over two sections, so a destination
-            // action landing on a site row refuses rather than acting on
-            // the wrong one. On success the hub closes: `travel_to_settlement`
-            // queues the arrival cue, and `Mode::Playing` is where the map
-            // and that cue meet. An outpost row has no fast-travel of its
-            // own — walk there instead — so it refuses rather than reaching
-            // `travel_to_settlement` with a tile it cannot take.
-            GameKey::Char('T') => {
-                match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
-                    Some(DispatchRow::Destination(i)) => match destinations[i].destination {
-                        RouteDestinationId::Settlement(target) => {
-                            let outcome = match &mut self.game {
-                                Some(game) => game.travel_to_settlement(target),
-                                None => return,
-                            };
-                            let went = outcome.is_ok();
-                            self.report(outcome);
-                            if went {
-                                self.close_screen();
-                                // `finish_compile`'s rule — the same
-                                // bookkeeping a move gets, since travel spends
-                                // ordinary ticks. It is also what **drains the
-                                // arrival cue**: `travel_to_settlement` queues
-                                // `PendingVisit` and `after_world_action` is the
-                                // one place that reads it, so without this the
-                                // town page opens later, on some unrelated
-                                // action, for a town already walked away from.
-                                self.after_world_action(true, false, 0);
-                            }
-                        }
-                        RouteDestinationId::Outpost(_) => {
-                            self.refuse("You can't fast-travel to an outpost — walk there.");
-                        }
-                    },
-                    _ => self.refuse("Highlight a destination to travel to."),
-                }
-            }
-            // `Game::sever_route` reaches both endpoint kinds now —
-            // `RouteDestinationId` is the one id it matches on, so this row
-            // needs no per-kind branch of its own.
-            GameKey::Char('X') => {
-                match dispatch_row(self.menu_selected, sites.len(), destinations.len()) {
-                    Some(DispatchRow::Destination(i)) => {
-                        let target = destinations[i].destination;
-                        let Some(game) = &mut self.game else { return };
-                        if game.sever_route(target) {
-                            self.status_line = None;
-                        } else {
-                            self.refuse(crate::app::sites_hub::NO_STANDING_ROUTE);
-                        }
-                    }
-                    _ => self.refuse("Highlight a destination to cut a standing route from."),
-                }
-            }
+                None => self.refuse("Highlight a site to send a squad to."),
+            },
             _ => {
-                if let Some(idx) = self.selected_index(key, sites.len() + destinations.len()) {
+                if let Some(idx) = self.selected_index(key, sites.len()) {
                     self.menu_selected = idx;
                 }
             }
@@ -397,7 +302,7 @@ impl App {
             self.pending_dispatch_destination = None;
             self.route_cargo_amounts.clear();
             self.status_line = None;
-            self.leave_site_screen(Mode::Dispatch);
+            self.leave_site_screen(Mode::Playing);
             return;
         }
         match self.pending_dispatch_destination {
@@ -405,7 +310,7 @@ impl App {
                 self.handle_settlement_cargo_key(destination, key)
             }
             Some(RouteDestinationId::Outpost(tile)) => self.handle_outpost_cargo_key(tile, key),
-            None => self.leave_site_screen(Mode::Dispatch),
+            None => self.leave_site_screen(Mode::Playing),
         }
     }
 
@@ -441,7 +346,7 @@ impl App {
                         self.route_cargo_amounts.clear();
                         self.route_standing = false;
                         self.status_line = None;
-                        self.leave_site_screen(Mode::Dispatch);
+                        self.leave_site_screen(Mode::Playing);
                     }
                     Err(e) => {
                         let line = route_refusal_line(game, e);
@@ -467,7 +372,7 @@ impl App {
                         self.pending_dispatch_destination = None;
                         self.route_standing = false;
                         self.status_line = None;
-                        self.leave_site_screen(Mode::Dispatch);
+                        self.leave_site_screen(Mode::Playing);
                     }
                     Err(e) => {
                         let line = route_refusal_line(game, e);

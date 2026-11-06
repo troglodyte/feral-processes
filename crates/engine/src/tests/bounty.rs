@@ -244,6 +244,13 @@ fn a_missing_quarry_is_respawned_and_a_second_is_removed() {
     game.world.despawn(entity);
     game.ensure_bounty_quarry();
     assert_one_quarry_at_grade(&mut game, &id);
+    // A stray second body carrying the mark (a double respawn) is removed.
+    let (_, mark, _) = quarries(&mut game).remove(0);
+    let stray = game
+        .spawn_wild_creature_scaled("drone", 0, 0, 1.0, true)
+        .unwrap();
+    game.world.entity_mut(stray).insert(mark);
+    assert_eq!(quarries(&mut game).len(), 2);
     game.ensure_bounty_quarry();
     game.ensure_bounty_quarry();
     assert_one_quarry_at_grade(&mut game, &id);

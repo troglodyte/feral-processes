@@ -427,8 +427,12 @@ fn enter_hub_at_holds_the_named_page() {
 const SHARED_SCREENS: &[Mode] = &[];
 
 pub(super) fn shared_screens(app: &App) -> Vec<Mode> {
+    shared_screens_of(app, &Hub::ALL)
+}
+
+fn shared_screens_of(app: &App, hubs: &[Hub]) -> Vec<Mode> {
     let mut counts: Vec<(Mode, usize)> = Vec::new();
-    for hub in Hub::ALL {
+    for hub in hubs {
         for page in hub.kind().pages(app) {
             for &mode in page.screens {
                 match counts.iter_mut().find(|(m, _)| *m == mode) {
@@ -449,10 +453,18 @@ pub(super) fn shared_screens(app: &App) -> Vec<Mode> {
 fn shared_screens_are_pinned() {
     let mut app = app_with_a_breeding_bay(41066, 1, false);
     let message = "a screen is now shared by several pages: enter it with App::enter_hub_at";
-    assert_eq!(shared_screens(&app), SHARED_SCREENS, "{message}");
+    assert_eq!(
+        shared_screens_outside_sites(&app),
+        SHARED_SCREENS,
+        "{message}"
+    );
     app.handle_key(GameKey::Char('c'));
     assert!(app.structure_hub.is_some());
-    assert_eq!(shared_screens(&app), SHARED_SCREENS, "{message}");
+    assert_eq!(
+        shared_screens_outside_sites(&app),
+        SHARED_SCREENS,
+        "{message}"
+    );
 }
 
 /// With two towns and two outposts on the rail, every tab of a site page is
@@ -476,4 +488,12 @@ fn shared_screens_with_sites_are_pinned() {
     let mut pinned = SHARED_WITH_SITES.to_vec();
     pinned.sort_by_key(|m| format!("{m:?}"));
     assert_eq!(shared, pinned);
+}
+
+/// The fixed hubs. The Sites rail lists every known town, so the Sites tab
+/// modes are shared in any run that has met two of them; `sites_hub.rs` pins
+/// that hub's Esc and reopen paths.
+fn shared_screens_outside_sites(app: &App) -> Vec<Mode> {
+    let hubs: Vec<Hub> = Hub::ALL.into_iter().filter(|h| *h != Hub::Sites).collect();
+    shared_screens_of(app, &hubs)
 }

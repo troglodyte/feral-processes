@@ -231,10 +231,12 @@ impl App {
         let (Some(site), Some(game)) = (self.held_site(), self.game.as_ref()) else {
             return String::new();
         };
-        match site {
-            RouteDestinationId::Settlement(key) => game.settlement_name(key),
-            RouteDestinationId::Outpost(tile) => game.outpost_destination_name(tile),
-        }
+        // The rail's own title, so a town the party has not visited is named
+        // by the same generic noun here as it is on the rail.
+        game.site_rail()
+            .into_iter()
+            .find(|entry| entry.site == site)
+            .map_or_else(String::new, |entry| entry.name)
     }
 
     pub(crate) fn handle_sites_key(&mut self, key: GameKey) {

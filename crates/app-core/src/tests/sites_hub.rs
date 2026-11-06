@@ -712,3 +712,84 @@ fn travel_below_allied_refuses_and_stays_on_the_tab() {
     assert_eq!(app.mode, Mode::SiteStatus);
     assert!(app.status_line.is_some());
 }
+
+/// What `app_at_a_hub_with_an_ally` proved on Dispatch: a town the party has
+/// only heard of, and has since made Allied, still takes a cargo route and a
+/// relay trip from the base.
+fn app_at_base_with_an_unvisited_ally(seed: u32) -> (App, SettlementKey) {
+    let mut app = app_at_a_relay(seed, &ItemId::from("cache_grain"), 10);
+    let key = SettlementKey { rx: 6, ry: 6 };
+    super::dispatch::register_a_known_settlement(&mut app, key, (60, 60));
+    super::settlement_aid::set_standing(
+        &mut app,
+        key,
+        feral_processes_engine::tuning::SETTLEMENT_ALLIED_STANDING,
+    );
+    (app, key)
+}
+
+#[test]
+fn an_unvisited_allied_town_is_on_the_rail_by_the_generic_noun() {
+    let (app, key) = app_at_base_with_an_unvisited_ally(7150);
+    let titles: Vec<String> = rail(&app).into_iter().map(|(t, _, _)| t).collect();
+    assert_eq!(titles, ["a settlement", "Caravans"]);
+    assert_eq!(
+        Hub::Sites.kind().pages(&app)[0].key,
+        HubPageKey::Site(RouteDestinationId::Settlement(key))
+    );
+}
+
+#[test]
+fn an_unvisited_allied_town_takes_a_route_from_the_base() {
+    let (mut app, key) = app_at_base_with_an_unvisited_ally(7151);
+    open_routes_tab(&mut app, site(key), Mode::SiteRoutes);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::RouteCargo, "{:?}", app.status_line);
+    let basket = app.route_cargo_basket().expect("the site is pending");
+    let row = basket
+        .stock
+        .iter()
+        .position(|r| r.item == ItemId::from("cache_grain"))
+        .expect("the depot holds cargo");
+    app.menu_selected = row;
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::SiteRoutes, "{:?}", app.status_line);
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .route_reports()
+            .iter()
+            .any(|r| r.destination == RouteDestinationId::Settlement(key)),
+        "the trip is in flight"
+    );
+}
+
+#[test]
+fn an_unvisited_allied_town_takes_a_relay_trip_and_leaves_no_cue_dangling() {
+    let (mut app, key) = app_at_base_with_an_unvisited_ally(7152);
+    open_routes_tab(&mut app, site(key), Mode::SiteStatus);
+    let before = tick(&app);
+    app.handle_key(GameKey::Char('T'));
+    assert!(app.hub_at().is_none(), "{:?}", app.status_line);
+    assert!(tick(&app) > before, "{:?}", app.status_line);
+    assert_ne!(
+        app.game.as_ref().unwrap().player_status().position,
+        (60, 60),
+        "the party landed on the settlement tile"
+    );
+    assert!(app.game.as_mut().unwrap().take_visit().is_none());
+}
+
+#[test]
+fn an_unvisited_town_refuses_its_beside_only_actions_from_the_base() {
+    let (mut app, key) = app_at_base_with_an_unvisited_ally(7153);
+    open_routes_tab(&mut app, site(key), Mode::SiteGoods);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::SiteGoods);
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Walk over to a settlement to trade.")
+    );
+}

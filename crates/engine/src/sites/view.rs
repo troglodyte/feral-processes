@@ -42,7 +42,7 @@ pub struct SiteRailEntry {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SiteReach {
     pub on_base: bool,
-    /// The visited site the party is beside, if any.
+    /// The site the party is beside, if any.
     pub beside: Option<RouteDestinationId>,
 }
 

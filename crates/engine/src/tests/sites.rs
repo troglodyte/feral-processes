@@ -441,6 +441,15 @@ fn add_town(game: &mut Game, key: SettlementKey, name: &str, visited: bool, at: 
     name_town(game, key, name, visited);
 }
 
+/// The fixture world materializes some towns of its own; the rail tests
+/// want only the ones they add.
+fn forget_towns(game: &mut Game) {
+    game.world
+        .resource_mut::<crate::resources::Settlements>()
+        .0
+        .clear();
+}
+
 fn add_outpost(game: &mut Game, tile: (i32, i32)) {
     game.world
         .resource_mut::<crate::resources::Outposts>()
@@ -455,9 +464,10 @@ fn add_outpost(game: &mut Game, tile: (i32, i32)) {
 }
 
 #[test]
-fn the_rail_lists_visited_towns_by_name_then_outposts_by_name() {
+fn the_rail_lists_towns_by_name_then_outposts_by_name() {
     use crate::sites::SiteSection;
     let mut game = game();
+    forget_towns(&mut game);
     add_town(
         &mut game,
         SettlementKey { rx: 1, ry: 0 },
@@ -492,6 +502,7 @@ fn the_rail_lists_visited_towns_by_name_then_outposts_by_name() {
 #[test]
 fn two_towns_with_one_name_stay_in_key_order() {
     let mut game = game();
+    forget_towns(&mut game);
     let (a, b) = (
         SettlementKey { rx: 5, ry: 0 },
         SettlementKey { rx: 3, ry: 0 },
@@ -505,21 +516,30 @@ fn two_towns_with_one_name_stay_in_key_order() {
 }
 
 #[test]
-fn an_unvisited_town_is_not_on_the_rail() {
+fn an_unvisited_town_is_on_the_rail_without_its_name() {
     let mut game = game();
+    forget_towns(&mut game);
+    let key = SettlementKey { rx: 1, ry: 0 };
+    add_town(&mut game, key, "Hidden", false, (600, 0));
     add_town(
         &mut game,
-        SettlementKey { rx: 1, ry: 0 },
-        "Hidden",
-        false,
-        (600, 0),
+        SettlementKey { rx: 2, ry: 0 },
+        "Seen",
+        true,
+        (700, 0),
     );
-    assert!(game.site_rail().is_empty());
+
+    let rail = game.site_rail();
+
+    let listed: Vec<&str> = rail.iter().map(|e| e.name.as_str()).collect();
+    assert_eq!(listed, vec!["Seen", "a settlement"]);
+    assert_eq!(rail[1].site, town_site(key));
 }
 
 #[test]
 fn a_hostile_town_and_a_damaged_outpost_are_marked() {
     let mut game = game();
+    forget_towns(&mut game);
     let calm = SettlementKey { rx: 1, ry: 0 };
     let angry = SettlementKey { rx: 2, ry: 0 };
     add_town(&mut game, calm, "Calm", true, (600, 0));

@@ -74,8 +74,8 @@ impl Game {
 /// The views the Sites hub reads. Each is a call into the door that already
 /// answers the question, so the hub and the visit pages cannot disagree.
 impl Game {
-    /// Where the party stands relative to the sites. `beside` is a visited
-    /// settlement within `settlement_reach`, else an outpost within
+    /// Where the party stands relative to the sites. `beside` is a settlement
+    /// within `settlement_reach`, else an outpost within
     /// `standing_at_outpost`; ties go to the lowest key, then the lowest tile.
     pub fn site_reach(&self) -> SiteReach {
         let town = self
@@ -83,7 +83,7 @@ impl Game {
             .resource::<crate::resources::Settlements>()
             .0
             .iter()
-            .find(|(key, known)| known.visited && self.settlement_reach(**key))
+            .find(|(key, _)| self.settlement_reach(**key))
             .map(|(key, _)| RouteDestinationId::Settlement(*key));
         let beside = town.or_else(|| {
             self.world
@@ -99,8 +99,10 @@ impl Game {
         }
     }
 
-    /// Every visited settlement by name, then every outpost by name. Ties
-    /// fall to the key, so two towns with one name stay in a stable order.
+    /// Every known settlement by name, then every outpost by name. A town the
+    /// party has not walked to is listed under the compass's generic noun, so
+    /// the rail leaks no name the world map keeps hidden. Ties fall to the
+    /// key, so two towns with one name stay in a stable order.
     pub fn site_rail(&self) -> Vec<SiteRailEntry> {
         let stalled: BTreeSet<RouteDestinationId> = self
             .route_reports()
@@ -113,8 +115,7 @@ impl Game {
             .resource::<crate::resources::Settlements>()
             .0
             .iter()
-            .filter(|(_, known)| known.visited)
-            .map(|(key, known)| (known.def.name.clone(), *key))
+            .map(|(key, known)| (known.compass_label(), *key))
             .collect();
         towns.sort();
         let mut rail = Vec::new();
@@ -175,6 +176,7 @@ impl Game {
             .0
             .get(&key)?
             .clone();
+        let name = known.compass_label();
         let band = self.standing_band(key);
         let kind = self.settlement_kind(key)?;
         let reading = self.growth_reading(key);
@@ -184,7 +186,7 @@ impl Game {
             (None, None) => None,
         };
         Some(TownStatus {
-            name: known.def.name,
+            name,
             kind: kind.label(),
             specialty: known.def.specialty.label(),
             temperament: known.def.temperament.label(),

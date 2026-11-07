@@ -173,7 +173,7 @@ impl App {
             stack_zoom: STACK_MAP_MIN_ZOOM,
             log_expanded: false,
             paused: false,
-            world_speed: WorldSpeed::Normal,
+            world_speed: WorldSpeed::Fast,
             walk: None,
             drag_ticks_owed: 0,
             menu_selected: 0,

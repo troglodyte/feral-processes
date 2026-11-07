@@ -370,6 +370,8 @@ fn held(app: &App, item: &str) -> u32 {
 #[test]
 fn a_compile_advances_the_world_at_the_idle_tick_rate() {
     let mut app = stocked_app(722);
+    // `WORLD_SPEED_MULTIPLIER` is the `Normal` rate, not the one a run opens at.
+    app.world_speed = WorldSpeed::Normal;
     open_compile_of(&mut app, "ice_breaker");
     // A batch long enough that one second of it is nowhere near the end,
     // so what this measures is the pace and not a batch running out.

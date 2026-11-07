@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.52
+
+**A game now starts at x2 speed.** At x1 the world ran too slowly to start a run on. The status bar shows x2 from the first moment. `,` still cycles the speed, now x2, x4, x1 and back to x2, so the slower speed is one more press away. The speed is not saved, so every launch starts at x2.
+
 ## 0.21.51
 
 **Contract Brokers now sometimes offer a bounty: hunt one named program and the escort running with it.** From sector 2 on, a Broker's board may add a bounty such as "Bounty: Vesk the Long Wire", with a line saying what the target is and how many programs travel with it. At most one is offered at a time, and you can hold only one. Accepting it places the target out on the map, 25 to 60 tiles from your base, and adds a row to the compass (U) that shows its bearing and distance and follows it as it wanders within a few tiles of where it started.

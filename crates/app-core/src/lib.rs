@@ -732,6 +732,9 @@ const WORLD_SPEED_MULTIPLIER: u32 = 2;
 /// the idle clock drives — the wild programs `WORLD_SPEED_MULTIPLIER`'s pins
 /// hold at a fixed wall-clock pace included. That is what fast-forward means.
 ///
+/// A run opens at `Fast`, because `Normal` read as too slow to start a
+/// game on; `Normal` stays one `,` past `Fastest` for anyone who wants it.
+///
 /// Pause is a separate `App::paused` rather than a variant here, so SPACE
 /// resumes at the speed it paused at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

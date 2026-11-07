@@ -218,6 +218,9 @@ fn a_step_that_moves_nobody_still_spends_the_clocks_tick() {
     // off by default — every eastward bump from the edge refuses for free,
     // spending no tick of its own.
     stand_in_base_at(&mut app, TEST_POCKET_HALF_WIDTH, 0);
+    // At `Normal`: three seconds at a faster speed is long enough for a
+    // wild program to open a fight under the held key.
+    app.world_speed = WorldSpeed::Normal;
     let start_tick = tick_of(&app);
 
     const HELD_SECONDS: u32 = 3;
@@ -284,7 +287,7 @@ fn a_popup_key_clears_a_pending_walk_before_it_opens() {
 fn update_realtime_paces_idle_ticks_against_dt() {
     let mut app = test_app(303);
     let start = tick_of(&app);
-    let tick = 1.0 / WorldSpeed::Normal.ticks_per_second();
+    let tick = 1.0 / app.world_speed.ticks_per_second();
 
     app.update_realtime(tick * 0.6);
     assert_eq!(tick_of(&app), start, "ticked before a tick's worth of time");
@@ -303,7 +306,7 @@ fn update_realtime_paces_idle_ticks_against_dt() {
 fn update_realtime_holds_the_clock_off_the_map() {
     let mut app = test_app(304);
     let start = tick_of(&app);
-    let tick = 1.0 / WorldSpeed::Normal.ticks_per_second();
+    let tick = 1.0 / app.world_speed.ticks_per_second();
 
     app.update_realtime(tick * 0.9);
     app.mode = Mode::Inventory;
@@ -484,19 +487,20 @@ fn space_pauses_underground_too() {
     assert!(app.status_line.is_none(), "{:?}", app.status_line);
 }
 
-/// `,` cycles the speed and wraps back to `Normal`, and is not an action.
+/// A run starts at `Fast`; `,` cycles the speed, wraps to the slower
+/// `Normal`, and is not an action.
 #[test]
 fn comma_cycles_the_world_speed() {
     let mut app = test_app(9107);
     let start = tick_of(&app);
-    assert_eq!(app.world_speed, WorldSpeed::Normal);
+    assert_eq!(app.world_speed, WorldSpeed::Fast, "a run starts at x2");
 
-    app.handle_key(GameKey::Char(','));
-    assert_eq!(app.world_speed, WorldSpeed::Fast);
     app.handle_key(GameKey::Char(','));
     assert_eq!(app.world_speed, WorldSpeed::Fastest);
     app.handle_key(GameKey::Char(','));
     assert_eq!(app.world_speed, WorldSpeed::Normal, "did not wrap");
+    app.handle_key(GameKey::Char(','));
+    assert_eq!(app.world_speed, WorldSpeed::Fast);
     assert_eq!(tick_of(&app), start, "changing speed spent a turn");
 }
 
@@ -509,7 +513,7 @@ fn comma_cycles_the_world_speed_underground_too() {
 
     assert_eq!(
         app.world_speed,
-        WorldSpeed::Fast,
+        WorldSpeed::Fastest,
         "`,` was swallowed underground"
     );
 }

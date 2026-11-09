@@ -55,8 +55,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
 - **A group menu's rows are hidden dynamically**, so `command_rows`
-  must be the *only* source of them, for the base's pages and the party's.
-- **Every hub — `b`, `i`, `c`, `w` and Esc's game menu — walks one nav rule,
+  must be the *only* source of them, for the party's pages (and the
+  temporary BASE "Structures" stopgap, removed in phase 3).
+- **Every hub — `b`, `i`, `c` and Esc's game menu (`w` opens `b`, not a hub of its own) — walks one nav rule,
   `App::handle_hub_nav` (ADR 0045: arrows move the cursor, `Tab`/`Shift+Tab`
   (`GameKey::ShiftTab`, folded to `Tab` for every other screen) switch the
   highlighted page's `HubTab`s from either half, `[ ]` step the rail, `{ }`

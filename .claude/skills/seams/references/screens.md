@@ -131,12 +131,14 @@
   any per-row transform must live in the engine.** Both sides call
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
-- **A group menu's rows are hidden dynamically**, so `command_rows` /
-  `party_menu_rows` must be the *only* source of them. A row survives two
+- **A group menu's rows are hidden dynamically**, so `command_rows`
+  (the party pages, plus the temporary BASE "Structures" stopgap that phase 3
+  removes) must be the *only* source of them; the base launcher tables are
+  gone and their verbs are tabs of `b`'s pages. A row survives two
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
   `require_field`'s caller list.
-- **Every hub — `b`, `i`, `c`, `w` and the game menu — walks one nav rule,
+- **Every hub — `b`, `i`, `c` and the game menu (`w` is a shortcut that opens `b` on the site beside the party, else the first town, else Overview) — walks one nav rule,
   `App::handle_hub_nav`, and `App::screen_claims` is the one place a page
   takes an arrow, `Esc` or a brace back from it.** The rule (ADR 0045):
   arrows move the cursor, so `Right` in a page is the page's own and `Left`

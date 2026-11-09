@@ -92,15 +92,19 @@ const BASE_RAIL: &[(&str, &[Mode])] = &[
 ];
 
 const INVENTORY_RAIL: &[(&str, &[Mode])] = &[
-    ("Items", &[Mode::Inventory]),
-    ("Phase keys", &[Mode::PhaseKeys]),
-    ("Downed programs", &[Mode::DownedPrograms]),
-    ("Tools", &[Mode::Tools]),
-    ("Companions", &[Mode::Companion]),
-    ("Manifests", &[Mode::ManifestIntro]),
-    ("Programs", &[Mode::PartyPrograms]),
-    ("Routines", &[Mode::PartyRoutines]),
-    ("Perks", &[Mode::Perks]),
+    (
+        "You",
+        &[
+            Mode::Inventory,
+            Mode::Tools,
+            Mode::PhaseKeys,
+            Mode::PartyRoutines,
+            Mode::Perks,
+            Mode::ManifestIntro,
+        ],
+    ),
+    ("Roster", &[Mode::Companion, Mode::PartyPrograms]),
+    ("Downed", &[Mode::DownedPrograms]),
 ];
 
 const GAME_MENU_RAIL: &[(&str, &[Mode])] = &[
@@ -245,11 +249,12 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         &mut app,
         &[
             (Char('i'), at(Mode::Inventory, Hub::Inventory, 0, 0, true)),
-            (Down, at(Mode::PhaseKeys, Hub::Inventory, 1, 0, true)),
+            (Down, at(Mode::Companion, Hub::Inventory, 1, 0, true)),
             (Down, at(Mode::DownedPrograms, Hub::Inventory, 2, 0, true)),
             (Right, at(Mode::DownedPrograms, Hub::Inventory, 2, 0, false)),
             (Esc, at(Mode::DownedPrograms, Hub::Inventory, 2, 0, true)),
-            (Char(']'), at(Mode::Tools, Hub::Inventory, 3, 0, true)),
+            (Char(']'), at(Mode::Inventory, Hub::Inventory, 0, 0, true)),
+            (Tab, at(Mode::Tools, Hub::Inventory, 0, 1, true)),
             (
                 Char('['),
                 at(Mode::DownedPrograms, Hub::Inventory, 2, 0, true),

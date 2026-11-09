@@ -143,12 +143,17 @@ fn braces_jump_to_the_first_page_of_the_next_and_previous_section() {
 #[test]
 fn braces_do_nothing_on_a_hub_with_no_sections() {
     let mut app = test_app(43008);
-    open_hub_screen(&mut app, Mode::PhaseKeys);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(
+        app.mode,
+        Mode::GameplayOptions,
+        "the game menu has no sections"
+    );
     let before = app.hub_at();
     app.handle_key(GameKey::Char('}'));
     app.handle_key(GameKey::Char('{'));
     assert_eq!(app.hub_at(), before);
-    assert_eq!(app.mode, Mode::PhaseKeys);
+    assert_eq!(app.mode, Mode::GameplayOptions);
 }
 
 #[test]

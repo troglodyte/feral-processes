@@ -2,45 +2,43 @@
 
 use crate::*;
 
-/// The inventory's table, in rail order: what you carry, then who you carry
-/// it with. The roster and Perks are pages in their own right; the two
-/// command pages hold the errands that act on programs and on routines.
+/// The YOU entry's tabs: what the player carries and knows, then the
+/// errand page for routines and the Manifests entry door.
+pub const YOU_TABS: &[HubTab] = &[
+    HubTab::new("Items", Mode::Inventory),
+    HubTab::new("Tools", Mode::Tools),
+    HubTab::new("Phase keys", Mode::PhaseKeys),
+    HubTab::new("Routines", Mode::PartyRoutines),
+    HubTab::new("Perks", Mode::Perks),
+    HubTab::new("Manifests", Mode::ManifestIntro),
+];
+
+/// The Roster entry's tabs: every program you own, then the errands that
+/// act on programs.
+pub const ROSTER_TABS: &[HubTab] = &[
+    HubTab::new("Roster", Mode::Companion),
+    HubTab::new("Errands", Mode::PartyPrograms),
+];
+
+pub const YOU_SECTION: &str = "YOU";
+pub const PROGRAMS_SECTION: &str = "PROGRAMS";
+
+/// The inventory's fixed entries, in rail order within their sections. The
+/// PARTY entries (one per member) come between the first two, and BESIDE
+/// YOU's (one per adjacent structure) after the last: both are the live
+/// game's answer, not a table.
 pub const INVENTORY_PAGES: &[FixedPage] = &[
     FixedPage {
-        title: "Items",
-        tabs: &[HubTab::new("Items", Mode::Inventory)],
+        title: "You",
+        tabs: YOU_TABS,
     },
     FixedPage {
-        title: "Phase keys",
-        tabs: &[HubTab::new("Phase keys", Mode::PhaseKeys)],
+        title: "Roster",
+        tabs: ROSTER_TABS,
     },
     FixedPage {
-        title: "Downed programs",
-        tabs: &[HubTab::new("Downed programs", Mode::DownedPrograms)],
-    },
-    FixedPage {
-        title: "Tools",
-        tabs: &[HubTab::new("Tools", Mode::Tools)],
-    },
-    FixedPage {
-        title: "Companions",
-        tabs: &[HubTab::new("Companions", Mode::Companion)],
-    },
-    FixedPage {
-        title: "Manifests",
-        tabs: &[HubTab::new("Manifests", Mode::ManifestIntro)],
-    },
-    FixedPage {
-        title: "Programs",
-        tabs: &[HubTab::new("Programs", Mode::PartyPrograms)],
-    },
-    FixedPage {
-        title: "Routines",
-        tabs: &[HubTab::new("Routines", Mode::PartyRoutines)],
-    },
-    FixedPage {
-        title: "Perks",
-        tabs: &[HubTab::new("Perks", Mode::Perks)],
+        title: "Downed",
+        tabs: &[HubTab::new("Downed", Mode::DownedPrograms)],
     },
 ];
 
@@ -52,7 +50,20 @@ impl HubKind for InventoryHub {
     }
 
     fn pages(&self, _app: &App) -> Vec<HubPage> {
-        INVENTORY_PAGES.iter().map(FixedPage::page).collect()
+        let [you, roster, downed] = INVENTORY_PAGES else {
+            unreachable!("the fixed table is three entries")
+        };
+        vec![
+            HubPage {
+                section: Some(YOU_SECTION),
+                ..you.page()
+            },
+            HubPage {
+                section: Some(PROGRAMS_SECTION),
+                ..roster.page()
+            },
+            downed.page(),
+        ]
     }
 
     /// Enter or Right on the Manifests rail entry opens the sheet itself,

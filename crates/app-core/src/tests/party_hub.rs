@@ -7,14 +7,6 @@ use feral_processes_engine::save;
 use super::support::*;
 use crate::*;
 
-const RAIL: [Mode; 5] = [
-    Mode::Companion,
-    Mode::ManifestIntro,
-    Mode::PartyPrograms,
-    Mode::PartyRoutines,
-    Mode::Perks,
-];
-
 fn press(app: &mut App, keys: &[GameKey]) {
     for key in keys {
         app.handle_key(*key);
@@ -62,9 +54,15 @@ fn app_with_points(seed: u32, stat_points: u32, perk_points: u32) -> App {
 }
 
 #[test]
-fn the_party_pages_follow_tools_on_the_inventory_rail() {
-    for (page, mode) in RAIL.into_iter().enumerate() {
-        assert_eq!(hub_of(mode), Some((Hub::Inventory, 4 + page, 0)));
+fn the_party_screens_are_tabs_of_you_and_the_roster() {
+    for (mode, place) in [
+        (Mode::Companion, (1, 0)),
+        (Mode::PartyPrograms, (1, 1)),
+        (Mode::PartyRoutines, (0, 3)),
+        (Mode::Perks, (0, 4)),
+        (Mode::ManifestIntro, (0, 5)),
+    ] {
+        assert_eq!(hub_of(mode), Some((Hub::Inventory, place.0, place.1)));
     }
 }
 
@@ -93,8 +91,8 @@ fn right_and_enter_go_into_the_page_and_esc_climbs_back_out() {
 #[test]
 fn i_reopens_on_a_party_page_and_the_base_keeps_its_own_slot() {
     let mut app = test_app(31004);
-    open_companions(&mut app);
-    press(&mut app, &[GameKey::Down, GameKey::Down, GameKey::Down]);
+    app.handle_key(GameKey::Char('i'));
+    press(&mut app, &[GameKey::Tab, GameKey::Tab, GameKey::Tab]);
     assert_eq!(app.mode, Mode::PartyRoutines);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
@@ -121,15 +119,16 @@ fn a_command_page_with_every_row_hidden_still_turns_and_escapes() {
         "premise: one companion and no fusion research hides Fuse"
     );
     open_companions(&mut app);
-    press(&mut app, &[GameKey::Char(']'), GameKey::Char(']')]);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::PartyPrograms);
     // Rows are selected by key, not by walking onto a hidden one.
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Char('z'));
     assert_eq!(app.mode, Mode::PartyPrograms, "no row answers to z");
-    press(&mut app, &[GameKey::Esc, GameKey::Char(']')]);
-    assert_eq!(app.mode, Mode::PartyRoutines);
-    press(&mut app, &[GameKey::Esc]);
+    press(&mut app, &[GameKey::Esc, GameKey::Esc]);
+    assert_eq!(app.mode, Mode::Playing);
+    open_hub_screen(&mut app, Mode::PartyRoutines);
+    press(&mut app, &[GameKey::Esc, GameKey::Esc]);
     assert_eq!(app.mode, Mode::Playing);
 }
 
@@ -327,7 +326,7 @@ fn perk_previews_are_fresh_after_a_rail_turn() {
     let stale = app.perk_previews.clone();
     // Turn away, change the perks under the page, turn back.
     app.handle_key(GameKey::Esc);
-    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::ShiftTab);
     assert_eq!(app.mode, Mode::PartyRoutines);
     let id = app.game.as_mut().unwrap().perk_defs()[0].id;
     app.game
@@ -335,7 +334,7 @@ fn perk_previews_are_fresh_after_a_rail_turn() {
         .unwrap()
         .buy_perk(id)
         .expect("a point to spend");
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::Perks);
 
     let game = app.game.as_mut().unwrap();

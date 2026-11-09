@@ -1693,8 +1693,8 @@ pub enum Mode {
     BuildDirection,
     /// Picking which owned program pays for the order assembled in
     /// `App::pending_build` — see `Game::programs_for_build`. Reached from
-    /// `Mode::BuildDirection` for a deploy or from `U` on a structure's Info
-    /// tab for an upgrade, and never for a Home: a fresh run owns zero programs, so a
+    /// `Mode::BuildDirection` for a deploy or from `Mode::UpgradeDirection`
+    /// for an upgrade, and never for a Home: a fresh run owns zero programs, so a
     /// Home that needed one to found would be unfoundable, and
     /// `handle_build_direction_key` still calls `place_structure(.., None)`
     /// straight for it. Nothing is spent reaching this screen — the commit
@@ -1787,14 +1787,22 @@ pub enum Mode {
     /// scheduler's own pick order. `App::work_column` is the column half of
     /// the cursor; `menu_selected` is the row half, as everywhere else.
     BaseStaff,
+    /// Picking a nearby structure for the *player* to work themselves rather
+    /// than posting a program to it — see `Game::work_structure`. The player
+    /// is not staff, so this flow is untouched by work orders.
+    WorkStructure,
+    /// Lists nearby structures to demolish (see `App::pending_remove_structure`).
+    /// Picking the Home moves to `Mode::RemoveConfirm` instead of demolishing
+    /// immediately, since it cascades; anything else is removed right away.
+    Remove,
     /// Warns that demolishing the Home destroys every other base structure
     /// too, before `Game::remove_structure` is actually called.
     RemoveConfirm,
     /// Aiming the demolish key at one of the four neighbouring tiles, reached
-    /// with `d` from `Mode::Playing`, or `X` on a structure's Info tab. A
-    /// structure has to be *adjacent*, so a single keypress can never take
-    /// down something off the far side of the screen. Home routes into
-    /// `Mode::RemoveConfirm`.
+    /// with `d` from `Mode::Playing`. The direct route to the same removal
+    /// `Mode::Remove` lists — a structure has to be *adjacent*, so a single
+    /// keypress can never take down something off the far side of the screen.
+    /// Home still routes into `Mode::RemoveConfirm`.
     RemoveDirection,
     /// Aiming a placeable item at one of the four neighbouring tiles,
     /// reached with `[P]lace` from `Mode::InventoryItemAction`. The item is
@@ -1803,6 +1811,18 @@ pub enum Mode {
     /// popup like every other picker, so it does not join
     /// `needs_status_banner`.
     TrapDirection,
+    /// Aiming the upgrade verb at one of the four neighbouring tiles,
+    /// reached from the Build page. Whatever structure stands that way
+    /// **files a request** for the next tier, which the base's build crew
+    /// fetches for and works.
+    ///
+    /// A direction rather than the list this used to be, for
+    /// `Mode::RemoveDirection`'s reason one verb over: the machine is a
+    /// thing on the map, and a player who can see it there would rather
+    /// point at it than find its row. The cost the list used to quote per
+    /// row moved down one screen to `Mode::BuildProgram`, which is the
+    /// first point the target is known.
+    UpgradeDirection,
     InspectDirection,
     /// The party's own map of the Stack frame they are standing in — see
     /// `Game::frame_map`. Underground only, opened with `g` — a no-op on the
@@ -2261,8 +2281,12 @@ pub enum Mode {
     /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
     /// the highlighted page's first screen.
     BaseOverview,
+    /// The base's Structures command page, a stopgap until hub-merge phase
+    /// 3: the structure verbs currently possible, dispatching to the screen
+    /// behind the highlighted one — see `App::command_rows`.
+    BaseStructures,
     /// The party's command pages on the inventory rail: the program errands and the
-    /// routine errands, drawn from `App::command_rows`.
+    /// routine errands, drawn from `App::command_rows` like the base's.
     PartyPrograms,
     PartyRoutines,
     /// One party member's page on the inventory rail: their roster row's
@@ -2559,9 +2583,12 @@ impl Mode {
             | Mode::WorkOrderPick
             | Mode::WorkOrderQuantity
             | Mode::BaseStaff
+            | Mode::WorkStructure
+            | Mode::Remove
             | Mode::RemoveConfirm
             | Mode::RemoveDirection
             | Mode::TrapDirection
+            | Mode::UpgradeDirection
             | Mode::InspectDirection
             | Mode::Manifest
             | Mode::StructureManifest
@@ -2669,6 +2696,7 @@ impl Mode {
             // Opened from the map with `b`, `BaseOutput`'s reason — never
             // layers over a fight.
             | Mode::BaseOverview
+            | Mode::BaseStructures
             // Opened from the map with `p`, the base command pages' reason.
             | Mode::PartyPrograms
             | Mode::PartyRoutines
@@ -2779,7 +2807,7 @@ pub enum PendingBuild {
     /// An existing structure, and the tier its crew would raise it to.
     /// `to_tier` is carried rather than re-derived from the structure's
     /// current `EntityView::tier` at confirm time, because the structure
-    /// aimed at by `U` on the Info tab is the only place that tier was
+    /// aimed at in `Mode::UpgradeDirection` is the only place that tier was
     /// read off — re-reading it here would trust the structure to still
     /// exist and still report the same tier it did when it was pointed at.
     Upgrade { structure: Entity, to_tier: u32 },
@@ -2969,8 +2997,8 @@ pub struct App {
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.
     pub hub_on_rail: bool,
-    /// The Home picked for demolition, awaiting `Mode::RemoveConfirm` (see
-    /// `Game::remove_structure`).
+    /// The structure picked in `Mode::Remove`, awaiting confirmation from
+    /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,
     /// Which owned program the map's camera is following, if any — started
     /// with `W` on that program's manifest and handed back by `Esc`, by a

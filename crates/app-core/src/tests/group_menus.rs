@@ -255,3 +255,68 @@ fn refactoring_works_underground() {
         "a refactor reaches no zone-map state through Position, so it is not surface-only"
     );
 }
+
+/// The Structures page's verbs are field actions, so its rows are off the
+/// page in the Stack — and on it on the field, or the test proves nothing.
+#[test]
+fn the_command_pages_drop_their_base_rows_underground_too() {
+    const GUARDED: [&str; 3] = [
+        "Work a structure yourself",
+        "Upgrade a structure",
+        "Demolish a structure",
+    ];
+    let mut surface = app_owning_a_program_and_an_extractor_deep(4008, &[], &[], false);
+    stand_in_base(&mut surface);
+    let mut offered = command_labels_all(&mut surface);
+    offered.extend(command_labels_all(
+        &mut app_inside_a_small_base_with_programs(4009, false, 1),
+    ));
+    for row in GUARDED {
+        assert!(
+            offered.contains(&row),
+            "no fixture offers {row:?}: {offered:?}"
+        );
+    }
+    for mut app in [
+        app_owning_a_program_and_an_extractor_deep(4005, &[], &[], true),
+        app_inside_a_small_base_with_programs(4007, true, 1),
+    ] {
+        assert!(
+            app.game.as_ref().is_some_and(|g| g.is_underground()),
+            "precondition: the fixture really went down"
+        );
+        let rows = command_labels_all(&mut app);
+        for absent in GUARDED {
+            assert!(
+                !rows.contains(&absent),
+                "{absent:?} is a field verb: {rows:?}"
+            );
+        }
+    }
+}
+
+/// The parked row is an index into a list that can shrink while the child
+/// screen is open; Esc must land on a row that still exists.
+#[test]
+fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
+    let mut app = app_inside_a_small_base_with_programs(4010, false, 1);
+    open_command(&mut app, "Demolish a structure");
+    assert_eq!(app.mode, Mode::Remove);
+    let before = app.command_rows(Mode::BaseStructures).unwrap().len();
+    // Underground, where every row on the page is a field verb.
+    go_underground(&mut app);
+    let rows = app.command_rows(Mode::BaseStructures).unwrap().len();
+    assert!(
+        rows < before,
+        "precondition: the page shrank ({before} -> {rows})"
+    );
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::BaseStructures);
+    assert!(
+        app.menu_selected < rows.max(1),
+        "highlight {} is past the {rows} rows the page now has",
+        app.menu_selected
+    );
+}

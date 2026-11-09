@@ -50,6 +50,7 @@ impl App {
                 self.hover_circle(hover, view.siege_origin)
             }
             Mode::BuildDirection => self.deploy_previews(),
+            Mode::UpgradeDirection => self.upgrade_previews(),
             _ => Vec::new(),
         }
     }
@@ -107,6 +108,37 @@ impl App {
                 radius,
                 style: ReachCircleStyle::Preview,
                 kind,
+            })
+            .collect()
+    }
+
+    fn upgrade_previews(&mut self) -> Vec<ReachCircle> {
+        let Some(game) = self.game.as_mut() else {
+            return Vec::new();
+        };
+        let adjacent: Vec<_> = NEIGHBOURS
+            .iter()
+            .filter_map(|&(dx, dy)| game.adjacent_structure(dx, dy))
+            .map(|e| e.entity)
+            .collect();
+        let shields = game
+            .view_shields()
+            .into_iter()
+            .map(|s| (s.entity, s.anchor, s.next_radius, ReachKind::Shield));
+        let patches = game
+            .view_patch_nodes()
+            .into_iter()
+            .map(|n| (n.entity, n.anchor, n.next_radius, ReachKind::Patch));
+        shields
+            .chain(patches)
+            .filter(|(entity, ..)| adjacent.contains(entity))
+            .filter_map(|(_, anchor, next, kind)| {
+                Some(ReachCircle {
+                    anchor,
+                    radius: next?,
+                    style: ReachCircleStyle::Preview,
+                    kind,
+                })
             })
             .collect()
     }

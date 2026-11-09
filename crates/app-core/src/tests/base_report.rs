@@ -53,6 +53,7 @@ fn the_rail_runs_its_pages_in_order() {
             Mode::StaffWellbeing,
             Mode::Research,
             Mode::Alerts,
+            Mode::BaseStructures,
         ]
     );
     assert_eq!(hub_of(Mode::BaseOutput), Some((Hub::Base, 2, 0)));
@@ -191,7 +192,7 @@ fn paging_onto_alerts_marks_everything_read() {
 #[test]
 fn no_command_row_is_called_base_output_or_base_report() {
     let mut app = test_app(30010);
-    let labels: Vec<_> = party_rows(&mut app).iter().map(|r| r.label).collect();
+    let labels = command_labels_all(&mut app);
     assert!(!labels.contains(&"Base output"), "{labels:?}");
     assert!(!labels.contains(&"Base report"), "{labels:?}");
 }
@@ -783,6 +784,29 @@ fn a_non_command_mode_has_no_command_rows() {
     let mut app = test_app(30108);
     assert!(app.command_rows(Mode::BaseStock).is_none());
     assert!(app.command_rows(Mode::Playing).is_none());
+}
+
+#[test]
+fn a_row_letter_on_the_rail_of_a_command_page_does_nothing() {
+    let mut app = app_inside_a_small_base_with_programs(30110, false, 1);
+    app.handle_key(GameKey::Char('b'));
+    back_to(&mut app, Mode::BaseStructures);
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Char('a'));
+    app.handle_key(GameKey::Char('1'));
+    assert_eq!(app.mode, Mode::BaseStructures);
+}
+
+#[test]
+fn an_all_hidden_page_is_still_on_the_rail() {
+    let mut app = test_app(30111);
+    skip_tutorial(&mut app);
+    app.handle_key(GameKey::Char('b'));
+    back_to(&mut app, Mode::BaseStructures);
+    assert_eq!(
+        app.command_rows(Mode::BaseStructures).map(|r| r.len()),
+        Some(0)
+    );
 }
 
 /// A merged page keeps every mark its old pages had: the engine's flag for

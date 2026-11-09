@@ -132,9 +132,9 @@
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
 - **A group menu's rows are hidden dynamically**, so `command_rows`
-  (the party pages; the base's structure verbs are `W`/`U`/`X` on a BESIDE
-  YOU entry's Info tab) must be the *only* source of them; the base launcher
-  tables are gone and their verbs are tabs of `b`'s pages or keys on a tab. A row survives two
+  (the party pages, plus the BASE "Structures" stopgap, still standing though
+  W/U/X on a BESIDE YOU entry's Info tab now reach the same verbs) must be the *only* source of them; the base launcher tables are
+  gone and their verbs are tabs of `b`'s pages. A row survives two
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
   `require_field`'s caller list.

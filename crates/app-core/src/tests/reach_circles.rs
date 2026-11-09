@@ -69,10 +69,28 @@ fn deploying_a_shield_previews_four_circles() {
 }
 
 #[test]
+fn upgrading_previews_the_next_radius() {
+    let mut app = app_beside_a_shield(6103);
+    let anchor = shield_anchor(&mut app);
+    app.mode = Mode::UpgradeDirection;
+
+    assert_eq!(
+        app.reach_circles(),
+        vec![ReachCircle {
+            anchor,
+            radius: 6,
+            style: ReachCircleStyle::Preview,
+            kind: ReachKind::Shield
+        }]
+    );
+}
+
+#[test]
 fn a_shield_upgrade_skips_the_program_picker() {
     let mut app = app_beside_a_shield(6104);
+    app.mode = Mode::UpgradeDirection;
 
-    app.upgrade_toward((1, 0));
+    app.handle_key(GameKey::Right);
 
     assert_ne!(app.mode, Mode::BuildProgram);
     assert!(
@@ -81,7 +99,7 @@ fn a_shield_upgrade_skips_the_program_picker() {
             .unwrap()
             .adjacent_build_site(1, 0)
             .is_some(),
-        "the upgrade is filed by the call alone"
+        "the upgrade is filed by the direction press alone"
     );
 }
 
@@ -149,6 +167,23 @@ fn deploy_preview_of_a_patch_node_shows_radius_4() {
     assert!(circles.iter().all(|c| {
         (c.radius, c.style, c.kind) == (4, ReachCircleStyle::Preview, ReachKind::Patch)
     }));
+}
+
+#[test]
+fn upgrade_preview_of_a_tier_1_patch_node_shows_radius_6() {
+    let mut app = app_beside_a_patch_node(6113);
+    let anchor = app.game.as_mut().unwrap().view_patch_nodes()[0].anchor;
+    app.mode = Mode::UpgradeDirection;
+
+    assert_eq!(
+        app.reach_circles(),
+        vec![ReachCircle {
+            anchor,
+            radius: 6,
+            style: ReachCircleStyle::Preview,
+            kind: ReachKind::Patch
+        }]
+    );
 }
 
 #[test]

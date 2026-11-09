@@ -325,10 +325,13 @@ impl App {
             Mode::WorkOrderPick => self.handle_work_order_pick_key(key),
             Mode::WorkOrderQuantity => self.handle_work_order_quantity_key(key),
             Mode::BaseStaff => self.handle_base_staff_key(key),
+            Mode::WorkStructure => self.handle_work_structure_key(key),
+            Mode::Remove => self.handle_remove_key(key),
             Mode::RemoveConfirm => self.handle_remove_confirm_key(key),
             Mode::RemoveDirection => self.handle_remove_direction_key(key),
             Mode::TrapDirection => self.handle_trap_direction_key(key),
             Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
+            Mode::UpgradeDirection => self.handle_upgrade_direction_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::CellDescribe => self.handle_cell_describe_key(key),
@@ -424,7 +427,9 @@ impl App {
             | Mode::RoutesInFlight => self.handle_sites_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
-            Mode::PartyPrograms | Mode::PartyRoutines => self.handle_command_page_key(key),
+            Mode::BaseStructures | Mode::PartyPrograms | Mode::PartyRoutines => {
+                self.handle_command_page_key(key)
+            }
             Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
                 self.handle_staff_key(key)
             }

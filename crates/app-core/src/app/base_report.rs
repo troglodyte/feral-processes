@@ -64,6 +64,12 @@ pub const BASE_REPORT_PAGES: &[FixedPage] = &[
         title: "Alerts",
         tabs: &[HubTab::new("Alerts", Mode::Alerts)],
     },
+    // A stopgap until hub-merge phase 3 gives these verbs keys on the
+    // structure's Info tab in `i`; delete it then.
+    FixedPage {
+        title: "Structures",
+        tabs: &[HubTab::new("Structures", Mode::BaseStructures)],
+    },
 ];
 
 /// The section header the rail draws above the Overview.

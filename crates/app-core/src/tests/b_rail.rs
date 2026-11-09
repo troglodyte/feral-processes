@@ -229,6 +229,67 @@ fn the_caravan_and_dispatch_launcher_verbs_are_in_traffic() {
     assert_eq!(reach_in_b(&mut app, "Sorties", "Sorties"), Mode::Dispatch);
 }
 
+/// Until phase 3 gives them keys in `i`, the three structure verbs are rows
+/// on BASE's Structures page, so none of them is out of reach in a release.
+/// Delete with the page.
+#[test]
+fn the_structure_verbs_open_from_the_structures_page_of_b() {
+    for (label, target) in [
+        ("Work a structure yourself", Mode::WorkStructure),
+        ("Upgrade a structure", Mode::UpgradeDirection),
+        ("Demolish a structure", Mode::Remove),
+    ] {
+        let mut app = app_owning_a_program_and_an_extractor(46016, &[]);
+        stand_in_base(&mut app);
+        assert_eq!(
+            reach_in_b(&mut app, "Structures", "Structures"),
+            Mode::BaseStructures
+        );
+        app.handle_key(GameKey::Right);
+        let rows = app
+            .command_rows(Mode::BaseStructures)
+            .expect("a command page");
+        let row = rows
+            .iter()
+            .position(|r| r.label == label)
+            .unwrap_or_else(|| panic!("{label} is offered beside a machine"));
+        highlight_row(&mut app, row);
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.mode, target, "{label}");
+    }
+}
+
+/// Walks `[c]`'s entries to the one named `name` and into its Info tab,
+/// cursor in the page, so the next key is the tab's own.
+fn on_the_info_tab_of(app: &mut App, name: &str) -> Entity {
+    app.handle_key(GameKey::Char('c'));
+    for _ in 0..8 {
+        if held_beside(app).name == name {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
+    assert_eq!(held_beside(app).name, name, "an entry for {name}");
+    let entity = held_beside(app).entity;
+    for _ in 0..16 {
+        if app.mode == Mode::StructureManifest {
+            break;
+        }
+        app.handle_key(GameKey::Tab);
+    }
+    assert_eq!(app.mode, Mode::StructureManifest, "the Info tab");
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail);
+    entity
+}
+
+fn is_beside(app: &App, entity: Entity) -> bool {
+    let game = app.game.as_ref().unwrap();
+    game.adjacent_structures()
+        .iter()
+        .any(|s| s.entity == entity)
+}
+
 /// Work, Upgrade and Demolish are keys on the structure's Info tab in `i`
 /// (decision 5: `W`, `U`, `X`, free on that tab and in the key-hint
 /// census), each aimed at the entry's own structure through the door the old

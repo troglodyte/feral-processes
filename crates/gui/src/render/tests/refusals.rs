@@ -1,7 +1,7 @@
 use super::*;
 
 /// Every `Mode`, as the status-line census below drives them.
-const ALL_MODES: [Mode; 178] = [
+const ALL_MODES: [Mode; 182] = [
     Mode::Dossier,
     Mode::TacticalBattle,
     Mode::TacticalRoutine,
@@ -51,9 +51,12 @@ const ALL_MODES: [Mode; 178] = [
     Mode::WorkOrderPick,
     Mode::WorkOrderQuantity,
     Mode::BaseStaff,
+    Mode::WorkStructure,
+    Mode::Remove,
     Mode::RemoveConfirm,
     Mode::RemoveDirection,
     Mode::TrapDirection,
+    Mode::UpgradeDirection,
     Mode::InspectDirection,
     Mode::FrameMap,
     Mode::WorldMap,
@@ -143,6 +146,7 @@ const ALL_MODES: [Mode; 178] = [
     Mode::StructureAssign,
     Mode::BaseOutput,
     Mode::BaseOverview,
+    Mode::BaseStructures,
     Mode::PartyPrograms,
     Mode::ManifestIntro,
     Mode::PartyRoutines,

@@ -282,13 +282,30 @@ impl App {
         }
     }
 
+    /// Nearby structures that accept a posted program. The same list whether
+    /// the work is done by a program (`Mode::CronjobStructure`) or by the
+    /// player themselves (`Mode::WorkStructure`) — it is the same job either
+    /// way, see `Game::work_structure`.
+    pub fn workable_structures(&mut self) -> Vec<EntityView> {
+        self.scanned(|e| e.can_work)
+    }
+
+    /// Every nearby structure, whatever it is: a guard posts to any of them
+    /// and demolition takes any of them.
+    pub fn nearby_structures(&mut self) -> Vec<EntityView> {
+        self.scanned(|e| e.is_structure)
+    }
+
     /// Nearby structures that declare an upgrade path. Filtered on `tier`
     /// rather than just `is_structure`: a base with nothing that climbs
     /// should not be offered the verb at all.
     ///
-    /// Read by gui's `build_commit`, which names the machine an upgrade
-    /// order was filed against: a question about the neighbourhood rather
-    /// than one cell, which is why the scan radius stayed.
+    /// **No longer a screen's rows** — `Mode::UpgradeDirection` aims at one
+    /// tile. Two readers are left and they want different things from it:
+    /// the Build page asks whether the row is worth offering at all, and
+    /// gui's `build_commit` names the machine an order was filed against.
+    /// Both are questions about the neighbourhood rather than about one
+    /// cell, which is why the scan radius stayed.
     pub fn upgradeable_structures(&mut self) -> Vec<EntityView> {
         self.scanned(|e| e.is_structure && e.tier.is_some())
     }
@@ -413,8 +430,8 @@ impl App {
 
     /// Confirms the order `App::pending_build` describes by spending the
     /// picked program on it — `Mode::BuildProgram`, reached from
-    /// `Mode::BuildDirection` (a deploy) or `U` on a structure's Info
-    /// tab (an upgrade).
+    /// `Mode::BuildDirection` (a deploy) or `Mode::UpgradeDirection` (an
+    /// upgrade).
     ///
     /// **Nothing is spent until this resolves.** `place_structure` and
     /// `upgrade_structure` are the one place either commit actually happens,
@@ -568,6 +585,44 @@ impl App {
         }
     }
 
+    /// Picks a nearby workable structure for the player to work themselves —
+    /// see `Game::work_structure`. **The player is not staff**, so this flow
+    /// survived work orders untouched: the scheduler never moves you.
+    pub(crate) fn handle_work_structure_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let structures = self.workable_structures();
+        if let Some(idx) = self.selected_index(key, structures.len()) {
+            let Some(game) = &mut self.game else { return };
+            let outcome = game.work_structure(structures[idx].entity);
+            self.report(outcome);
+            self.mode = Mode::Playing;
+        }
+    }
+
+    pub(crate) fn handle_remove_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let structures = self.nearby_structures();
+        if let Some(idx) = self.selected_index(key, structures.len()) {
+            let picked_entity = structures[idx].entity;
+            let picked_is_home = structures[idx].is_home;
+            if picked_is_home {
+                self.pending_remove_structure = Some(picked_entity);
+                self.mode = Mode::RemoveConfirm;
+                return;
+            }
+            let Some(game) = &mut self.game else { return };
+            let outcome = game.remove_structure(picked_entity);
+            self.report(outcome);
+            self.mode = Mode::Playing;
+        }
+    }
+
     /// `[P]lace` + a direction: drop the held placeable on that neighbouring
     /// tile. `handle_build_direction_key`'s exact shape one verb over.
     pub(crate) fn handle_trap_direction_key(&mut self, key: GameKey) {
@@ -652,12 +707,15 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    /// Files the upgrade for the structure on the tile `dir` away, for `U`
-    /// on a structure's Info tab: a request for the next tier, which the
-    /// base's build crew fetches for and works.
+    /// The Build page's upgrade verb + a direction: file a request for the
+    /// next tier on whatever machine stands on that neighbouring tile.
     ///
-    /// `Game::adjacent_structure` is the same reach as the demolish key's —
-    /// the four orthogonal neighbours.
+    /// `handle_remove_direction_key`'s shape, and `Game::adjacent_structure`
+    /// is literally the same reach — the four orthogonal neighbours. An
+    /// upgrade is a crew job and so needs no adjacency of its own, but
+    /// pointing at a machine is only unambiguous while the machine is next
+    /// to you: a ray would have to choose between two structures on the
+    /// same line, and there is nothing on screen saying which it took.
     ///
     /// **The refusals about the machine are the engine's own sentences, not
     /// copies of them.** `EntityView::tier` is `Some` exactly when the def
@@ -667,6 +725,18 @@ impl App {
     /// a second copy of "can't be upgraded". Every refusal in that function
     /// lands before `commit_for_build`, so nothing is spent on the way to
     /// the sentence.
+    pub(crate) fn handle_upgrade_direction_key(&mut self, key: GameKey) {
+        if key == GameKey::Esc {
+            self.close_screen();
+            return;
+        }
+        let Some(dir) = direction_of(key) else {
+            return;
+        };
+        self.upgrade_toward(dir);
+    }
+
+    /// Files the upgrade for the structure on the tile `dir` away.
     pub(crate) fn upgrade_toward(&mut self, dir: (i32, i32)) {
         let Some(game) = &mut self.game else { return };
         let Some(found) = game.adjacent_structure(dir.0, dir.1) else {

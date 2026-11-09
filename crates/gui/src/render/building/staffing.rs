@@ -516,6 +516,87 @@ pub(super) fn skill_line(skills: &[SkillView]) -> String {
         .join(COLUMN_GAP)
 }
 
+pub(crate) fn draw_structure_menu(
+    structures: &[EntityView],
+    title: &str,
+    prompt: &str,
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![text_row(prompt)];
+    if structures.is_empty() {
+        rows.push(text_row("(no structures nearby)"));
+    }
+    for (i, s) in structures.iter().enumerate() {
+        let assigned = s
+            .structure_worker
+            .as_ref()
+            .map(|w| format!(" (assigned: {w})"))
+            .unwrap_or_default();
+        let durability = s
+            .durability
+            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
+            .unwrap_or_default();
+        rows.push(with_icon(
+            item_row(
+                format!(
+                    "{} at ({}, {}){}{}",
+                    s.label, s.pos.0, s.pos.1, durability, assigned
+                ),
+                i == selected,
+            ),
+            s.glyph,
+            glyph_color(s.color),
+        ));
+    }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
+    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
+}
+
+pub(crate) fn draw_remove_menu(
+    structures: &[EntityView],
+    selected: usize,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let mut rows = vec![text_row(
+        "Demolish which structure? Removing Home destroys the whole base.",
+    )];
+    if structures.is_empty() {
+        rows.push(text_row("(no structures nearby)"));
+    }
+    for (i, s) in structures.iter().enumerate() {
+        let durability = s
+            .durability
+            .map(|(hp, max)| format!(" [HP {hp}/{max}]"))
+            .unwrap_or_default();
+        let home_tag = if s.is_home { " (Home)" } else { "" };
+        rows.push(with_icon(
+            item_row(
+                format!(
+                    "{} at ({}, {}){}{}",
+                    s.label, s.pos.0, s.pos.1, durability, home_tag
+                ),
+                i == selected,
+            ),
+            s.glyph,
+            glyph_color(s.color),
+        ));
+    }
+    push_key_footer(&mut rows, &["Enter choose", "Esc cancel"]);
+    draw_popup(
+        "Demolish structure",
+        PopupSize::Large,
+        &rows,
+        refusal,
+        painter,
+        m,
+    );
+}
+
 pub(crate) fn draw_remove_confirm(
     selected: usize,
     refusal: Option<&str>,

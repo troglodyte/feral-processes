@@ -711,9 +711,10 @@ pub(crate) fn go_underground(app: &mut App) {
 /// Stands the party on the one cell orthogonally adjacent to the Extractor
 /// `app_owning_a_program_and_an_extractor` plants at base-space `(2, 0)`.
 ///
-/// `U` on an Info tab acts on a *neighbour*, so an upgrade test has to say
-/// where the party is standing before it can open the machine's entry — the
-/// exit cell `stand_in_base` leaves it on is two tiles west of that machine.
+/// `Mode::UpgradeDirection` aims at a *neighbour*, so an upgrade test has to
+/// say where the party is standing before it can press a direction — the
+/// exit cell `stand_in_base` leaves it on is two tiles west of that machine
+/// and every arrow key from there finds nothing.
 pub(crate) fn stand_beside_the_extractor(app: &mut App) {
     stand_in_base_at(app, 1, 0);
 }

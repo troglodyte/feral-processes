@@ -134,8 +134,8 @@ use battle::{
 use breeding::{draw_breed_confirm_menu, draw_breed_menu, draw_breed_second_menu};
 use building::{
     build_commit, draw_build_direction, draw_build_menu, draw_build_program, draw_pin_prisoner,
-    draw_pin_subject, draw_remove_confirm, draw_siphon, draw_staffing_menu, draw_work_order_pick,
-    draw_work_order_quantity,
+    draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon, draw_staffing_menu,
+    draw_structure_menu, draw_work_order_pick, draw_work_order_quantity,
 };
 use caravan::CaravanBasket;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity};
@@ -1018,6 +1018,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::SettlementBoard => app.settlement_board_sections(),
         _ => (Vec::new(), Vec::new()),
     };
+    let scanned = match app.mode {
+        Mode::WorkStructure => app.workable_structures(),
+        Mode::Remove => app.nearby_structures(),
+        _ => Vec::new(),
+    };
     // Row counts are app-core's and rows are gui's, the way the history
     // screen and the structure roster already work: a renderer that rebuilt
     // these lists itself would be right until the first hidden row and then
@@ -1037,6 +1042,12 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // `command_rows` reads the party's surroundings, so like the lists above
     // it is taken before `game` borrows the app.
     let commands = app.command_rows(app.mode);
+    let command_counts: Vec<(usize, usize)> = match app.mode {
+        Mode::BaseOverview => base_report::command_pages()
+            .filter_map(|(page, mode)| Some((page, app.command_rows(mode)?.len())))
+            .collect(),
+        _ => Vec::new(),
+    };
     let list_filter = app.filter_text().to_owned();
     let site = app.held_site();
     let app_screens = base_report::AppScreens {
@@ -1044,6 +1055,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         member: app.held_member(),
         list_filter: &list_filter,
         commands: commands.as_deref(),
+        command_counts: &command_counts,
         work_orders: &work_orders,
         base_staff: base_staff.as_ref(),
         work_column: app.work_column,
@@ -1200,9 +1212,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RouteCargo => app.route_cargo_basket(),
         _ => None,
     };
-    // What the program picker is about to spend a program on. An upgrade's
-    // structure is named off `App::upgradeable_structures`, which takes
-    // `&mut self` and so cannot run once `game` below holds `&mut app.game`.
+    // What the program picker is about to spend a program on. Read here for
+    // `scanned`'s reason — an upgrade's structure is named off
+    // `App::upgradeable_structures`, which takes `&mut self` and so cannot
+    // run once `game` below holds `&mut app.game`.
     let build_commit = match app.mode {
         Mode::BuildProgram => build_commit(app),
         _ => None,
@@ -1496,7 +1509,28 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 m,
             )
         }
+        Mode::WorkStructure => draw_structure_menu(
+            &scanned,
+            "Work",
+            "Work which structure yourself?",
+            selected,
+            refusal,
+            painter,
+            m,
+        ),
+        Mode::Remove => draw_remove_menu(&scanned, selected, refusal, painter, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, refusal, painter, m),
+        // Says the crew does the work, because the direction prompt is now
+        // the whole of the screen the player decides on: the list this
+        // replaced carried that sentence above its rows.
+        Mode::UpgradeDirection => draw_direction_prompt(
+            "Upgrade direction",
+            "Upgrade which neighbour? Your crew fetches the parts and does \
+             the work.",
+            refusal,
+            painter,
+            m,
+        ),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect direction",
             "Choose a direction to inspect",

@@ -64,8 +64,8 @@
   `is_structure` **before** `build.is_some()`, or an upgrading machine draws
   as a bare slab. And the bill is quoted through `Game::upgrade_cost` and
   `build_cost_display`, the pack no longer being the store the verb reads —
-  on the program picker since the upgrade became `U` on a structure's Info
-  tab, because a key aimed at a *tile* does not know the machine yet.
+  on the program picker since `Mode::UpgradeDirection` replaced the upgrade
+  list, because a prompt aimed at a *tile* does not know the machine yet.
 
 - **A drop pod's recharge is `Upgrade`'s build request with a third goal,
   and it cannot be cancelled.** `Game::spend_pod` files `BuildGoal::Recharge`

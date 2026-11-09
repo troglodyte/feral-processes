@@ -74,6 +74,7 @@ pub fn key_alphabet() -> Vec<GameKey> {
         GameKey::Esc,
         GameKey::Backspace,
         GameKey::Tab,
+        GameKey::ShiftTab,
         GameKey::PageUp,
         GameKey::PageDown,
     ];
@@ -106,6 +107,7 @@ fn every_variant_is_spoken_for(key: GameKey) {
         | GameKey::Esc
         | GameKey::Backspace
         | GameKey::Tab
+        | GameKey::ShiftTab
         | GameKey::PageUp
         | GameKey::PageDown
         | GameKey::Char(_) => {}

@@ -209,17 +209,21 @@ impl HubKind for StructureHubKind {
     }
 
     fn key(&self, app: &mut App, key: GameKey) -> bool {
-        if key != GameKey::Tab {
-            return false;
-        }
-        app.step_structure(1);
+        let by = match key {
+            GameKey::Tab => 1,
+            GameKey::ShiftTab => -1,
+            _ => return false,
+        };
+        app.step_structure(by);
         true
     }
 
     /// `Tab` only when there is another structure to step to.
     fn extra_keys(&self, app: &App) -> Vec<(&'static str, &'static str)> {
         match &app.structure_hub {
-            Some(open) if open.cycle.len() > 1 => vec![("Tab", "next structure")],
+            Some(open) if open.cycle.len() > 1 => {
+                vec![("Tab", "next structure"), ("Shift+Tab", "previous")]
+            }
             _ => Vec::new(),
         }
     }

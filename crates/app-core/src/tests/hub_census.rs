@@ -207,11 +207,10 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         &mut app,
         &[
             (Right, at(Mode::StaffWellbeing, Hub::Base, 6, 0, false)),
-            (Right, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Right, at(Mode::StaffDiscontent, Hub::Base, 6, 2, false)),
-            (Left, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Left, at(Mode::StaffWellbeing, Hub::Base, 6, 0, false)),
-            (Left, at(Mode::StaffWellbeing, Hub::Base, 6, 0, true)),
+            (Tab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
+            (Tab, at(Mode::StaffDiscontent, Hub::Base, 6, 2, false)),
+            (ShiftTab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
+            (Left, at(Mode::StaffCoverage, Hub::Base, 6, 1, true)),
         ],
     );
 
@@ -284,9 +283,9 @@ fn a_hub_reopens_where_it_was_left() {
     for _ in 0..6 {
         app.handle_key(Char(']'));
     }
-    for _ in 0..3 {
-        app.handle_key(Right);
-    }
+    app.handle_key(Right);
+    app.handle_key(Tab);
+    app.handle_key(Tab);
     assert_eq!(app.mode, Mode::StaffDiscontent);
     app.handle_key(Esc);
     app.handle_key(Esc);

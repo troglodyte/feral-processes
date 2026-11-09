@@ -31,6 +31,7 @@ mod gear_inspect;
 mod group_menus;
 mod hover;
 mod hub_census;
+mod hub_nav;
 mod info_tab;
 mod interact;
 mod inventory;

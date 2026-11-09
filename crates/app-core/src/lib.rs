@@ -980,6 +980,10 @@ pub enum GameKey {
     /// between two panels would flicker for as long as the key was held, so
     /// nothing repeats it the way the four directions repeat.
     Tab,
+    /// `Shift+Tab`: `Tab` backwards. Only the hub rule reads it; every
+    /// other screen sees it folded to `Tab` (`App::handle_key`), so a
+    /// Shift held over a panel toggle still toggles.
+    ShiftTab,
     /// Move a menu's highlight `MENU_PAGE_ROWS` at a time. They repeat
     /// while held, like Up/Down, since paging is scrolling.
     PageUp,
@@ -989,7 +993,7 @@ pub enum GameKey {
 impl GameKey {
     /// Every variant but `Char`, spelled by its `Debug` name — the one
     /// table the parser reads, so a name and its variant cannot drift.
-    pub const NAMED: [GameKey; 18] = [
+    pub const NAMED: [GameKey; 19] = [
         GameKey::Up,
         GameKey::Down,
         GameKey::Left,
@@ -1006,6 +1010,7 @@ impl GameKey {
         GameKey::Esc,
         GameKey::Backspace,
         GameKey::Tab,
+        GameKey::ShiftTab,
         GameKey::PageUp,
         GameKey::PageDown,
     ];

@@ -140,7 +140,8 @@ fn dev_shortcuts() -> bool {
     *ON
 }
 
-/// Folds held modifiers into the two horizontal arrows.
+/// Folds held modifiers into the two horizontal arrows, and Shift into Tab
+/// (the hub rule's "previous tab").
 ///
 /// Up and Down are deliberately untouched: they move a cursor on every
 /// screen that reads them, and there is no second meaning to give them. The
@@ -157,6 +158,7 @@ fn with_modifiers(key: GameKey, shift: bool, ctrl: bool) -> GameKey {
         (GameKey::Right, true, _) => GameKey::ShiftRight,
         (GameKey::Left, false, true) => GameKey::CtrlLeft,
         (GameKey::Right, false, true) => GameKey::CtrlRight,
+        (GameKey::Tab, true, _) => GameKey::ShiftTab,
         (key, _, _) => key,
     }
 }
@@ -880,7 +882,7 @@ fn frame(
         if input.keyboard.just_pressed(key)
             && let Some(game_key) = map_special_key(key)
         {
-            fe.app.handle_key(game_key);
+            fe.app.handle_key(with_modifiers(game_key, shift, false));
         }
     }
     // Letters and digits arrive as the text a keypress produced rather than
@@ -2326,13 +2328,14 @@ mod tests {
                  milder surprise, and the screen already does it with [A]"
             );
         }
+        assert_eq!(with_modifiers(GameKey::Tab, true, false), GameKey::ShiftTab);
+        assert_eq!(with_modifiers(GameKey::Tab, false, true), GameKey::Tab);
         for untouched in [
             GameKey::Up,
             GameKey::Down,
             GameKey::Enter,
             GameKey::Esc,
             GameKey::Backspace,
-            GameKey::Tab,
             GameKey::Char('c'),
         ] {
             assert_eq!(

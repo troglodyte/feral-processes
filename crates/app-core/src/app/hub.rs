@@ -25,8 +25,20 @@ pub enum HubPageKey {
     Site(RouteDestinationId),
 }
 
-/// One page of a hub: a rail entry, and the screens `Right`/`Left` step
-/// through on it.
+/// One tab of a page: the name the title row draws and the screen it shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HubTab {
+    pub name: &'static str,
+    pub mode: Mode,
+}
+
+impl HubTab {
+    pub const fn new(name: &'static str, mode: Mode) -> Self {
+        Self { name, mode }
+    }
+}
+
+/// One page of a hub: a rail entry, and the tabs `Tab` cycles on it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HubPage {
     pub key: HubPageKey,
@@ -34,7 +46,7 @@ pub struct HubPage {
     pub glyph: Option<char>,
     /// A header drawn above this page on the rail.
     pub section: Option<&'static str>,
-    pub screens: &'static [Mode],
+    pub tabs: &'static [HubTab],
     /// The rail's `!`.
     pub marked: bool,
     /// A name the rail may cut: the tail gives way ("Outpost north-e…"),
@@ -45,7 +57,18 @@ pub struct HubPage {
 /// A fixed hub's table row: what `HubPage` was. Keeps the tables `const`.
 pub struct FixedPage {
     pub title: &'static str,
-    pub screens: &'static [Mode],
+    pub tabs: &'static [HubTab],
+}
+
+impl HubPage {
+    /// The screens the page's tabs show, in tab order.
+    pub fn modes(&self) -> impl Iterator<Item = Mode> + '_ {
+        self.tabs.iter().map(|t| t.mode)
+    }
+
+    pub fn offers(&self, mode: Mode) -> bool {
+        self.modes().any(|m| m == mode)
+    }
 }
 
 impl FixedPage {
@@ -55,7 +78,7 @@ impl FixedPage {
             title: self.title.to_string(),
             glyph: None,
             section: None,
-            screens: self.screens,
+            tabs: self.tabs,
             marked: false,
             name_cut_at_end: false,
         }
@@ -85,7 +108,7 @@ pub trait HubKind: Sync {
 
     /// Shows page `page`, on its first screen.
     fn turn(&self, app: &mut App, page: usize) {
-        app.mode = self.pages(app)[page].screens[0];
+        app.mode = self.pages(app)[page].tabs[0].mode;
     }
 
     /// `Esc` on the rail.
@@ -162,7 +185,7 @@ impl App {
         let place = self.hub_place.as_ref()?;
         let pages = place.hub.kind().pages(self);
         let page = pages.iter().position(|p| p.key == place.key)?;
-        let screen = pages[page].screens.iter().position(|&s| s == mode)?;
+        let screen = pages[page].tabs.iter().position(|t| t.mode == mode)?;
         Some((place.hub, page, screen))
     }
 
@@ -184,11 +207,7 @@ impl App {
         let last = self.hub_last[hub.slot()]
             .clone()
             .filter(|_| kind.remembers())
-            .filter(|(key, mode)| {
-                pages
-                    .iter()
-                    .any(|p| &p.key == key && p.screens.contains(mode))
-            });
+            .filter(|(key, mode)| pages.iter().any(|p| &p.key == key && p.offers(*mode)));
         match last {
             Some((key, mode)) => {
                 self.hub_place = Some(HubPlace { hub, key });
@@ -232,7 +251,7 @@ impl App {
             hub.kind()
                 .pages(self)
                 .iter()
-                .any(|p| p.key == key && p.screens.contains(&mode)),
+                .any(|p| p.key == key && p.offers(mode)),
             "{key:?} does not offer {mode:?}"
         );
         self.hub_place = Some(HubPlace { hub, key });
@@ -253,13 +272,10 @@ impl App {
         let shown = base_popup_parent(self.mode).unwrap_or(self.mode);
         if let Some(place) = &self.hub_place {
             let pages = place.hub.kind().pages(self);
-            if pages
-                .iter()
-                .any(|p| p.key == place.key && p.screens.contains(&shown))
-            {
+            if pages.iter().any(|p| p.key == place.key && p.offers(shown)) {
                 return;
             }
-            if let Some(page) = pages.iter().find(|p| p.screens.contains(&shown)) {
+            if let Some(page) = pages.iter().find(|p| p.offers(shown)) {
                 let key = page.key.clone();
                 if let Some(place) = &mut self.hub_place {
                     place.key = key;
@@ -270,7 +286,7 @@ impl App {
         let mut offered = Vec::new();
         for hub in Hub::ALL {
             for page in hub.kind().pages(self) {
-                if page.screens.contains(&shown) {
+                if page.offers(shown) {
                     offered.push(HubPlace { hub, key: page.key });
                 }
             }
@@ -306,7 +322,7 @@ impl App {
         }
         let pages = kind.pages(self);
         let count = pages.len();
-        let screens = pages[page].screens;
+        let screens: Vec<Mode> = pages[page].modes().collect();
         let (next, prev) = ((page + 1) % count, (page + count - 1) % count);
         match key {
             GameKey::Char(']') => self.turn_hub_to_index(hub, next),

@@ -14,27 +14,27 @@ const VOLUME_MAX: i16 = 100;
 
 const GAMEPLAY: FixedPage = FixedPage {
     title: "Gameplay",
-    screens: &[Mode::GameplayOptions],
+    tabs: &[HubTab::new("Gameplay", Mode::GameplayOptions)],
 };
 const AUDIO: FixedPage = FixedPage {
     title: "Audio",
-    screens: &[Mode::AudioOptions],
+    tabs: &[HubTab::new("Audio", Mode::AudioOptions)],
 };
 const GRAPHICS: FixedPage = FixedPage {
     title: "Graphics",
-    screens: &[Mode::GraphicsOptions],
+    tabs: &[HubTab::new("Graphics", Mode::GraphicsOptions)],
 };
 const SPRITES: FixedPage = FixedPage {
     title: "Sprites",
-    screens: &[Mode::SpriteOptions],
+    tabs: &[HubTab::new("Sprites", Mode::SpriteOptions)],
 };
 const MANUAL: FixedPage = FixedPage {
     title: "Manual",
-    screens: &[Mode::ManualOptions],
+    tabs: &[HubTab::new("Manual", Mode::ManualOptions)],
 };
 const SAVE_AND_QUIT: FixedPage = FixedPage {
     title: "Save & quit",
-    screens: &[Mode::QuitRunConfirm],
+    tabs: &[HubTab::new("Save & quit", Mode::QuitRunConfirm)],
 };
 
 pub(crate) struct GameMenu;

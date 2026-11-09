@@ -270,7 +270,7 @@ fn draw_title(
     let base = title.y + title.h * 0.75;
     let name = pages[page].title.as_str();
     painter.ui_bold(name, title.x, base, m.title(), hud::palette::PANE_TITLE);
-    let screens = pages[page].screens.len();
+    let screens = pages[page].tabs.len();
     if screens > 1 {
         let dots: Vec<&str> = (0..screens)
             .map(|i| if i == screen { "●" } else { "○" })
@@ -304,7 +304,7 @@ pub(super) fn keybar_groups(
             .map(group)
             .collect();
     }
-    let step = if pages[page].screens.len() > 1 {
+    let step = if pages[page].tabs.len() > 1 {
         keycap("←/→", "screen")
     } else {
         keycap("←", "menu")
@@ -482,10 +482,7 @@ mod tests {
             Mode::Alerts,
         ] {
             let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
-            let page = pages
-                .iter()
-                .position(|p| p.screens.contains(&mode))
-                .unwrap();
+            let page = pages.iter().position(|p| p.offers(mode)).unwrap();
             let text = |on_rail| -> String {
                 keybar_groups(mode, &pages, page, on_rail, &[])
                     .iter()
@@ -579,7 +576,10 @@ mod tests {
             title: title.to_string(),
             glyph: None,
             section,
-            screens: &[Mode::Alerts],
+            tabs: &[feral_processes_app_core::HubTab {
+                name: "Alerts",
+                mode: Mode::Alerts,
+            }],
             marked,
             name_cut_at_end: false,
         }

@@ -17,67 +17,115 @@ pub fn structure_page(page: StructurePage) -> &'static FixedPage {
     match page {
         StructurePage::Inventory => &FixedPage {
             title: "Inventory",
-            screens: &[Mode::Transfer],
+            tabs: &[HubTab {
+                name: "Inventory",
+                mode: Mode::Transfer,
+            }],
         },
         StructurePage::Filter => &FixedPage {
             title: "Filter",
-            screens: &[Mode::DepotFilter],
+            tabs: &[HubTab {
+                name: "Filter",
+                mode: Mode::DepotFilter,
+            }],
         },
         StructurePage::Recipe => &FixedPage {
             title: "Recipe",
-            screens: &[Mode::MachineRecipe],
+            tabs: &[HubTab {
+                name: "Recipe",
+                mode: Mode::MachineRecipe,
+            }],
         },
         StructurePage::Tool => &FixedPage {
             title: "Tool",
-            screens: &[Mode::RigTool],
+            tabs: &[HubTab {
+                name: "Tool",
+                mode: Mode::RigTool,
+            }],
         },
         StructurePage::Siphon => &FixedPage {
             title: "Siphon",
-            screens: &[Mode::Siphon],
+            tabs: &[HubTab {
+                name: "Siphon",
+                mode: Mode::Siphon,
+            }],
         },
         StructurePage::Splice => &FixedPage {
             title: "Splice",
-            screens: &[Mode::SpliceRig],
+            tabs: &[HubTab {
+                name: "Splice",
+                mode: Mode::SpliceRig,
+            }],
         },
         StructurePage::Grow => &FixedPage {
             title: "Grow",
-            screens: &[Mode::FarmRecipe],
+            tabs: &[HubTab {
+                name: "Grow",
+                mode: Mode::FarmRecipe,
+            }],
         },
         StructurePage::Rebuild => &FixedPage {
             title: "Rebuild",
-            screens: &[Mode::BuildProgram],
+            tabs: &[HubTab {
+                name: "Rebuild",
+                mode: Mode::BuildProgram,
+            }],
         },
         StructurePage::Build => &FixedPage {
             title: "Build routine",
-            screens: &[Mode::RoutineBuild],
+            tabs: &[HubTab {
+                name: "Build routine",
+                mode: Mode::RoutineBuild,
+            }],
         },
         StructurePage::Weapon => &FixedPage {
             title: "Build weapon",
-            screens: &[Mode::WeaponBuild],
+            tabs: &[HubTab {
+                name: "Build weapon",
+                mode: Mode::WeaponBuild,
+            }],
         },
         StructurePage::Salvage => &FixedPage {
             title: "Salvage",
-            screens: &[Mode::WeaponSalvage],
+            tabs: &[HubTab {
+                name: "Salvage",
+                mode: Mode::WeaponSalvage,
+            }],
         },
         StructurePage::Compile => &FixedPage {
             title: "Compile",
-            screens: &[Mode::Craft],
+            tabs: &[HubTab {
+                name: "Compile",
+                mode: Mode::Craft,
+            }],
         },
         StructurePage::Built => &FixedPage {
             title: "Built routines",
-            screens: &[Mode::BuiltRoutines],
+            tabs: &[HubTab {
+                name: "Built routines",
+                mode: Mode::BuiltRoutines,
+            }],
         },
         StructurePage::Breed => &FixedPage {
             title: "Breed",
-            screens: &[Mode::Breed],
+            tabs: &[HubTab {
+                name: "Breed",
+                mode: Mode::Breed,
+            }],
         },
         StructurePage::Hold => &FixedPage {
             title: "Hold",
-            screens: &[Mode::PinPrisoner],
+            tabs: &[HubTab {
+                name: "Hold",
+                mode: Mode::PinPrisoner,
+            }],
         },
         StructurePage::Info => &FixedPage {
             title: "Info",
-            screens: &[Mode::StructureManifest],
+            tabs: &[HubTab {
+                name: "Info",
+                mode: Mode::StructureManifest,
+            }],
         },
     }
 }

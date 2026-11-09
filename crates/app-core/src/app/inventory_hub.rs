@@ -8,39 +8,39 @@ use crate::*;
 pub const INVENTORY_PAGES: &[FixedPage] = &[
     FixedPage {
         title: "Items",
-        screens: &[Mode::Inventory],
+        tabs: &[HubTab::new("Items", Mode::Inventory)],
     },
     FixedPage {
         title: "Phase keys",
-        screens: &[Mode::PhaseKeys],
+        tabs: &[HubTab::new("Phase keys", Mode::PhaseKeys)],
     },
     FixedPage {
         title: "Downed programs",
-        screens: &[Mode::DownedPrograms],
+        tabs: &[HubTab::new("Downed programs", Mode::DownedPrograms)],
     },
     FixedPage {
         title: "Tools",
-        screens: &[Mode::Tools],
+        tabs: &[HubTab::new("Tools", Mode::Tools)],
     },
     FixedPage {
         title: "Companions",
-        screens: &[Mode::Companion],
+        tabs: &[HubTab::new("Companions", Mode::Companion)],
     },
     FixedPage {
         title: "Manifests",
-        screens: &[Mode::ManifestIntro],
+        tabs: &[HubTab::new("Manifests", Mode::ManifestIntro)],
     },
     FixedPage {
         title: "Programs",
-        screens: &[Mode::PartyPrograms],
+        tabs: &[HubTab::new("Programs", Mode::PartyPrograms)],
     },
     FixedPage {
         title: "Routines",
-        screens: &[Mode::PartyRoutines],
+        tabs: &[HubTab::new("Routines", Mode::PartyRoutines)],
     },
     FixedPage {
         title: "Perks",
-        screens: &[Mode::Perks],
+        tabs: &[HubTab::new("Perks", Mode::Perks)],
     },
 ];
 

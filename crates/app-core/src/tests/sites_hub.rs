@@ -199,7 +199,7 @@ fn every_site_page_walks_its_tabs_with_left_and_right() {
             seen.push(app.mode);
         }
     }
-    assert_eq!(seen, TOWN_TABS);
+    assert_eq!(seen, TOWN_TABS.iter().map(|t| t.mode).collect::<Vec<_>>());
     assert_eq!(app.mode, Mode::SiteLog);
     for _ in 0..TOWN_TABS.len() {
         app.handle_key(GameKey::Left);

@@ -11,7 +11,7 @@ use crate::*;
 fn page_modes() -> Vec<Mode> {
     BASE_REPORT_PAGES
         .iter()
-        .map(|p| p.screens[0])
+        .map(|p| p.tabs[0].mode)
         .collect::<Vec<_>>()
 }
 
@@ -747,9 +747,14 @@ fn no_mode_is_in_two_hubs() {
     let mut seen = Vec::new();
     for hub in Hub::ALL {
         let mut in_hub = Vec::new();
-        for mode in hub.kind().pages(&app).iter().flat_map(|p| p.screens) {
-            assert!(!seen.contains(mode), "{mode:?} is in two hubs");
-            in_hub.push(*mode);
+        for mode in hub
+            .kind()
+            .pages(&app)
+            .iter()
+            .flat_map(|p| p.modes().collect::<Vec<_>>())
+        {
+            assert!(!seen.contains(&mode), "{mode:?} is in two hubs");
+            in_hub.push(mode);
         }
         seen.extend(in_hub);
     }

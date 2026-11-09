@@ -105,9 +105,9 @@ pub(crate) fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
     .into_iter()
     .find_map(|(hub, table)| {
         table.iter().enumerate().find_map(|(p, page)| {
-            page.screens
+            page.tabs
                 .iter()
-                .position(|&s| s == mode)
+                .position(|t| t.mode == mode)
                 .map(|s| (hub, p, s))
         })
     })

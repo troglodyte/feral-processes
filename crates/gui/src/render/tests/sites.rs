@@ -327,7 +327,7 @@ fn unavailable_actions_are_still_on_the_keybar() {
     for _ in 0..2 {
         app.handle_key(GameKey::Right);
     }
-    assert_eq!(app.mode, TOWN_TABS[1]);
+    assert_eq!(app.mode, TOWN_TABS[1].mode);
     let mut fx = Fx::new();
     let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
     let text = crate::paint::painted_text(&shapes).join("\n");

@@ -267,7 +267,7 @@ pub(super) fn command_pages() -> impl Iterator<Item = (usize, Mode)> {
     BASE_REPORT_PAGES
         .iter()
         .enumerate()
-        .map(|(page, entry)| (page, entry.screens[0]))
+        .map(|(page, entry)| (page, entry.tabs[0].mode))
 }
 
 #[cfg(test)]

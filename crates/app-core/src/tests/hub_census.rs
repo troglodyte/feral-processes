@@ -16,7 +16,10 @@ fn rail(app: &App, hub: Hub) -> Vec<(String, Vec<Mode>, bool)> {
     hub.kind()
         .pages(app)
         .into_iter()
-        .map(|p| (p.title, p.screens.to_vec(), p.marked))
+        .map(|p| {
+            let modes = p.modes().collect::<Vec<_>>();
+            (p.title, modes, p.marked)
+        })
         .collect()
 }
 
@@ -435,7 +438,7 @@ fn shared_screens_of(app: &App, hubs: &[Hub]) -> Vec<Mode> {
     let mut counts: Vec<(Mode, usize)> = Vec::new();
     for hub in hubs {
         for page in hub.kind().pages(app) {
-            for &mode in page.screens {
+            for mode in page.modes() {
                 match counts.iter_mut().find(|(m, _)| *m == mode) {
                     Some((_, n)) => *n += 1,
                     None => counts.push((mode, 1)),

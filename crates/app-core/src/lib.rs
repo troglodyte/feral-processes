@@ -36,6 +36,7 @@ pub use app::gear_craft::{
     design_row_category, gear_craft_refusal_line,
 };
 pub use app::group_menu::GroupMenuRow;
+pub use app::hub::HubTab;
 pub use app::hub::{FixedPage, Hub, HubKind, HubPage, HubPageKey};
 pub use app::inventory::{equip_swap_visible, inventory_visible};
 pub use app::inventory_hub::INVENTORY_PAGES;

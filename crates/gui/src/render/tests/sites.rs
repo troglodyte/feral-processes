@@ -464,3 +464,45 @@ fn every_site_page_draws_a_refusal_once() {
         "the walk reached only {seen:?}"
     );
 }
+
+/// `b`'s rail with every section populated, at 1280x720: each section header
+/// and the heading's tail fit the rail whole, and every title, long site
+/// names included, fits once elided for the caret, glyph and `!` it shares
+/// the row with.
+#[test]
+fn b_rail_titles_and_sections_fit_at_1280_by_720() {
+    use crate::render::base_report::frame::RAIL_CELLS;
+    use crate::render::manifest::elided_to_fit;
+    use feral_processes_app_core::Hub;
+
+    let app = sites_app();
+    let kind = Hub::Base.kind();
+    let pages = kind.pages(&app);
+    let (_, tail) = kind.heading(&app);
+    assert!(
+        pages.iter().any(|p| p.section == Some("TOWNS")),
+        "the census needs the sites sections on the rail"
+    );
+    let m = crate::text::ui_metrics(720.0);
+    crate::paint::with_painter(|p| {
+        let char_w = p.measure_ui_advance("M", m.font_size);
+        let rail_w = RAIL_CELLS as f32 * char_w;
+        assert!(p.measure_ui_advance(&tail, m.small()) <= rail_w, "{tail:?}");
+        for page in &pages {
+            if let Some(section) = page.section {
+                assert!(
+                    p.measure_ui_advance(section, m.small()) <= rail_w,
+                    "section {section:?} runs past the rail"
+                );
+            }
+            let cells = 4.0 + if page.glyph.is_some() { 2.0 } else { 0.0 };
+            let room = rail_w - char_w * cells;
+            let shown = elided_to_fit(p, &page.title, m.font_size, room);
+            assert!(
+                p.measure_ui_advance(&shown, m.font_size) <= room + 0.5,
+                "{:?} runs past the rail",
+                page.title
+            );
+        }
+    });
+}

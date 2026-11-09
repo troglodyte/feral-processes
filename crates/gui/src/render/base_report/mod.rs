@@ -8,7 +8,7 @@
 //! popup: the frame owns the chrome, the screen owns its rows.
 
 mod commands;
-mod frame;
+pub(in crate::render) mod frame;
 #[cfg(test)]
 pub(in crate::render) use fit::{assert_column_rows_fit, assert_rows_fit, content_rows_at_720};
 pub(in crate::render) use frame::RAIL_CELLS;

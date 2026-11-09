@@ -1071,6 +1071,17 @@ pub enum CaravanReach {
 }
 
 impl Game {
+    /// Whether a visiting trader has set out at the base's counter, wherever
+    /// the party is: `CaravanReach::NotDocked` alone cannot tell a wagon
+    /// still walking in from one waiting while the party is away.
+    pub fn caravan_docked(&mut self) -> bool {
+        let mut query = self.world.query::<&Caravan>();
+        query
+            .iter(&self.world)
+            .next()
+            .is_some_and(|caravan| matches!(caravan.stage, CaravanStage::Docked))
+    }
+
     /// Where the player stands in relation to the visiting trader.
     ///
     /// `AtCaravan` measures **the base floor**, exactly as `broker_reach` does,

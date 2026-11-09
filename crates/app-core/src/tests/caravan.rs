@@ -29,6 +29,13 @@ fn caravan_row_resolves_both_sections_and_stops_at_the_end() {
 /// reach the `World` (that is the architectural rule), and a fixture that
 /// could would be testing its own idea of a docked trader.
 fn app_at_a_caravan(seed: u32) -> Option<App> {
+    app_with_a_trader(seed, |g| {
+        g.caravan_reach() == feral_processes_engine::CaravanReach::AtCaravan
+    })
+}
+
+/// `app_at_a_caravan`'s base, ticked until `ready` holds.
+fn app_with_a_trader(seed: u32, ready: fn(&mut Game) -> bool) -> Option<App> {
     let assets_dir = test_assets_dir();
     let mut app = test_app(seed);
     let path = scratch_path("caravan", seed);
@@ -74,11 +81,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
     // in each — a run that finds none in that many ticks has found a broken
     // schedule rather than an unlucky seed.
     for _ in 0..3000 {
-        if app
-            .game
-            .as_mut()
-            .is_some_and(|g| g.caravan_reach() == feral_processes_engine::CaravanReach::AtCaravan)
-        {
+        if app.game.as_mut().is_some_and(ready) {
             return Some(app);
         }
         app.game.as_mut().unwrap().wait();
@@ -118,6 +121,42 @@ fn the_trader_tab_with_no_wagon_stays_open_and_says_why() {
         );
     }
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+}
+
+/// A wagon still walking in is not waiting for anyone, wherever the party
+/// stands: the tab says it has not arrived, not to walk back.
+#[test]
+fn the_trader_tab_says_a_wagon_on_its_way_has_not_arrived() {
+    let walking = |g: &mut Game| {
+        g.caravan_reach() == feral_processes_engine::CaravanReach::NotDocked && !g.caravan_docked()
+    };
+    let mut app = app_with_a_trader(4, walking)
+        .or_else(|| app_with_a_trader(11, walking))
+        .expect("a trader sets out inside two visit windows");
+    for _ in 0..2 {
+        let line = app.trader_absence().expect("no wagon to deal with");
+        assert_eq!(line, "The trader hasn't reached the base's counter yet.");
+        walk_far_from_the_base(&mut app);
+    }
+    open_hub_screen(&mut app, Mode::Caravan);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("The trader hasn't reached the base's counter yet.")
+    );
+}
+
+/// With no wagon there is no basket for Left to lower, so Left goes back
+/// to the rail and nothing is refused.
+#[test]
+fn left_on_an_empty_trader_tab_goes_to_the_rail() {
+    let mut app = test_app(7);
+    found_the_base(&mut app);
+    stand_in_base(&mut app);
+    open_hub_screen(&mut app, Mode::Caravan);
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail);
+    assert_eq!(app.status_line, None);
 }
 
 /// Off the base's floor a docked wagon is still there, so the tab says to

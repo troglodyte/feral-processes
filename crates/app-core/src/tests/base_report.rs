@@ -878,8 +878,8 @@ fn left_in_the_research_tree_view_stays_in_the_page() {
 }
 
 /// The tree view draws over the whole hub, so with the cursor in it the
-/// page and tab keys do nothing under it, and Esc steps back to the list
-/// view before the next one reaches the rail.
+/// page keys do nothing under it, Tab switches trees in the view, and Esc
+/// steps back to the list view before the next one reaches the rail.
 #[test]
 fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
     let mut app = test_app(30115);
@@ -888,9 +888,13 @@ fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
         app.handle_key(GameKey::Char('G'));
     }
     let page = app.hub_page().cloned();
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::RoutineResearch, "Tab switches trees");
+    assert!(app.research_graph_view, "and the tree view stays shown");
+    assert!(!app.hub_on_rail);
+    app.handle_key(GameKey::ShiftTab);
+    assert_eq!(app.mode, Mode::Research, "Shift+Tab switches back");
     for key in [
-        GameKey::Tab,
-        GameKey::ShiftTab,
         GameKey::Char(']'),
         GameKey::Char('['),
         GameKey::Char('}'),

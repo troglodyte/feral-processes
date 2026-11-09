@@ -23,7 +23,8 @@ use feral_processes_engine::views::CaravanView;
 
 const NO_TRADER: &str = "No trader is at the base's counter.";
 const TRADER_ON_ITS_WAY: &str = "The trader hasn't reached the base's counter yet.";
-const TRADER_AT_BASE: &str = "Traders deal at the base's counter. Walk back to the base to trade.";
+const TRADER_AT_BASE: &str =
+    "The trader is waiting at the base's counter. Walk back to the base to trade.";
 /// Every sentence `App::trader_absence` can say, for gui's width census.
 pub const TRADER_ABSENCE_LINES: &[&str] = &[NO_TRADER, TRADER_ON_ITS_WAY, TRADER_AT_BASE];
 
@@ -157,7 +158,7 @@ impl App {
         match game.caravan_reach() {
             CaravanReach::AtCaravan => None,
             CaravanReach::NoCaravan => Some(NO_TRADER),
-            CaravanReach::NotDocked if !game.site_reach().on_base => Some(TRADER_AT_BASE),
+            CaravanReach::NotDocked if game.caravan_docked() => Some(TRADER_AT_BASE),
             CaravanReach::NotDocked => Some(TRADER_ON_ITS_WAY),
         }
     }

@@ -448,7 +448,13 @@ pub(super) fn draw_research_graph(
     );
     painter.ui(
         &{
-            let mut hints = vec!["[G] list", "Arrows move", "Enter work", "[A] abandon"];
+            let mut hints = vec![
+                "[G] list",
+                "Arrows move",
+                "Tab tree",
+                "Enter work",
+                "[A] abandon",
+            ];
             if train_offered {
                 hints.push("[T] train your AI");
             }

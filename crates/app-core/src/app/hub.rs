@@ -466,13 +466,11 @@ impl App {
     pub(crate) fn screen_claims(&mut self, key: GameKey) -> bool {
         match key {
             // The tree view draws over the whole hub, so once the cursor is
-            // in it the page and tab keys wait and Esc steps back to the list
-            // view first. From the rail they stay the rail's, or `]` would
-            // stop on the Research page.
-            GameKey::Esc
-            | GameKey::Tab
-            | GameKey::ShiftTab
-            | GameKey::Char('[' | ']' | '{' | '}')
+            // in it the page keys wait and Esc steps back to the list view
+            // first. Tab still switches trees, which the view redraws in
+            // place. From the rail they stay the rail's, or `]` would stop
+            // on the Research page.
+            GameKey::Esc | GameKey::Char('[' | ']' | '{' | '}')
                 if self.research_tree_shown() && !self.hub_on_rail =>
             {
                 true
@@ -507,8 +505,12 @@ impl App {
             GameKey::Left if self.research_tree_shown() => true,
             GameKey::Left if self.on_level_row() => true,
             // The Trader tab's arrows are the basket's: Left lowers the
-            // highlighted row, so the rail is Esc away.
-            GameKey::Left if self.mode == Mode::Caravan => true,
+            // highlighted row, so the rail is Esc away. With no wagon there
+            // is no basket, and Left is the rail's again.
+            GameKey::Left if self.mode == Mode::Caravan => self
+                .game
+                .as_mut()
+                .is_some_and(|g| g.caravan_view().is_some()),
             // The duty table spends Left on its column cursor, so it only
             // leaves off its first column.
             GameKey::Left => self.mode == Mode::BaseStaff && self.work_column > 0,

@@ -73,8 +73,22 @@ fn two_spaces_file_a_row_of_walls_and_spend_no_tick() {
     assert_eq!(filed_walls(&app), 2);
     assert_eq!(app.mode, Mode::WallBox, "the mode stays open");
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::Build);
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+}
+
+/// Picked from the Deploy tab, the box goes back to it: Esc takes a dropped
+/// anchor first, then the mode, landing on the tab it came from.
+#[test]
+fn esc_from_the_wall_box_returns_to_the_deploy_tab() {
+    let mut app = app_in_the_base(6304);
+    pick_structure(&mut app, "wall");
+    app.handle_key(GameKey::Char(' '));
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::WallBox, "the first Esc lifts the anchor");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Build);
+    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Base));
 }
 
 #[test]

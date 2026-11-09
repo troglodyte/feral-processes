@@ -127,14 +127,20 @@ fn page_of(app: &App, key: &HubPageKey) -> usize {
 }
 
 /// `b` opens anywhere now, and so does `w`, its shortcut onto the sites:
-/// with none known it is `b` as it opens by itself.
+/// with none known it opens `b` on the Overview, not where `b` was left.
 #[test]
-fn w_out_in_the_field_with_no_site_known_opens_b() {
+fn w_out_in_the_field_with_no_site_known_opens_the_overview() {
     let mut app = test_app(7100);
     set_sites(&mut app, &[], &[]);
+    app.handle_key(GameKey::Char('b'));
+    app.enter_hub_at(Hub::Base, HubPageKey::Named("Staff"), Mode::StaffCoverage);
+    app.hub_on_rail = true;
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
     let before = tick(&app);
     app.handle_key(GameKey::Char('w'));
     assert_eq!(app.mode, Mode::BaseOverview);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Overview")));
     assert_eq!(app.status_line, None);
     assert_eq!(tick(&app), before);
     assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Base));

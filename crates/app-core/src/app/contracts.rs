@@ -62,6 +62,21 @@ impl App {
     /// highlighted contract back. Board: Enter takes the highlighted offer.
     /// Each tab's rows are its own list from `contract_sections`, so a row
     /// number is an index into that list alone.
+    /// `[A]` on a held contract, from the Held tab, a town's Jobs tab or its
+    /// board: gives it back. The engine refuses a tutorial too — that is
+    /// where the invariant lives — but a bare `false` cannot reach the log,
+    /// and a key that silently does nothing reads as a broken key.
+    pub(crate) fn give_back(&mut self, contract: &ContractRow) {
+        if contract.tutorial {
+            self.refuse(TUTORIAL_REFUSAL);
+            return;
+        }
+        if let Some(game) = &mut self.game {
+            game.abandon_contract(&contract.id);
+        }
+        self.status_line = None;
+    }
+
     pub(crate) fn handle_contracts_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
@@ -74,22 +89,10 @@ impl App {
         // trade screen — a shifted letter that also picked a row would fire
         // both on one keypress, and this one gives a contract up.
         if held && key == GameKey::Char('A') {
-            let Some(contract) = active.get(self.menu_selected) else {
-                self.refuse("Highlight a contract you are holding to give it back.");
-                return;
-            };
-            // The engine refuses this too — that is where the invariant
-            // lives — but a bare `false` cannot reach the log, and a key
-            // that silently does nothing reads as a broken key.
-            if contract.tutorial {
-                self.refuse(TUTORIAL_REFUSAL);
-                return;
+            match active.get(self.menu_selected) {
+                Some(contract) => self.give_back(contract),
+                None => self.refuse("Highlight a contract you are holding to give it back."),
             }
-            let id = contract.id.clone();
-            if let Some(game) = &mut self.game {
-                game.abandon_contract(&id);
-            }
-            self.status_line = None;
             return;
         }
 

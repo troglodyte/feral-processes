@@ -126,7 +126,8 @@ pub fn sites_screen_keys(mode: Mode) -> &'static [(&'static str, &'static str)] 
 
 impl App {
     /// `w`: opens `b` on the site beside the party, else on the first
-    /// TOWNS entry, else where `b` opens by itself.
+    /// TOWNS entry, else on the Overview — never `b`'s remembered page,
+    /// which would make `w` a second `b` key.
     pub(crate) fn open_sites_hub(&mut self) {
         let Some(game) = self.game.as_ref() else {
             return;
@@ -138,9 +139,11 @@ impl App {
             .find(|e| e.section == SiteSection::Settlements)
             .map(|e| e.site);
         self.open_hub(Hub::Base);
-        if let Some(site) = beside.or(first_town) {
-            self.turn_hub_to(Hub::Base, &HubPageKey::Site(site));
-        }
+        let page = match beside.or(first_town) {
+            Some(site) => HubPageKey::Site(site),
+            None => HubPageKey::Named("Overview"),
+        };
+        self.turn_hub_to(Hub::Base, &page);
     }
 
     /// The site the held page names, `None` on any other page or outside
@@ -315,17 +318,14 @@ impl App {
                 self.launch_from_site(Mode::SettlementBoard);
             }
             (Mode::SiteJobs, Some(RouteDestinationId::Settlement(k)), GameKey::Char('A')) => {
-                let Some(game) = &mut self.game else { return };
-                let Some(contract) = game.town_contracts(k).into_iter().nth(row) else {
-                    self.refuse("Highlight a contract you are holding to give it back.");
-                    return;
-                };
-                if contract.tutorial {
-                    self.refuse(crate::app::contracts::TUTORIAL_REFUSAL);
-                    return;
+                let contract = self
+                    .game
+                    .as_mut()
+                    .and_then(|g| g.town_contracts(k).into_iter().nth(row));
+                match contract {
+                    Some(contract) => self.give_back(&contract),
+                    None => self.refuse("Highlight a contract you are holding to give it back."),
                 }
-                game.abandon_contract(&contract.id);
-                self.status_line = None;
             }
             _ => {}
         }

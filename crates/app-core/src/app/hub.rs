@@ -359,7 +359,12 @@ impl App {
                         && seen.tabs.iter().any(|t| t.mode == shown)
                 });
             if vanished && let Some(seen) = &self.hub_rail_seen {
-                let to = &pages[successor(seen, &pages)];
+                // An empty rail has no successor; the place goes with it.
+                let Some(to) = pages.get(successor(seen, &pages)) else {
+                    self.hub_place = None;
+                    self.hub_rail_seen = None;
+                    return;
+                };
                 let hub = place.hub;
                 self.hub_place = Some(HubPlace {
                     hub,

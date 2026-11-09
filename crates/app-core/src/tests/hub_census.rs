@@ -504,6 +504,43 @@ fn shared_screens_are_pinned() {
     );
 }
 
+/// Compile has two homes once a routine bench stands beside the party: `b`'s
+/// Production page and the bench's own `c` page. Each enters it by its own
+/// page (`turn_hub_to` / the structure hub's turn), never `settle_hub`'s
+/// guess.
+const SHARED_WITH_A_BENCH: &[Mode] = &[Mode::Craft];
+
+#[test]
+fn compile_beside_a_bench_is_pinned_and_each_hub_keeps_its_own() {
+    let mut app = app_at_a_workbench(41068);
+    app.handle_key(GameKey::Char('c'));
+    assert!(app.structure_hub.is_some(), "the bench is beside the party");
+    assert_eq!(shared_screens_outside_sites(&app), SHARED_WITH_A_BENCH);
+
+    // The bench's Compile is the structure hub's page...
+    let pages = Hub::Structure.kind().pages(&app);
+    let compile = pages
+        .iter()
+        .position(|p| p.offers(Mode::Craft))
+        .expect("a routine bench has a Compile page");
+    for _ in 0..pages.len() {
+        if app.hub_at().is_some_and(|(_, page, _)| page == compile) {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
+    assert_eq!(app.mode, Mode::Craft);
+    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Structure));
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+
+    // ...and b's is Production's tab.
+    open_hub_screen(&mut app, Mode::Craft);
+    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Base));
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Production")));
+}
+
 /// With two towns and two outposts on the rail, every tab of a site page is
 /// shared by its twin. Caravans is one page, so its tabs never are.
 const SHARED_WITH_SITES: &[Mode] = &[

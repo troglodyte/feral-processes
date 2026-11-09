@@ -74,6 +74,25 @@ fn deploy_home(app: &mut App) {
     stand_in_base(app);
 }
 
+/// Home declares no upgrade path, so a base consisting only of one leaves
+/// nothing to upgrade — and the Structures page says so by not offering the
+/// row at all, rather than opening a picker with no entries in it.
+#[test]
+fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
+    let mut app = test_app(231);
+    deploy_home(&mut app);
+
+    let rows = command_labels_all(&mut app);
+    assert!(
+        rows.contains(&"Demolish a structure"),
+        "Home is deployed, so the rows that take any structure are live: {rows:?}"
+    );
+    assert!(
+        !rows.contains(&"Upgrade a structure"),
+        "Home has no upgrade path, so the row leads nowhere: {rows:?}"
+    );
+}
+
 /// Guards Finding 3: `handle_build_direction_key` must recognise Home by
 /// looking up the picked structure's real `StructureDef::category()`, not
 /// by comparing its id against a hand-copied `"home"` literal that happens

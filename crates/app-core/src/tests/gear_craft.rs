@@ -276,6 +276,7 @@ fn the_weapons_research_tab_opens_from_the_research_page() {
     let mut app = forge_app(81_013);
     open_command(&mut app, "Weapon research");
     assert_eq!(app.mode, Mode::WeaponResearch);
+    leave_the_research_tree_view(&mut app);
     app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
 }

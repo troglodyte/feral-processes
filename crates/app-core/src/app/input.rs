@@ -505,6 +505,16 @@ impl App {
         if self.mode != Mode::QuitRunConfirm {
             self.quit_unsaved_pending = false;
         }
+        // The hub takes the Trader tab's Esc before its handler can, so the
+        // basket is dropped here; a gear look returns to it and keeps it.
+        let inspecting_from_caravan = self.mode == Mode::ItemDescribe
+            && self
+                .pending_inspect
+                .as_ref()
+                .is_some_and(|i| i.from == Mode::Caravan);
+        if self.mode != Mode::Caravan && !inspecting_from_caravan {
+            self.caravan_amounts.clear();
+        }
         // A hub that remembers is reopened where the player last was.
         self.settle_hub();
         if let Some((hub, ..)) = self.hub_at()

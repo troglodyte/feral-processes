@@ -50,6 +50,7 @@ fn the_research_page_opens_research_and_esc_closes_it() {
     let mut app = test_app(501);
     open_command(&mut app, "Research");
     assert!(matches!(app.mode, Mode::Research));
+    leave_the_research_tree_view(&mut app);
     app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
     app.handle_key(GameKey::Esc);
@@ -291,18 +292,21 @@ fn enter_on_an_unreachable_node_refuses_without_filing() {
     assert_eq!(app.mode, Mode::Research, "the screen stays open");
 }
 
-/// Esc closes the screen from either view — the graph is a view of this
-/// screen, not a screen of its own to back out of first.
+/// The graph draws over the whole hub, so Esc backs out of it to the list
+/// first, and the list's Esc goes to the rail.
 #[test]
-fn esc_closes_the_screen_from_the_graph_view() {
+fn esc_leaves_the_graph_view_before_the_screen() {
     let mut app = test_app(525);
     open_command(&mut app, "Research");
-    app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "Esc goes to the rail");
     assert!(
         app.research_graph_view,
-        "the chosen view survives closing the screen"
+        "precondition: the graph is the default"
     );
+    app.handle_key(GameKey::Esc);
+    assert!(!app.research_graph_view, "the first Esc leaves the graph");
+    assert!(!app.hub_on_rail);
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail, "the list's Esc goes to the rail");
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +334,7 @@ fn the_research_page_opens_routine_research_and_esc_closes_it() {
     let mut app = test_app(560);
     open_command(&mut app, "Routine research");
     assert!(matches!(app.mode, Mode::RoutineResearch));
+    leave_the_research_tree_view(&mut app);
     app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
 }

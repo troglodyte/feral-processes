@@ -86,6 +86,7 @@ fn the_group_menu_row_opens_the_affix_research_view() {
     let mut app = app_at_a_mod_bench(9304, 0);
     open_command(&mut app, "Affix research");
     assert_eq!(app.mode, Mode::AffixResearch);
+    leave_the_research_tree_view(&mut app);
     app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
 }

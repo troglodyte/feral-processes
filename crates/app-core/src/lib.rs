@@ -22,6 +22,7 @@ pub use app::building::{
     roster_rows,
 };
 pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
+pub use app::caravan::TRADER_ABSENCE_LINES;
 pub use app::crafting::{craft_list, craft_visible};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;

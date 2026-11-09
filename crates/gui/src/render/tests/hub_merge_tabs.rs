@@ -49,3 +49,10 @@ fn the_study_tab_fits_the_content_rect() {
     let game = app.game.as_ref().unwrap();
     assert_rows_fit(&pin_subject_page_rows(game, 0), "Study");
 }
+
+#[test]
+fn the_trader_tabs_empty_lines_fit_the_content_rect() {
+    for line in feral_processes_app_core::TRADER_ABSENCE_LINES {
+        assert_rows_fit(&[crate::render::popup::text_row(*line)], line);
+    }
+}

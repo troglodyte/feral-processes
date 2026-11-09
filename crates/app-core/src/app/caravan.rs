@@ -18,7 +18,14 @@
 
 use crate::app::basket::halve;
 use crate::*;
+use feral_processes_engine::CaravanReach;
 use feral_processes_engine::views::CaravanView;
+
+const NO_TRADER: &str = "No trader is at the base's counter.";
+const TRADER_ON_ITS_WAY: &str = "The trader hasn't reached the base's counter yet.";
+const TRADER_AT_BASE: &str = "Traders deal at the base's counter. Walk back to the base to trade.";
+/// Every sentence `App::trader_absence` can say, for gui's width census.
+pub const TRADER_ABSENCE_LINES: &[&str] = &[NO_TRADER, TRADER_ON_ITS_WAY, TRADER_AT_BASE];
 
 /// Which section of the caravan screen a picked row lands in, and its index
 /// within that section.
@@ -143,6 +150,18 @@ impl App {
     ///
     /// Enter commits, clears the basket and **leaves the screen open**: a
     /// wagon is a place you shop at, not a form you submit.
+    /// Why the Trader tab has no wagon to deal with, `None` when it has
+    /// one. The tab's empty line and its keys' refusal are this sentence.
+    pub fn trader_absence(&mut self) -> Option<&'static str> {
+        let game = self.game.as_mut()?;
+        match game.caravan_reach() {
+            CaravanReach::AtCaravan => None,
+            CaravanReach::NoCaravan => Some(NO_TRADER),
+            CaravanReach::NotDocked if !game.site_reach().on_base => Some(TRADER_AT_BASE),
+            CaravanReach::NotDocked => Some(TRADER_ON_ITS_WAY),
+        }
+    }
+
     pub(crate) fn handle_caravan_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.caravan_amounts.clear();
@@ -150,9 +169,16 @@ impl App {
             return;
         }
         let Some(view) = self.game.as_mut().and_then(|g| g.caravan_view()) else {
-            // No wagon at the counter: the Trader tab says so and has no
-            // rows to act on.
+            // No wagon to deal with: the Trader tab says why and has no rows
+            // to act on, so a key that would act says it again.
             self.caravan_amounts.clear();
+            let browsing = matches!(
+                key,
+                GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown
+            );
+            if !browsing && let Some(line) = self.trader_absence() {
+                self.refuse(line);
+            }
             return;
         };
         let total = view.offers.len() + view.sells.len();

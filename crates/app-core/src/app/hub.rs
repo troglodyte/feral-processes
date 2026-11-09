@@ -418,8 +418,8 @@ impl App {
         let count = pages.len();
         let (next, prev) = ((page + 1) % count, (page + count - 1) % count);
         match key {
-            GameKey::Char(']') => self.turn_hub_to_index(hub, next),
-            GameKey::Char('[') => self.turn_hub_to_index(hub, prev),
+            GameKey::Char(']') if !self.screen_claims(key) => self.turn_hub_to_index(hub, next),
+            GameKey::Char('[') if !self.screen_claims(key) => self.turn_hub_to_index(hub, prev),
             GameKey::Char('}') if !self.screen_claims(key) => {
                 if let Some(to) = section_start(&pages, page, 1) {
                     self.turn_hub_to_index(hub, to);
@@ -430,8 +430,10 @@ impl App {
                     self.turn_hub_to_index(hub, to);
                 }
             }
-            GameKey::Tab => self.step_hub_tab(&pages[page], tab, 1),
-            GameKey::ShiftTab => self.step_hub_tab(&pages[page], tab, -1),
+            GameKey::Tab if !self.screen_claims(key) => self.step_hub_tab(&pages[page], tab, 1),
+            GameKey::ShiftTab if !self.screen_claims(key) => {
+                self.step_hub_tab(&pages[page], tab, -1)
+            }
             _ if self.hub_on_rail => match key {
                 GameKey::Down => self.turn_hub_to_index(hub, next),
                 GameKey::Up => self.turn_hub_to_index(hub, prev),
@@ -458,6 +460,18 @@ impl App {
     /// the page spends on a cursor or a question of its own.
     pub(crate) fn screen_claims(&mut self, key: GameKey) -> bool {
         match key {
+            // The tree view draws over the whole hub, so once the cursor is
+            // in it the page and tab keys wait and Esc steps back to the list
+            // view first. From the rail they stay the rail's, or `]` would
+            // stop on the Research page.
+            GameKey::Esc
+            | GameKey::Tab
+            | GameKey::ShiftTab
+            | GameKey::Char('[' | ']' | '{' | '}')
+                if self.research_tree_shown() && !self.hub_on_rail =>
+            {
+                true
+            }
             // With a program picked Esc steps back to the list, which the
             // downed-program handler owns; Left would strand that pick on
             // the rail.
@@ -485,7 +499,7 @@ impl App {
             // needs no claim.)
             GameKey::Left if self.quit_unsaved_pending => true,
             // The research tree view walks its nodes with every arrow.
-            GameKey::Left if self.research_graph_view && is_research_tree(self.mode) => true,
+            GameKey::Left if self.research_tree_shown() => true,
             GameKey::Left if self.on_level_row() => true,
             // The Trader tab's arrows are the basket's: Left lowers the
             // highlighted row, so the rail is Esc away.
@@ -495,6 +509,10 @@ impl App {
             GameKey::Left => self.mode == Mode::BaseStaff && self.work_column > 0,
             _ => false,
         }
+    }
+
+    fn research_tree_shown(&self) -> bool {
+        self.research_graph_view && is_research_tree(self.mode)
     }
 
     fn in_downed_drill_down(&self) -> bool {

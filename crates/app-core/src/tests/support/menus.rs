@@ -148,6 +148,15 @@ pub(crate) fn open_structure_page(app: &mut App) {
     }
 }
 
+/// Steps a research tab out of its tree view (the default), whose Esc
+/// leaves the tree before the tab.
+pub(crate) fn leave_the_research_tree_view(app: &mut App) {
+    if app.research_graph_view {
+        app.handle_key(GameKey::Esc);
+    }
+    assert!(!app.research_graph_view);
+}
+
 /// Opens `target`'s hub with its own key, walks `]` to the first page on
 /// the rail as it stands that offers `target`, and Right off the rail and
 /// `Tab` along its tabs to it, the way a player reaches a screen that has
@@ -174,15 +183,16 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
         }
         app.handle_key(GameKey::Char(']'));
     }
-    if app.hub_on_rail {
-        app.handle_key(GameKey::Right);
-    }
-    // From the tab the page opened (or was left) on.
+    // From the tab the page opened (or was left) on, from the rail: a
+    // research tree view keeps `Tab` once the cursor is in it.
     for _ in 0..pages[page].tabs.len() {
         if app.mode == target {
             break;
         }
         app.handle_key(GameKey::Tab);
+    }
+    if app.hub_on_rail {
+        app.handle_key(GameKey::Right);
     }
     assert_eq!(app.mode, target, "the hub reached {target:?}");
     assert!(!app.hub_on_rail, "the cursor is on the screen's rows");

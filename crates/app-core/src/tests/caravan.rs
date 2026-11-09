@@ -93,25 +93,48 @@ fn a_caravan() -> App {
 }
 
 /// The Trader tab is always on the Caravans page: with no wagon at the
-/// counter its keys do nothing and it stays put, rather than closing the
-/// hub under the player.
+/// counter its keys say so and it stays put, rather than closing the hub
+/// under the player.
 #[test]
-fn the_trader_tab_with_no_wagon_stays_open_and_does_nothing() {
+fn the_trader_tab_with_no_wagon_stays_open_and_says_why() {
     let mut app = test_app(7);
     found_the_base(&mut app);
     stand_in_base(&mut app);
     open_hub_screen(&mut app, Mode::Caravan);
     let before = app.game.as_ref().unwrap().current_tick();
-    for key in [
-        GameKey::Down,
-        GameKey::Right,
-        GameKey::Enter,
-        GameKey::Char('A'),
-    ] {
+    app.handle_key(GameKey::Down);
+    assert_eq!(
+        app.status_line, None,
+        "browsing an empty tab is not a refusal"
+    );
+    for key in [GameKey::Right, GameKey::Enter, GameKey::Char('A')] {
+        app.status_line = None;
         app.handle_key(key);
         assert_eq!(app.mode, Mode::Caravan, "{key:?}");
+        assert_eq!(
+            app.status_line.as_deref(),
+            Some("No trader is at the base's counter."),
+            "{key:?}"
+        );
     }
     assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
+}
+
+/// Off the base's floor a docked wagon is still there, so the tab says to
+/// walk back rather than that nobody came.
+#[test]
+fn the_trader_tab_away_from_the_base_says_to_walk_back() {
+    let mut app = a_caravan();
+    walk_far_from_the_base(&mut app);
+    assert!(
+        app.game.as_mut().unwrap().caravan_view().is_none(),
+        "precondition"
+    );
+    open_hub_screen(&mut app, Mode::Caravan);
+    let line = app.trader_absence().expect("no wagon to deal with");
+    assert!(line.contains("Walk back to the base"), "{line}");
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.status_line.as_deref(), Some(line));
 }
 
 /// The basket's arrows are the tab's: Right raises a sell row and Left
@@ -183,24 +206,80 @@ fn a_cursor_past_the_end_still_resolves_to_a_row() {
 }
 
 /// A wagon that rolls away leaves the Trader tab saying so, rather than
-/// closing the hub under the player, and takes its basket with it.
+/// closing the hub under the player, and takes its basket with it: the hub
+/// eats both Esc presses, so it is leaving the tab that empties it.
 #[test]
 fn a_trader_that_rolls_away_leaves_the_tab_empty() {
     let mut app = a_caravan();
     open_hub_screen(&mut app, Mode::Caravan);
+    fill_a_sell_row(&mut app);
 
     // Wait out the whole stay. The trader packs up and there is nothing to
     // draw.
     for _ in 0..(feral_processes_engine::tuning::CARAVAN_STAY_TICKS + 50) {
         app.game.as_mut().unwrap().wait();
     }
-    pick_row(&mut app, 0);
-    // Long enough for the base to be swept at least once, which fires the
-    // raid tutorial over whatever the screen had settled on.
-    dismiss_notifications(&mut app);
-
     assert!(app.game.as_mut().unwrap().caravan_view().is_none());
+    assert_eq!(app.mode, Mode::Caravan, "the tab stays up");
+    // Long enough for the base to be swept at least once, which fires the
+    // raid tutorial over whatever the screen had settled on, so each Esc
+    // may first clear a notification.
+    for _ in 0..2 {
+        app.handle_key(GameKey::Esc);
+        dismiss_notifications(&mut app);
+    }
+    if app.mode == Mode::Caravan {
+        app.handle_key(GameKey::Esc);
+    }
+
+    assert_eq!(app.mode, Mode::Playing, "Esc leaves the hub");
     assert!(app.caravan_amounts.is_empty(), "the basket went with it");
+}
+
+/// Esc goes to the rail and Esc again leaves the hub, neither reaching the
+/// tab's handler; the basket still does not outlive the tab.
+#[test]
+fn leaving_the_trader_tab_empties_the_basket() {
+    let mut app = a_caravan();
+    open_hub_screen(&mut app, Mode::Caravan);
+    fill_a_sell_row(&mut app);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Caravan, "the first Esc is the rail's");
+    assert!(
+        app.caravan_amounts.iter().any(|n| *n > 0),
+        "still on the tab"
+    );
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.caravan_amounts.is_empty(), "the basket was left behind");
+}
+
+/// Inspecting a sell row's gear is a look, not a leave: the basket is there
+/// on the way back.
+#[test]
+fn inspecting_gear_from_the_trader_keeps_the_basket() {
+    let mut app = a_caravan();
+    open_hub_screen(&mut app, Mode::Caravan);
+    fill_a_sell_row(&mut app);
+    let kept = app.caravan_amounts.clone();
+    app.handle_key(GameKey::Char('I'));
+    assert_eq!(app.mode, Mode::ItemDescribe);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Caravan);
+    assert_eq!(app.caravan_amounts, kept);
+}
+
+/// Walks to the first sell row and raises it by one.
+fn fill_a_sell_row(app: &mut App) {
+    let row = first_sell_row(app);
+    for _ in 0..row {
+        app.handle_key(GameKey::Down);
+    }
+    app.handle_key(GameKey::Right);
+    assert!(
+        app.caravan_amounts.iter().any(|n| *n > 0),
+        "the basket holds a row"
+    );
 }
 
 /// Sets the cursor on the first sell row and returns its index.

@@ -1137,6 +1137,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // it cannot run once `game` below holds `&mut app.game` — and computed
     // through app-core rather than here, so the figure the screen draws is
     // the figure the keys clamp against.
+    let trader_absence = match app.mode {
+        Mode::Caravan => app.trader_absence(),
+        _ => None,
+    };
     let caravan = match app.mode {
         Mode::Caravan => app
             .game
@@ -1334,7 +1338,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                     basket.purse,
                     selected,
                 ),
-                None => vec![text_row("No trader is at the base's counter.")],
+                None => vec![text_row(trader_absence.unwrap_or_default())],
             },
             None,
         )),

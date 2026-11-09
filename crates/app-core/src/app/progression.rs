@@ -89,6 +89,12 @@ impl App {
     /// copied one, since the two screens differ only in which tree
     /// `research_nodes`/`research_graph` are asked for.
     pub(crate) fn handle_research_key(&mut self, key: GameKey, tree: ResearchTree) {
+        // The tree view is drawn over everything, so Esc leaves it for the
+        // list before it leaves the screen.
+        if key == GameKey::Esc && self.research_graph_view {
+            self.research_graph_view = false;
+            return;
+        }
         if key == GameKey::Esc {
             self.close_screen();
             return;

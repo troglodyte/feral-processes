@@ -877,6 +877,62 @@ fn left_in_the_research_tree_view_stays_in_the_page() {
     assert!(app.hub_on_rail, "the list view's Left goes to the rail");
 }
 
+/// The tree view draws over the whole hub, so with the cursor in it the
+/// page and tab keys do nothing under it, and Esc steps back to the list
+/// view before the next one reaches the rail.
+#[test]
+fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
+    let mut app = test_app(30115);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    let page = app.hub_page().cloned();
+    for key in [
+        GameKey::Tab,
+        GameKey::ShiftTab,
+        GameKey::Char(']'),
+        GameKey::Char('['),
+        GameKey::Char('}'),
+        GameKey::Char('{'),
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::Research, "{key:?} changed the tab");
+        assert_eq!(app.hub_page().cloned(), page, "{key:?} turned the page");
+        assert!(!app.hub_on_rail, "{key:?} went to the rail");
+        assert!(app.research_graph_view, "{key:?} left the tree view");
+    }
+    app.handle_key(GameKey::Esc);
+    assert!(!app.research_graph_view, "Esc leaves the tree view first");
+    assert_eq!(app.mode, Mode::Research);
+    assert!(!app.hub_on_rail);
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail, "the list view's Esc goes to the rail");
+    assert_eq!(app.mode, Mode::Research);
+}
+
+/// From the rail the tree view claims nothing, so `]` walks past the
+/// Research page rather than stopping on it.
+#[test]
+fn the_rail_walks_past_the_research_tree_view() {
+    let mut app = test_app(30116);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.handle_key(GameKey::Left);
+    app.hub_on_rail = true;
+    app.handle_key(GameKey::Char(']'));
+    assert_ne!(app.mode, Mode::Research, "the rail stepped on");
+    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::Tab);
+    assert_eq!(
+        app.mode,
+        Mode::RoutineResearch,
+        "Tab from the rail switches tabs"
+    );
+}
+
 /// The Study tab stands whether or not a station does (a page is never
 /// hidden for the base's state); with no station there is no pen, so the
 /// staff are not rows a key could pin.

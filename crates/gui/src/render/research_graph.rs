@@ -455,7 +455,7 @@ pub(super) fn draw_research_graph(
             if dev_unlock {
                 hints.push("[U] unlock");
             }
-            hints.push("Esc back");
+            hints.push("Esc list");
             key_hints(&hints)
         },
         geo.panel.x,

@@ -510,14 +510,52 @@ fn shared_screens_are_pinned() {
 }
 
 /// A bay beside the party has two homes: `b`'s Breed page and the bay's own
-/// Breed tab in `i`. Each enters it by its own page.
+/// Breed tab in `i`. Each enters it by its own page. The fixture's Extractor
+/// beside it shares the Info tab, which each entry opens for its own
+/// structure.
 #[test]
 fn breed_beside_a_bay_is_pinned() {
     let app = app_with_a_breeding_bay(41069, 1, false);
     let mut shared = shared_screens_outside_sites(&app);
     shared.sort_by_key(|m| format!("{m:?}"));
-    // Every structure beside has an Info tab, so that repeats too.
-    assert!(shared.contains(&Mode::Breed), "{shared:?}");
+    assert_eq!(shared, [Mode::Breed, Mode::StructureManifest]);
+
+    let bay = structure_page_titled(&app, "Breeding Bay");
+    let tabs: Vec<Mode> = bay.tabs.iter().map(|t| t.mode).collect();
+    assert_eq!(tabs, [Mode::Breed, Mode::StructureManifest]);
+}
+
+/// A structure's page on `i`'s rail, by its title.
+fn structure_page_titled(app: &App, title: &str) -> HubPage {
+    Hub::Inventory
+        .kind()
+        .pages(app)
+        .into_iter()
+        .find(|p| matches!(p.key, HubPageKey::Structure(_)) && p.title == title)
+        .unwrap_or_else(|| panic!("an entry for {title}"))
+}
+
+/// Two structures of one kind beside the party share every tab they offer:
+/// each is entered by its own entry (`enter_structure_page` for that
+/// structure), never by the guess in `settle_hub`, which skips a structure's
+/// page (`HubPage::adoptable`).
+#[test]
+fn two_depots_beside_the_party_share_their_tabs_and_that_is_pinned() {
+    let app = app_beside_depots(41070, 2, 0, &[]);
+    let mut shared = shared_screens_outside_sites(&app);
+    shared.sort_by_key(|m| format!("{m:?}"));
+    let mut depot_tabs: Vec<Mode> = Hub::Inventory
+        .kind()
+        .pages(&app)
+        .into_iter()
+        .filter(|p| matches!(p.key, HubPageKey::Structure(_)))
+        .flat_map(|p| p.modes().collect::<Vec<_>>())
+        .collect();
+    depot_tabs.sort_by_key(|m| format!("{m:?}"));
+    depot_tabs.dedup();
+    assert_eq!(shared, depot_tabs, "every tab of the pair is shared");
+    assert!(shared.contains(&Mode::Transfer), "{shared:?}");
+    assert!(shared.contains(&Mode::StructureManifest), "{shared:?}");
 }
 
 /// Compile has two homes once a routine bench stands beside the party: `b`'s
@@ -540,12 +578,7 @@ fn compile_beside_a_bench_is_pinned_and_each_hub_keeps_its_own() {
     let pages = Hub::Inventory.kind().pages(&app);
     let compile = pages
         .iter()
-        .position(|p| p.section.is_some() && p.key != HubPageKey::Named("Production"))
-        .and_then(|_| {
-            pages
-                .iter()
-                .position(|p| matches!(p.key, HubPageKey::Structure(_)))
-        })
+        .position(|p| matches!(p.key, HubPageKey::Structure(_)))
         .expect("a routine bench has an entry");
     for _ in 0..pages.len() {
         if app.hub_at().is_some_and(|(_, page, _)| page == compile) {

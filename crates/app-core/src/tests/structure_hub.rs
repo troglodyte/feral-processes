@@ -168,9 +168,19 @@ fn losing_the_current_structure_steps_to_the_next() {
         .unwrap()
         .remove_structure(machine)
         .unwrap();
-    app.settle_hub();
+    // Any key: the hold moves on the keypress's own tail, as a player meets
+    // it, not on a hand-called `settle_hub`.
+    app.handle_key(GameKey::Char('z'));
     assert_eq!(held_beside(&app).name, "Depot", "the depot remains");
     assert_eq!(app.mode, Mode::Transfer);
+    let depot = held_beside(&app).entity;
+    assert!(
+        matches!(
+            app.transfer_source,
+            TransferSource::Base(TransferAt::Structure(e)) if e == depot
+        ),
+        "the successor's page is open on the depot, not the lost machine"
+    );
 }
 
 #[test]

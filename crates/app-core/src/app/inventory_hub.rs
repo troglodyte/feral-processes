@@ -100,15 +100,18 @@ impl HubKind for InventoryHub {
 
     fn show_tab(&self, app: &mut App, page: &HubPage, tab: usize) {
         app.mode = page.tabs[tab].mode;
-        match page.key {
-            HubPageKey::Member(member) => app.select_member(member),
-            HubPageKey::Structure(entity) => match app.beside_page(entity, tab) {
+        // Whatever a structure's page held goes when the hold leaves it,
+        // wherever the leaving came from (a turn, a tick, a demolition).
+        if let HubPageKey::Structure(entity) = page.key {
+            match app.beside_page(entity, tab) {
                 Some(structure_page) => app.enter_structure_page(entity, structure_page),
                 None => app.leave_beside(),
-            },
-            // Whatever a structure's page held goes when the hold leaves it,
-            // wherever the leaving came from (a turn, a tick, a demolition).
-            _ => app.drop_page_state(),
+            }
+            return;
+        }
+        app.drop_page_state();
+        if let HubPageKey::Member(member) = page.key {
+            app.select_member(member);
         }
     }
 

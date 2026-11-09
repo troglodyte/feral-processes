@@ -146,15 +146,6 @@ impl App {
         self.turn_hub_to(Hub::Base, &page);
     }
 
-    /// The party member the held page names, `None` on any other page or
-    /// outside the hub.
-    pub fn held_member(&self) -> Option<Entity> {
-        match self.hub_page()? {
-            HubPageKey::Member(member) => Some(*member),
-            _ => None,
-        }
-    }
-
     /// The site the held page names, `None` on any other page or outside
     /// the hub.
     pub fn held_site(&self) -> Option<RouteDestinationId> {

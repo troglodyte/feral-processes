@@ -56,6 +56,15 @@ impl App {
         }
     }
 
+    /// The party member the held page names, `None` on any other page or
+    /// outside the hub.
+    pub fn held_member(&self) -> Option<Entity> {
+        match self.hub_page()? {
+            HubPageKey::Member(member) => Some(*member),
+            _ => None,
+        }
+    }
+
     /// The screen the roster's side trips come back to: the held member's
     /// page when one is held, else the roster.
     pub(crate) fn roster_mode(&self) -> Mode {

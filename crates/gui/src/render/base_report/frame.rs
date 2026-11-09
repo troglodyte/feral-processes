@@ -354,20 +354,31 @@ pub(super) fn keybar_groups(
             .map(|(key, verb)| keycap(key, verb))
             .collect::<Vec<_>>()
     });
+    // The hub rule's keys, in both halves: Tab only where the page has a
+    // second tab to go to, and the braces only where the rail has sections.
+    let mut hub_keys = Vec::new();
+    if pages[page].tabs.len() > 1 {
+        hub_keys.push(keycap("Tab", "tab"));
+    }
+    if pages.iter().filter(|p| p.section.is_some()).count() > 1 {
+        hub_keys.push(keycap("{ }", "section"));
+    }
     if on_rail {
         let nav = vec![keycap("↑/↓", "page"), keycap("→", "open")];
-        return [Some(nav), cycle, Some(vec![keycap("Esc", "back")])]
-            .into_iter()
-            .flatten()
-            .map(group)
-            .collect();
+        return [
+            Some(nav),
+            Some(hub_keys),
+            cycle,
+            Some(vec![keycap("Esc", "back")]),
+        ]
+        .into_iter()
+        .flatten()
+        .filter(|g| !g.is_empty())
+        .map(group)
+        .collect();
     }
-    let step = if pages[page].tabs.len() > 1 {
-        keycap("←/→", "screen")
-    } else {
-        keycap("←", "menu")
-    };
-    let nav = vec![step, keycap("[ ]", "page")];
+    let mut nav = vec![keycap("←", "menu"), keycap("[ ]", "page")];
+    nav.extend(hub_keys);
     let acts = screen_keys(mode);
     [
         Some(acts),
@@ -554,6 +565,42 @@ mod tests {
             assert!(rail.contains("back"), "{mode:?}: {rail}");
             let rows = text(false);
             assert!(rows.contains("menu"), "{mode:?}: {rows}");
+        }
+    }
+
+    fn bar(pages: &[HubPage], page: usize, on_rail: bool) -> Vec<String> {
+        keybar_groups(Mode::BaseStock, pages, page, on_rail, &[])
+            .iter()
+            .map(|g| g.iter().map(|(t, _, _)| t.as_str()).collect())
+            .collect()
+    }
+
+    /// The keybar teaches the hub rule: `[ ] page` always, `Tab tab` only on
+    /// a page with a second tab, `{ } section` only on a rail with
+    /// sections, and never the retired `←/→ screen`.
+    #[test]
+    fn the_keybar_names_the_hub_nav_keys() {
+        let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
+        let staff = pages.iter().position(|p| p.title == "Staff").unwrap();
+        let stock = pages.iter().position(|p| p.title == "Stock").unwrap();
+        for on_rail in [false, true] {
+            let multi = bar(&pages, staff, on_rail).join("|");
+            assert!(multi.contains("Tab tab"), "{multi}");
+            let single = bar(&pages, stock, on_rail).join("|");
+            assert!(!single.contains("Tab"), "{single}");
+            assert!(!multi.contains("{ }"), "no sections here: {multi}");
+            assert!(!multi.contains("screen"), "{multi}");
+        }
+        let page_half = bar(&pages, staff, false).join("|");
+        assert!(page_half.contains("[ ] page") && page_half.contains("← menu"));
+
+        let sectioned = [
+            page("Aa", Some("Towns and cities"), false),
+            page("Bb", Some("Outposts"), false),
+        ];
+        for on_rail in [false, true] {
+            let text = bar(&sectioned, 0, on_rail).join("|");
+            assert!(text.contains("{ } section"), "{text}");
         }
     }
 

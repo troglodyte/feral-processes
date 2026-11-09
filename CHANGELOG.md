@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.53
+
+**Staffing structures now has its own page on the base report, and it lists only the structures your factory runs on.** The page that used to be called Staffing is now Duties, the table of which programs take which kinds of job. The new Staffing page right after it holds the structure list: machines, resource nodes, Teardown Rigs and Holding Cells, with a production line shown as one row. Walls, doors, shields and the Home are no longer listed, and the staffing popup no longer offers "Keep a guard on this". A base with nothing a program can work says so instead of showing an empty list.
+
 ## 0.21.52
 
 **A game now starts at x2 speed.** At x1 the world ran too slowly to start a run on. The status bar shows x2 from the first moment. `,` still cycles the speed, now x2, x4, x1 and back to x2, so the slower speed is one more press away. The speed is not saved, so every launch starts at x2.

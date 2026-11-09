@@ -325,8 +325,9 @@ fn page_keys_inside_a_work_order_popup_do_not_change_page() {
 
 #[test]
 fn page_keys_inside_the_staffing_popup_do_not_change_page() {
-    let mut app = app_inside_a_small_base_with_programs(30021, false, 1);
+    let mut app = app_inside_a_small_base_with_two_extractors(30021);
     open_hub_screen(&mut app, Mode::Structures);
+    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign);
 
@@ -340,7 +341,7 @@ fn page_keys_inside_the_staffing_popup_do_not_change_page() {
     }
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Structures, "Esc returns to the roster");
-    assert_eq!(app.menu_selected, 0, "on the row that was staffed");
+    assert_eq!(app.menu_selected, 1, "on the row that was staffed");
 }
 
 #[test]
@@ -481,17 +482,19 @@ fn stepping_back_into_the_duty_table_resets_its_column_cursor() {
 /// the row it was opened from, not wherever the popup's own cursor was left.
 #[test]
 fn the_roster_keeps_its_highlight_across_the_staffing_popup() {
-    let mut app = app_inside_a_small_base_with_programs(30025, false, 1);
+    let mut app = app_inside_a_small_base_with_two_extractors(30025);
     open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.menu_selected, 0, "entered at the top");
+    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign);
+    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Down);
 
     app.handle_key(GameKey::Esc);
 
     assert_eq!(app.mode, Mode::Structures);
-    assert_eq!(app.menu_selected, 0, "back on the Extractor's row");
+    assert_eq!(app.menu_selected, 1, "back on the second Extractor's row");
 }
 
 /// `]` from Overview walks every page once and wraps; `[` walks it back.

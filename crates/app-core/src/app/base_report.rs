@@ -122,7 +122,7 @@ pub fn base_page_flag(flags: &BaseReportFlags, page: usize) -> Option<&str> {
         Mode::BaseStock => flags.stock.as_deref(),
         Mode::BuildOrders => flags.build_orders.as_deref(),
         Mode::WorkOrders => flags.work_orders.as_deref(),
-        Mode::Structures => flags.staffing.as_deref(),
+        Mode::BaseStaff => flags.staffing.as_deref(),
         Mode::Alerts => flags.alerts.as_deref(),
         _ => None,
     }

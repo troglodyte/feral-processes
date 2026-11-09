@@ -30,29 +30,8 @@ struct GroupEntry {
 
 const TRADE_ROWS: &[GroupEntry] = &[
     GroupEntry {
-        // Not base-only, and deliberately so: mission status is the
-        // question worth answering four frames down, and the board itself is
-        // a property of the sector rather than of where the party is
-        // standing. Off the base the screen opens read-only — see
-        // `Game::broker_reach`.
-        //
-        // `broker_reach` rather than `contract_board`, which is what this row
-        // used to ask: this closure runs every frame the menu is open, and a
-        // board that no longer refuses on distance rolls every template and
-        // samples the habitat ring before it can answer. The proximity check
-        // used to short-circuit all of that.
-        label: "Contracts",
-        target: Mode::Contracts,
-        available: |app| {
-            app.game.as_mut().is_some_and(|g| {
-                g.broker_reach() != BrokerReach::NoBroker || !g.active_contracts().is_empty()
-            })
-        },
-    },
-    GroupEntry {
-        // `caravan_reach` rather than `caravan_view`, which is the trap the
-        // Contracts row above records: this closure runs every frame the menu
-        // is open, and the view rolls a whole shelf — gear copies, affixes
+        // `caravan_reach` rather than `caravan_view`: this closure runs every
+        // frame the menu is open, and the view rolls a whole shelf — gear copies, affixes
         // and all — before it can answer a question about where the player is
         // standing.
         label: "Caravan",

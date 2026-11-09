@@ -115,8 +115,14 @@ const GAME_MENU_RAIL: &[(&str, &[Mode])] = &[
 #[test]
 fn every_fixed_rail_reads_as_it_does_today() {
     // Base, no bay.
+    // The fixed table leads `b`'s rail; `b_rail.rs` has the sections after.
+    let fixed = |app: &App| {
+        let mut rail = plain(rail(app, Hub::Base));
+        rail.truncate(rail.iter().position(|(t, _)| t == "Alerts").unwrap() + 2);
+        rail
+    };
     let app = app_inside_a_small_base_with_programs(41001, false, 2);
-    assert_eq!(plain(rail(&app, Hub::Base)), expect(BASE_RAIL));
+    assert_eq!(fixed(&app), expect(BASE_RAIL));
 
     // Base with a bay: Breed before Alerts; with the structure hub open:
     // none.
@@ -124,10 +130,10 @@ fn every_fixed_rail_reads_as_it_does_today() {
     let mut with_breed = expect(BASE_RAIL);
     let alerts = with_breed.iter().position(|(t, _)| t == "Alerts").unwrap();
     with_breed.insert(alerts, ("Breed".to_string(), vec![Mode::Breed]));
-    assert_eq!(plain(rail(&app, Hub::Base)), with_breed);
+    assert_eq!(fixed(&app), with_breed);
     app.handle_key(GameKey::Char('c'));
     assert!(app.structure_hub.is_some());
-    assert_eq!(plain(rail(&app, Hub::Base)), expect(BASE_RAIL));
+    assert_eq!(fixed(&app), expect(BASE_RAIL));
 
     // Inventory.
     let app = test_app(41003);

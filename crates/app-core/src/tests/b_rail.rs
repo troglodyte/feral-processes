@@ -142,9 +142,9 @@ fn the_b_rail_has_its_five_sections_in_order() {
 }
 
 #[test]
-#[ignore = "phase 2.3"]
 fn contracts_is_on_the_rail_only_with_a_broker_or_a_held_contract() {
-    let app = test_app(46005);
+    let mut app = test_app(46005);
+    skip_tutorial(&mut app);
     let game = app.game.as_ref().unwrap();
     assert!(game.active_contracts().is_empty(), "precondition");
     assert!(!b_rail(&app).iter().any(|e| e.1 == "Contracts"));
@@ -216,7 +216,6 @@ fn every_base_launcher_verb_is_a_tab_of_b() {
 }
 
 #[test]
-#[ignore = "phase 2.3"]
 fn the_contracts_launcher_verb_is_a_tab_of_b() {
     let mut app = app_at_a_contract_broker(46011, false);
     assert_eq!(reach_in_b(&mut app, "Contracts", "Board"), Mode::Contracts);

@@ -133,7 +133,7 @@ fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
 
     assert_eq!(app.mode, Mode::BaseTrade);
     assert!(
-        app.menu_selected < rows,
+        app.menu_selected < rows.max(1),
         "highlight {} is past the {rows} rows the page now has",
         app.menu_selected
     );

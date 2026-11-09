@@ -407,7 +407,7 @@ impl App {
             Mode::ModCopy => self.handle_mod_copy_key(key),
             Mode::RefitCopy => self.handle_refit_copy_key(key),
             Mode::ModPickAffix => self.handle_mod_pick_affix_key(key),
-            Mode::Contracts => self.handle_contracts_key(key),
+            Mode::Contracts | Mode::ContractsHeld => self.handle_contracts_key(key),
             Mode::Alerts => self.handle_alerts_key(key),
             Mode::History => self.handle_history_key(key),
             Mode::Compass => self.handle_compass_key(key),

@@ -339,7 +339,7 @@ fn site(key: SettlementKey) -> HubPageKey {
 }
 
 /// At base with "Alder" (A) far away and "Birch" (B) beside the party.
-fn app_beside_birch(seed: u32) -> App {
+pub(super) fn app_beside_birch(seed: u32) -> App {
     let mut app = app_at_a_relay(seed, &ItemId::from("cache_grain"), 40);
     set_sites(
         &mut app,
@@ -350,6 +350,13 @@ fn app_beside_birch(seed: u32) -> App {
         &[],
     );
     app
+}
+
+/// Shows `tab` of town `key`'s page with the cursor in it, from wherever
+/// the app is.
+pub(super) fn open_town_tab(app: &mut App, key: SettlementKey, tab: Mode) {
+    app.enter_hub_at(Hub::Sites, site(key), tab);
+    app.hub_on_rail = false;
 }
 
 fn open_beside(app: &mut App, tab: Mode) {

@@ -149,18 +149,14 @@ pub(crate) fn open_structure_page(app: &mut App) {
     }
 }
 
-/// Opens `target`'s hub with its own key, walks `]` to `target`'s page and
-/// Right off the rail and along its screens to `target`, the way a player
-/// reaches a screen that no longer has a menu row of its own. The page is
-/// found by key, since a page the rail slots in (Breed) moves the ones after
-/// it.
+/// Opens `target`'s hub with its own key, walks `]` to the first page on
+/// the rail as it stands that offers `target`, and Right off the rail and
+/// `Tab` along its tabs to it, the way a player reaches a screen that has
+/// no menu row of its own. The page is found on the live rail, since a page
+/// the rail slots in (Breed, Contracts, a site) moves the ones after it. A
+/// screen in neither fixed table is looked for on `b`'s rail.
 pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
-    let (hub, page, _) = hub_of(target).expect("target is a hub screen");
-    let table = match hub {
-        Hub::Base => BASE_REPORT_PAGES,
-        _ => INVENTORY_PAGES,
-    };
-    let key = HubPageKey::Named(table[page].title);
+    let hub = hub_of(target).map_or(Hub::Base, |(hub, ..)| hub);
     app.handle_key(GameKey::Char(match hub {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
@@ -168,8 +164,13 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
             unreachable!("hub_of names the shared hubs only")
         }
     }));
-    for _ in 0..=BASE_REPORT_PAGES.len().max(INVENTORY_PAGES.len()) {
-        if app.hub_page() == Some(&key) {
+    let pages = hub.kind().pages(app);
+    let page = pages
+        .iter()
+        .position(|p| p.offers(target))
+        .unwrap_or_else(|| panic!("no page of {hub:?} offers {target:?} right now"));
+    for _ in 0..=pages.len() {
+        if app.hub_page() == Some(&pages[page].key) {
             break;
         }
         app.handle_key(GameKey::Char(']'));
@@ -178,7 +179,7 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
         app.handle_key(GameKey::Right);
     }
     // From the tab the page opened (or was left) on.
-    for _ in 0..table[page].tabs.len() {
+    for _ in 0..pages[page].tabs.len() {
         if app.mode == target {
             break;
         }

@@ -8,6 +8,32 @@ use crate::tests::alerts::{alert, seeded};
 use crate::tests::support::*;
 use crate::*;
 
+/// The first tab of every page on `b`'s rail as it stands now.
+fn rail_modes(app: &App) -> Vec<Mode> {
+    Hub::Base
+        .kind()
+        .pages(app)
+        .iter()
+        .map(|p| p.tabs[0].mode)
+        .collect()
+}
+
+/// The first tab of the last page on `b`'s rail.
+fn last_page_mode(app: &App) -> Mode {
+    *rail_modes(app).last().expect("b has pages")
+}
+
+/// Walks `[` along `b`'s rail until the page whose first tab is `mode`.
+fn back_to(app: &mut App, mode: Mode) {
+    for _ in 0..rail_modes(app).len() {
+        if app.mode == mode {
+            return;
+        }
+        app.handle_key(GameKey::Char('['));
+    }
+    assert_eq!(app.mode, mode, "{mode:?} is on the rail");
+}
+
 fn page_modes() -> Vec<Mode> {
     BASE_REPORT_PAGES
         .iter()
@@ -55,7 +81,7 @@ fn right_bracket_wraps_last_to_first_and_left_bracket_first_to_last() {
     let mut app = test_app(30002);
     app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::BaseTrade, "[ wraps first -> last");
+    assert_eq!(app.mode, last_page_mode(&app), "[ wraps first -> last");
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOverview, "] wraps last -> first");
     app.handle_key(GameKey::Char(']'));
@@ -66,10 +92,10 @@ fn right_bracket_wraps_last_to_first_and_left_bracket_first_to_last() {
 fn esc_from_a_later_page_leaves_the_hub_rather_than_stepping_back() {
     let mut app = test_app(30003);
     app.handle_key(GameKey::Char('b'));
-    for _ in 0..BASE_REPORT_PAGES.len() - 1 {
+    for _ in 0..rail_modes(&app).len() - 1 {
         app.handle_key(GameKey::Char(']'));
     }
-    assert_eq!(app.mode, Mode::BaseTrade);
+    assert_eq!(app.mode, last_page_mode(&app));
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -159,9 +185,7 @@ fn paging_onto_alerts_marks_everything_read() {
     );
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 1);
-    app.handle_key(GameKey::Char('['));
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::Alerts);
+    back_to(&mut app, Mode::Alerts);
     assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 0);
 }
 
@@ -499,15 +523,16 @@ fn the_roster_keeps_its_highlight_across_the_staffing_popup() {
 fn the_full_rail_walks_forward_and_back() {
     let mut app = test_app(30017);
     app.handle_key(GameKey::Char('b'));
+    let rail = rail_modes(&app);
     let mut seen = vec![app.mode];
-    for _ in 1..BASE_REPORT_PAGES.len() {
+    for _ in 1..rail.len() {
         app.handle_key(GameKey::Char(']'));
         seen.push(app.mode);
     }
-    assert_eq!(seen, page_modes());
+    assert_eq!(seen, rail);
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOverview);
-    for page in page_modes().into_iter().rev() {
+    for page in rail.into_iter().rev() {
         app.handle_key(GameKey::Char('['));
         assert_eq!(app.mode, page);
     }
@@ -609,7 +634,7 @@ fn b_opens_with_the_cursor_on_the_rail_and_down_walks_the_pages() {
     assert_eq!(app.mode, Mode::Build);
     app.handle_key(GameKey::Up);
     app.handle_key(GameKey::Up);
-    assert_eq!(app.mode, Mode::BaseTrade, "Up wraps first -> last");
+    assert_eq!(app.mode, last_page_mode(&app), "Up wraps first -> last");
     assert!(app.hub_on_rail, "walking the rail keeps the cursor there");
 }
 
@@ -690,14 +715,6 @@ fn left_walks_the_duty_table_columns_before_it_reaches_the_rail() {
     assert!(app.hub_on_rail);
 }
 
-fn command_labels(app: &mut App, page: Mode) -> Vec<&'static str> {
-    app.command_rows(page)
-        .expect("a command page")
-        .iter()
-        .map(|r| r.label)
-        .collect()
-}
-
 #[test]
 fn b_opens_the_hub_at_overview_then_where_it_was_left() {
     let mut app = test_app(30100);
@@ -708,7 +725,7 @@ fn b_opens_the_hub_at_overview_then_where_it_was_left() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     app.handle_key(GameKey::Char('b'));
-    assert_eq!(app.mode, Mode::BaseTrade, "the last hub screen");
+    assert_eq!(app.mode, last_page_mode(&app), "the last hub screen");
     assert!(app.hub_on_rail);
 }
 
@@ -751,19 +768,6 @@ fn no_mode_is_in_two_hubs() {
 }
 
 #[test]
-fn the_trade_page_lists_its_table_inside_the_base() {
-    let mut app = app_inside_a_small_base_with_programs(30103, false, 1);
-    assert_eq!(
-        command_labels(&mut app, Mode::BaseTrade),
-        ["Contracts"],
-        "the onboarding mission is in hand"
-    );
-
-    let mut broker = app_at_a_contract_broker(30106, false);
-    assert_eq!(command_labels(&mut broker, Mode::BaseTrade), ["Contracts"]);
-}
-
-#[test]
 fn the_deploy_tab_opens_on_its_category_list() {
     let mut app = test_app(30107);
     app.build_category = Some(feral_processes_engine::structures::StructureCategory::Utility);
@@ -783,8 +787,7 @@ fn a_non_command_mode_has_no_command_rows() {
 fn a_row_letter_on_the_rail_of_a_command_page_does_nothing() {
     let mut app = app_inside_a_small_base_with_programs(30110, false, 1);
     app.handle_key(GameKey::Char('b'));
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::BaseTrade);
+    back_to(&mut app, Mode::BaseTrade);
     assert!(app.hub_on_rail);
     app.handle_key(GameKey::Char('a'));
     app.handle_key(GameKey::Char('1'));
@@ -796,8 +799,7 @@ fn an_all_hidden_page_is_still_on_the_rail() {
     let mut app = test_app(30111);
     skip_tutorial(&mut app);
     app.handle_key(GameKey::Char('b'));
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::BaseTrade);
+    back_to(&mut app, Mode::BaseTrade);
     assert_eq!(app.command_rows(Mode::BaseTrade).map(|r| r.len()), Some(0));
 }
 

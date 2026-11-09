@@ -1,25 +1,21 @@
-//! The contracts screen: what the run is holding, then what the Broker in
-//! front of you is offering.
+//! The Contracts page (`b` → JOBS): Held, every contract the run is
+//! holding, and Board, what the Broker in front of you is offering.
 
 use crate::*;
 
-/// Which section of the contracts screen a picked row number lands in, and
-/// its index within that section.
+/// Which section of a town's board a picked row number lands in, and its
+/// index within that section.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum ContractScreenRow {
     Active(usize),
     Offer(usize),
 }
 
-/// Resolves a row number against the screen's two stacked sections — active
-/// contracts, then the board's offers — given how many rows each contributed.
-/// `None` for a row past the end.
-///
-/// Pulled out of `handle_contracts_key` and shared with the renderer that
-/// numbers the same rows, for `trade_row`'s stated reason: the offset
-/// arithmetic is where a screen with more than one section goes wrong, and it
-/// is the one part of this flow testable without a Broker to stand in front
-/// of.
+/// Resolves a row number against a board's two stacked sections — held
+/// contracts, then offers — given how many rows each contributed. `None`
+/// for a row past the end. Shared with the renderer that numbers the same
+/// rows: the offset arithmetic is where a screen with more than one section
+/// goes wrong.
 pub(crate) fn contract_row(idx: usize, active: usize, offers: usize) -> Option<ContractScreenRow> {
     if idx < active {
         return Some(ContractScreenRow::Active(idx));
@@ -28,8 +24,8 @@ pub(crate) fn contract_row(idx: usize, active: usize, offers: usize) -> Option<C
     (idx < offers).then_some(ContractScreenRow::Offer(idx))
 }
 
-/// Why an onboarding mission cannot be given back, on the contracts screen
-/// and the Sites hub's Jobs tab alike.
+/// Why an onboarding mission cannot be given back, on the Contracts page's
+/// Held tab and a town's Jobs tab alike.
 pub(crate) const TUTORIAL_REFUSAL: &str =
     "Onboarding missions cannot be given back — finish this one and the next arrives.";
 
@@ -62,69 +58,63 @@ impl App {
             .unwrap_or(BrokerReach::NoBroker)
     }
 
+    /// Both tabs. Held: Enter hands a delivery over, `[A]` gives the
+    /// highlighted contract back. Board: Enter takes the highlighted offer.
+    /// Each tab's rows are its own list from `contract_sections`, so a row
+    /// number is an index into that list alone.
     pub(crate) fn handle_contracts_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.close_screen();
             return;
         }
         let (active, offers) = self.contract_sections();
+        let held = self.mode == Mode::ContractsHeld;
 
         // Uppercase is reserved for screen actions, as `[S]`/`[B]` are on the
         // trade screen — a shifted letter that also picked a row would fire
-        // both on one keypress, and one of these gives a contract up.
-        if key == GameKey::Char('A') {
-            let idx = self.menu_selected;
-            if let Some(ContractScreenRow::Active(row)) =
-                contract_row(idx, active.len(), offers.len())
-            {
-                // The engine refuses this too — that is where the invariant
-                // lives — but a bare `false` cannot reach the log, and a key
-                // that silently does nothing reads as a broken key.
-                if active[row].tutorial {
-                    self.refuse(TUTORIAL_REFUSAL);
-                    return;
-                }
-                let id = active[row].id.clone();
-                if let Some(game) = &mut self.game {
-                    game.abandon_contract(&id);
-                }
-                self.status_line = None;
-            } else {
-                self.status_line =
-                    Some("Highlight a contract you are holding to give it back.".to_string());
+        // both on one keypress, and this one gives a contract up.
+        if held && key == GameKey::Char('A') {
+            let Some(contract) = active.get(self.menu_selected) else {
+                self.refuse("Highlight a contract you are holding to give it back.");
+                return;
+            };
+            // The engine refuses this too — that is where the invariant
+            // lives — but a bare `false` cannot reach the log, and a key
+            // that silently does nothing reads as a broken key.
+            if contract.tutorial {
+                self.refuse(TUTORIAL_REFUSAL);
+                return;
             }
+            let id = contract.id.clone();
+            if let Some(game) = &mut self.game {
+                game.abandon_contract(&id);
+            }
+            self.status_line = None;
             return;
         }
 
-        let Some(idx) = self.selected_index(key, active.len() + offers.len()) else {
+        let rows = if held { active.len() } else { offers.len() };
+        let Some(row) = self.selected_index(key, rows) else {
             return;
         };
-        match contract_row(idx, active.len(), offers.len()) {
-            Some(ContractScreenRow::Offer(row)) => {
-                let id = offers[row].id.clone();
-                let Some(game) = &mut self.game else { return };
-                let outcome = game.accept_contract(&id, None).map_err(refusal_line);
-                self.report(outcome);
-            }
-            // Picking one you already hold hands over a delivery. Nothing
-            // else on this screen is an action a held contract needs: the
-            // other four objectives advance on their own, wherever you are.
-            Some(ContractScreenRow::Active(row)) => {
-                let id = active[row].id.clone();
-                let Some(game) = &mut self.game else { return };
-                let outcome = game
-                    .deliver_to_contract(&id, None)
-                    .map(|_| ())
-                    .map_err(|why| match why {
-                        ContractRefusal::NotOffered => {
-                            "That one finishes itself — just go and do it.".to_string()
-                        }
-                        why => refusal_line(why),
-                    });
-                self.report(outcome);
-            }
-            None => {}
-        }
+        let Some(game) = &mut self.game else { return };
+        let outcome = if held {
+            // Picking one you hold hands over a delivery. Nothing else on
+            // this tab is an action a held contract needs: the other
+            // objectives advance on their own, wherever you are.
+            game.deliver_to_contract(&active[row].id, None)
+                .map(|_| ())
+                .map_err(|why| match why {
+                    ContractRefusal::NotOffered => {
+                        "That one finishes itself — just go and do it.".to_string()
+                    }
+                    why => refusal_line(why),
+                })
+        } else {
+            game.accept_contract(&offers[row].id, None)
+                .map_err(refusal_line)
+        };
+        self.report(outcome);
     }
 }
 

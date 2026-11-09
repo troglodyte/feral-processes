@@ -1889,7 +1889,7 @@ pub enum Mode {
     /// `Mode::CompanionEquip`'s shape one level over.
     SettlementMarket,
     /// A settlement's job board, opened with `[J]` from `Mode::Settlement` —
-    /// Phase 5. `Mode::Contracts`' shape exactly, and deliberately so: two
+    /// Phase 5. Two
     /// stacked sections numbered continuously, `app::contracts::contract_row`
     /// shared as the resolver, `[A]` to hand one back. What differs is the
     /// issuer it passes into all three engine doors — the held section is
@@ -2191,9 +2191,13 @@ pub enum Mode {
     /// The weapon research tree — `Mode::Research`'s screen for
     /// `ResearchTree::Weapons`, its row gated on `has_research_tree`.
     WeaponResearch,
-    /// Contracts: what the run is holding, then what a Broker in range is
-    /// offering. Stays open after each verb so several can be taken in one
-    /// visit, as `Mode::Research` does.
+    /// The Contracts page's Held tab: every contract the run is holding,
+    /// each naming who it is for (`ContractRow::issuer_name`). Enter hands
+    /// a delivery over and `[A]` gives one back.
+    ContractsHeld,
+    /// The Contracts page's Board tab: what a Broker in range is offering.
+    /// Stays open after each take so several can be taken in one visit, as
+    /// `Mode::Research` does.
     ///
     /// Not surface-only. The screen reaches no zone-map state through
     /// `Position` — the offers half is `Game::contract_board`, which answers
@@ -2669,6 +2673,7 @@ impl Mode {
             | Mode::RefitCopy
             | Mode::ModPickAffix
             | Mode::Contracts
+            | Mode::ContractsHeld
             // Opened from the map with `N`, so it never layers over a
             // fight — `Mode::History`'s reason exactly.
             | Mode::Alerts

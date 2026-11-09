@@ -138,7 +138,6 @@ use building::{
     draw_structure_menu, draw_work_order_pick, draw_work_order_quantity,
 };
 use caravan::{CaravanBasket, draw_caravan};
-use contracts::draw_contracts;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity};
 use depot_filter::draw_depot_filter;
 use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
@@ -1008,7 +1007,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // against these two lists, so a renderer with its own copy would act on a
     // different contract from the one under the highlight.
     let (contract_active, contract_offers, contract_reach) = match app.mode {
-        Mode::Contracts => {
+        Mode::Contracts | Mode::ContractsHeld => {
             let (active, offers) = app.contract_sections();
             (active, offers, app.broker_reach())
         }
@@ -1325,6 +1324,16 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             None,
         )),
         Mode::PinSubject => Some((building::pin_subject_page_rows(game, selected), None)),
+        Mode::ContractsHeld => Some((contracts::held_rows(&contract_active, selected), None)),
+        Mode::Contracts => Some((
+            contracts::board_rows(
+                &contract_offers,
+                contract_active.iter().any(|row| row.tutorial),
+                contract_reach,
+                selected,
+            ),
+            None,
+        )),
         // The list view is a tab; the tree view draws over the hub, as
         // it does anywhere, and claims every arrow (`App::screen_claims`).
         Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch
@@ -1867,15 +1876,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_mod_pick_affix(game, mod_copy.clone(), selected, refusal, painter, m)
         }
         Mode::RefitCopy => draw_refit_copy(game, refit_copy.clone(), refusal, painter, m),
-        Mode::Contracts => draw_contracts(
-            &contract_active,
-            &contract_offers,
-            contract_reach,
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
         _ if hub_frame.is_some() => {
             if let Some(frame) = &hub_frame {
                 base_report::draw_base_report(

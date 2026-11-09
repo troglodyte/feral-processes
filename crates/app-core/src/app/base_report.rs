@@ -80,6 +80,15 @@ const BREED_PAGE: FixedPage = FixedPage {
     tabs: &[HubTab::new("Breed", Mode::Breed)],
 };
 
+/// The JOBS section's one entry: every contract held, then the Broker's
+/// board. On the rail once a Broker stands or a contract is held, the
+/// question the Trade page's row used to ask.
+pub const CONTRACTS_TITLE: &str = "Contracts";
+pub const CONTRACTS_TABS: &[HubTab] = &[
+    HubTab::new("Held", Mode::ContractsHeld),
+    HubTab::new("Board", Mode::Contracts),
+];
+
 /// The base report as a hub: a fixed table, the attention marks off
 /// `Game::base_report_flags`.
 pub(crate) struct BaseReport;
@@ -116,6 +125,21 @@ impl HubKind for BaseReport {
             pages.insert(alerts, BREED_PAGE.page());
         }
         pages[0].section = Some(BASE_SECTION);
+        // `broker_reach` and not `contract_board`: this runs every frame,
+        // and the board rolls every template before it can answer.
+        let jobs = app.game.as_ref().is_some_and(|g| {
+            g.broker_reach() != BrokerReach::NoBroker || !g.active_contracts().is_empty()
+        });
+        if jobs {
+            pages.push(HubPage {
+                section: Some("JOBS"),
+                ..FixedPage {
+                    title: CONTRACTS_TITLE,
+                    tabs: CONTRACTS_TABS,
+                }
+                .page()
+            });
+        }
         pages
     }
 }

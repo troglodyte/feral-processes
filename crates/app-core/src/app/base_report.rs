@@ -6,7 +6,8 @@ use feral_processes_engine::BaseReportFlags;
 
 /// The base report's one table: the rail, the screen order and "is this mode
 /// in the hub" are all read off it, so a page cannot be on the rail and
-/// missing from the nav. Rail order is the order here; `[` and `]` walk it.
+/// missing from the nav. Rail order is the order here, with Breed slotted in
+/// before Alerts once a bay stands; `[` and `]` walk it.
 pub const BASE_REPORT_PAGES: &[FixedPage] = &[
     FixedPage {
         title: "Overview",
@@ -14,30 +15,11 @@ pub const BASE_REPORT_PAGES: &[FixedPage] = &[
     },
     FixedPage {
         title: "Build",
-        tabs: &[HubTab::new("Build", Mode::BaseBuild)],
-    },
-    FixedPage {
-        title: "Research",
-        tabs: &[HubTab::new("Research", Mode::BaseResearch)],
-    },
-    FixedPage {
-        title: "Trade",
-        tabs: &[HubTab::new("Trade", Mode::BaseTrade)],
-    },
-    FixedPage {
-        title: "Compile",
-        tabs: &[HubTab::new("Compile", Mode::BaseCompile)],
-    },
-    FixedPage {
-        title: "Recipes",
-        tabs: &[HubTab::new("Recipes", Mode::Recipes)],
-    },
-    FixedPage {
-        title: "Staff",
         tabs: &[
-            HubTab::new("Wellbeing", Mode::StaffWellbeing),
-            HubTab::new("Coverage", Mode::StaffCoverage),
-            HubTab::new("Discontent", Mode::StaffDiscontent),
+            HubTab::new("Deploy", Mode::Build),
+            HubTab::new("Build orders", Mode::BuildOrders),
+            HubTab::new("Dig", Mode::DigOrders),
+            HubTab::new("Floor", Mode::FloorOrders),
         ],
     },
     FixedPage {
@@ -46,41 +28,53 @@ pub const BASE_REPORT_PAGES: &[FixedPage] = &[
             HubTab::new("Output", Mode::BaseOutput),
             HubTab::new("Machines", Mode::BaseMachines),
             HubTab::new("Power", Mode::BasePower),
+            HubTab::new("Recipes", Mode::Recipes),
+            HubTab::new("Compile", Mode::Craft),
         ],
     },
     FixedPage {
         title: "Stock",
-        tabs: &[HubTab::new("Stock", Mode::BaseStock)],
-    },
-    FixedPage {
-        title: "Work orders",
-        tabs: &[HubTab::new("Work orders", Mode::WorkOrders)],
-    },
-    FixedPage {
-        title: "Duties",
-        tabs: &[HubTab::new("Duties", Mode::BaseStaff)],
-    },
-    FixedPage {
-        title: "Staffing",
-        tabs: &[HubTab::new("Staffing", Mode::Structures)],
-    },
-    FixedPage {
-        title: "Build orders",
         tabs: &[
-            HubTab::new("Build", Mode::BuildOrders),
-            HubTab::new("Dig", Mode::DigOrders),
-            HubTab::new("Floor", Mode::FloorOrders),
+            HubTab::new("Stock", Mode::BaseStock),
+            HubTab::new("Work orders", Mode::WorkOrders),
+        ],
+    },
+    FixedPage {
+        title: "Staff",
+        tabs: &[
+            HubTab::new("Wellbeing", Mode::StaffWellbeing),
+            HubTab::new("Coverage", Mode::StaffCoverage),
+            HubTab::new("Discontent", Mode::StaffDiscontent),
+            HubTab::new("Duties", Mode::BaseStaff),
+            HubTab::new("Staffing", Mode::Structures),
+        ],
+    },
+    FixedPage {
+        title: "Research",
+        tabs: &[
+            HubTab::new("Projects", Mode::Research),
+            HubTab::new("Routines", Mode::RoutineResearch),
+            HubTab::new("Affixes", Mode::AffixResearch),
+            HubTab::new("Weapons", Mode::WeaponResearch),
+            HubTab::new("Study", Mode::PinSubject),
         ],
     },
     FixedPage {
         title: "Alerts",
         tabs: &[HubTab::new("Alerts", Mode::Alerts)],
     },
+    FixedPage {
+        title: "Trade",
+        tabs: &[HubTab::new("Trade", Mode::BaseTrade)],
+    },
 ];
 
-/// The Breed page, on the rail after the fixed table once a bay stands.
-/// Last, so every fixed page keeps the index `base_page_flag` and the marks
-/// read it by.
+/// The section header the rail draws above the Overview.
+const BASE_SECTION: &str = "BASE";
+
+/// The Breed page, on the rail before Alerts once a bay stands. Not in the
+/// fixed table, so every fixed page keeps the index `base_page_flag` and the
+/// Overview read it by.
 const BREED_PAGE: FixedPage = FixedPage {
     title: "Breed",
     tabs: &[HubTab::new("Breed", Mode::Breed)],
@@ -95,9 +89,9 @@ impl HubKind for BaseReport {
         "BASE REPORT"
     }
 
-    /// The table, then Breed once a bay stands — but not while the `[c]`
-    /// hub is open, whose own Breed page is the same mode: a mode names
-    /// one hub, so only one may offer it at a time.
+    /// The table, with Breed before Alerts once a bay stands — but not
+    /// while the `[c]` hub is open, whose own Breed page is the same mode:
+    /// a mode names one hub, so only one may offer it at a time.
     fn pages(&self, app: &App) -> Vec<HubPage> {
         let flags = app.game.as_ref().map(|g| g.base_report_flags());
         let mut pages: Vec<HubPage> = BASE_REPORT_PAGES
@@ -115,16 +109,29 @@ impl HubKind for BaseReport {
             .as_ref()
             .is_some_and(|g| g.base_breeding_bay().is_some());
         if bay_stands && app.structure_hub.is_none() {
-            pages.push(BREED_PAGE.page());
+            let alerts = pages
+                .iter()
+                .position(|p| p.key == HubPageKey::Named("Alerts"))
+                .unwrap_or(pages.len());
+            pages.insert(alerts, BREED_PAGE.page());
         }
+        pages[0].section = Some(BASE_SECTION);
         pages
     }
 }
 
-/// Why `page` is flagged, if it is: the engine's reason for the page's
-/// first screen. A page the engine has no flag for is never flagged.
+/// Why `page` is flagged, if it is: the engine's reason for the first of
+/// its tabs that has one, so a page merged from several keeps each of their
+/// marks. A page the engine has no flag for is never flagged.
 pub fn base_page_flag(flags: &BaseReportFlags, page: usize) -> Option<&str> {
-    match BASE_REPORT_PAGES[page].tabs[0].mode {
+    BASE_REPORT_PAGES[page]
+        .tabs
+        .iter()
+        .find_map(|tab| tab_flag(flags, tab.mode))
+}
+
+fn tab_flag(flags: &BaseReportFlags, mode: Mode) -> Option<&str> {
+    match mode {
         Mode::StaffWellbeing => flags.staff.as_deref(),
         Mode::BaseOutput => flags.production.as_deref(),
         Mode::BaseStock => flags.stock.as_deref(),

@@ -347,6 +347,11 @@ impl App {
             }
             BuildRow::Structure(i) => {
                 self.build_category = None;
+                // The placing screens are outside the hub; Esc from them
+                // comes back to this tab.
+                if self.hub_at().is_some() {
+                    self.menu_origin = Some(Mode::Build);
+                }
                 let id = &menu.defs[i].id;
                 let painted_from = self
                     .game
@@ -514,7 +519,14 @@ impl App {
             self.mode = Mode::Playing;
             return;
         }
-        let Some(staff) = self.game.as_ref().map(|g| g.base_staff()) else {
+        // With no station there is no pen, so no row to pick: the screen
+        // says so rather than listing staff a key could not pin.
+        let Some(staff) = self
+            .game
+            .as_ref()
+            .filter(|g| g.study_station().is_some())
+            .map(|g| g.base_staff())
+        else {
             return;
         };
         let Some(idx) = self.selected_index(key, staff.len()) else {

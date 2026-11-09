@@ -1320,6 +1320,25 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             None,
         )),
         Mode::PinPrisoner => Some((building::pin_prisoner_rows(game, selected), None)),
+        Mode::Build => Some((
+            building::build_menu_page_rows(game, build_category, selected),
+            None,
+        )),
+        Mode::PinSubject => Some((building::pin_subject_page_rows(game, selected), None)),
+        // The list view is a tab; the tree view draws over the hub, as
+        // it does anywhere, and claims every arrow (`App::screen_claims`).
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch
+            if !graph_view =>
+        {
+            let tree = match app.mode {
+                Mode::Research => ResearchTree::Base,
+                Mode::RoutineResearch => ResearchTree::Routines,
+                Mode::AffixResearch => ResearchTree::Affixes,
+                _ => ResearchTree::Weapons,
+            };
+            let (_, rows) = progression::research_page_rows(game, tree, selected, dev_console);
+            Some((rows, None))
+        }
         _ => None,
     });
     if let (Some(frame), Some((rows, nothing_qualifies))) = (&hub_frame, page_rows) {

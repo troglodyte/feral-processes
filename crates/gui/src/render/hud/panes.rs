@@ -682,8 +682,8 @@ fn is_ready(c: &ContractRow) -> bool {
 /// is `Game::active_contracts`' own rule — so there is no locale for the
 /// body to be empty in.
 ///
-/// The chip says `b` because the Contracts screen hangs off the base group
-/// menu, at `Locality::Anywhere`.
+/// The chip says `b` because the Contracts screen hangs off the base
+/// report's Trade page, which opens anywhere.
 fn contract_rows(d: &PaneData) -> Vec<Row> {
     let mut out = vec![head("CONTRACTS", 'b', "contracts")];
     if d.contracts.is_empty() {

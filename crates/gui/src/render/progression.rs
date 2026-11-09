@@ -505,13 +505,25 @@ pub(super) fn draw_research_menu(
     m: &Metrics,
     dev_unlock: bool,
 ) {
+    let (title, rows) = research_page_rows(game, tree, selected, dev_unlock);
+    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// A research tree's list view as `(title, rows)`, shared by the popup and
+/// the base report's Research tabs so the two cannot list different nodes.
+pub(super) fn research_page_rows(
+    game: &Game,
+    tree: ResearchTree,
+    selected: usize,
+    dev_unlock: bool,
+) -> (&'static str, Vec<Row>) {
     let currency = game.item_name(&game.research_currency()).to_string();
     let nodes = game.research_nodes(tree);
     let active = game.active_research_progress();
     let train = game
         .base_ai_view()
         .filter(|view| view.training_available && tree == ResearchTree::Base);
-    let (title, rows) = match tree {
+    match tree {
         ResearchTree::Base => {
             let mut rows = research_menu_rows(
                 &nodes,
@@ -583,8 +595,7 @@ pub(super) fn draw_research_menu(
                 dev_unlock,
             ),
         ),
-    };
-    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
+    }
 }
 
 /// The Weapons tree's rows, or the line saying the tree is closed.
@@ -601,7 +612,15 @@ fn weapon_research_rows(
     }
     // An open tree always lists its first frames, so an empty list is the
     // closed tree.
-    vec![text_row(game.weapon_tree_hint().unwrap_or_default())]
+    // Wrapped, as the Compile list wraps the same hint: one line of it is
+    // wider than the hub's content rect at 1280x720.
+    wrap_text(
+        &game.weapon_tree_hint().unwrap_or_default(),
+        DESCRIBE_WRAP_COLUMNS,
+    )
+    .into_iter()
+    .map(text_row)
+    .collect()
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent

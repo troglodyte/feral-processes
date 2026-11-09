@@ -222,9 +222,8 @@ mint, override or `requires` one from this directory. The node is
 fit that affix at a Mod Bench, which is what `affix_researched` checks. See
 `assets/affixes/README.md` for the `research` block that feeds it.
 
-The tree is shown from the group menu's "Affix research" row, which is listed
-whenever any affix node exists; the screen itself stays empty until the
-`opens_affix_tree` node is researched.
+The tree is shown on the base report's Research page, Affixes tab; the
+screen itself stays empty until the `opens_affix_tree` node is researched.
 
 ## Rules
 

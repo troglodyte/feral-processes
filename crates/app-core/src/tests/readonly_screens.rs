@@ -158,23 +158,9 @@ fn enter_and_row_shortcuts_do_nothing_on_the_history() {
 }
 
 #[test]
-fn the_recipes_page_is_on_the_base_report_rail_after_compile() {
-    let titles: Vec<&str> = BASE_REPORT_PAGES.iter().map(|p| p.title).collect();
-    let compile = titles.iter().position(|t| *t == "Compile").unwrap();
-    assert_eq!(
-        titles.iter().position(|t| *t == "Recipes"),
-        Some(compile + 1)
-    );
-}
-
-#[test]
-fn the_compile_page_no_longer_lists_recipes() {
-    let mut app = test_app(98);
-    let rows = app.command_rows(Mode::BaseCompile).unwrap_or_default();
-    assert!(
-        rows.iter().all(|r| r.label != "Recipes"),
-        "Recipes is a rail page now"
-    );
+fn the_recipes_tab_sits_before_compile_on_production() {
+    assert_eq!(hub_of(Mode::Recipes), Some((Hub::Base, 2, 3)));
+    assert_eq!(hub_of(Mode::Craft), Some((Hub::Base, 2, 4)));
 }
 
 #[test]

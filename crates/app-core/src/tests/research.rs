@@ -51,9 +51,7 @@ fn the_research_page_opens_research_and_esc_closes_it() {
     open_command(&mut app, "Research");
     assert!(matches!(app.mode, Mode::Research));
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseResearch, "Esc walks back up one level");
-    app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "Esc on the page goes to the rail");
+    assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -128,7 +126,7 @@ fn a_project_needing_a_subject_opens_the_study_picker() {
     assert!(active_project(&app).is_some());
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseResearch);
+    assert!(app.hub_on_rail, "the Study tab's Esc goes to the rail");
 }
 
 /// The list's row keys and the graph's `Enter` are the same door, so both take
@@ -300,7 +298,7 @@ fn esc_closes_the_screen_from_the_graph_view() {
     let mut app = test_app(525);
     open_command(&mut app, "Research");
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseResearch, "Esc walks back up one level");
+    assert!(app.hub_on_rail, "Esc goes to the rail");
     assert!(
         app.research_graph_view,
         "the chosen view survives closing the screen"
@@ -333,7 +331,7 @@ fn the_research_page_opens_routine_research_and_esc_closes_it() {
     open_command(&mut app, "Routine research");
     assert!(matches!(app.mode, Mode::RoutineResearch));
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseResearch, "Esc walks back up one level");
+    assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
 }
 
 /// Once the tree is open, the list holds only routine nodes — never a base

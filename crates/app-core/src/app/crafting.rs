@@ -35,10 +35,11 @@ pub fn craft_visible(at_bench: bool, game: &Game, filter: &str) -> Vec<usize> {
 }
 
 impl App {
-    /// Where the compile flow lands when it ends or is refused: the bench
-    /// page it was opened from, else the map.
+    /// Where the compile flow lands when it ends or is refused: the hub
+    /// page it was opened from (the bench's, or the base report's Compile
+    /// tab), else the map.
     pub(crate) fn compile_exit_mode(&self) -> Mode {
-        if self.structure_hub.is_some() {
+        if self.hub_for(Mode::Craft).is_some() {
             Mode::Craft
         } else {
             Mode::Playing

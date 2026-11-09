@@ -229,6 +229,17 @@ pub(crate) fn draw_build_menu(
     painter: &Painter,
     m: &Metrics,
 ) {
+    let rows = build_menu_page_rows(game, open, selected);
+    draw_popup("Deploy", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The deploy menu's rows, shared by the popup and the base report's
+/// Deploy tab so the two cannot list different structures.
+pub(crate) fn build_menu_page_rows(
+    game: &mut Game,
+    open: Option<StructureCategory>,
+    selected: usize,
+) -> Vec<Row> {
     let status = game.player_status();
     let stock = game.base_stock();
     // `Game::programs_for_build` and not `owned_pets`, because it is the one
@@ -262,7 +273,7 @@ pub(crate) fn draw_build_menu(
             makes: def.machine.is_some().then(|| game.machine_products(def)),
         }
     };
-    let rows = match open {
+    match open {
         Some(_) => {
             let entries: Vec<BuildEntry> = menu
                 .rows
@@ -288,8 +299,7 @@ pub(crate) fn draw_build_menu(
                 .collect();
             build_top_rows(&lines, selected, shortfall)
         }
-    };
-    draw_popup("Deploy", PopupSize::Large, &rows, refusal, painter, m);
+    }
 }
 
 /// The deploy prompt's rows: what is about to be placed, before the compass

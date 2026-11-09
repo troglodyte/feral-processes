@@ -389,12 +389,14 @@ impl App {
             // A typed filter takes Esc first; the next Esc is the hub's.
             GameKey::Esc if self.filter_applied() => true,
             // A question the page is asking is answered by it, not
-            // abandoned.
+            // abandoned; an open Deploy category steps back to the list of
+            // categories first.
             GameKey::Esc => {
                 self.splice_rig
                     .as_ref()
                     .is_some_and(|s| s.confirm.is_some())
                     || self.quit_unsaved_pending
+                    || (self.mode == Mode::Build && self.build_category.is_some())
             }
             // A manifest shown as a hub tab walks its faces with the arrows
             // (`step_manifest_face`); off its first face Left is still its
@@ -406,6 +408,8 @@ impl App {
             // goes to the rail. (Right is the page's on every page, so it
             // needs no claim.)
             GameKey::Left if self.quit_unsaved_pending => true,
+            // The research tree view walks its nodes with every arrow.
+            GameKey::Left if self.research_graph_view && is_research_tree(self.mode) => true,
             GameKey::Left if self.on_level_row() => true,
             // The duty table spends Left on its column cursor, so it only
             // leaves off its first column.
@@ -417,4 +421,13 @@ impl App {
     fn in_downed_drill_down(&self) -> bool {
         self.mode == Mode::DownedPrograms && self.pending_downed_program_index.is_some()
     }
+}
+
+/// The four research trees' screens, which share one handler and its tree
+/// view.
+fn is_research_tree(mode: Mode) -> bool {
+    matches!(
+        mode,
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch
+    )
 }

@@ -2274,13 +2274,10 @@ pub enum Mode {
     /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
     /// the highlighted page's first screen.
     BaseOverview,
-    /// The hub's command pages, one per kind of base errand: each lists the
-    /// errands that are currently possible and dispatches to the screen
-    /// behind the highlighted one — see `App::command_rows`.
-    BaseBuild,
-    BaseResearch,
+    /// The base's Trade command page: the trade errands that are currently
+    /// possible, dispatching to the screen behind the highlighted one — see
+    /// `App::command_rows`.
     BaseTrade,
-    BaseCompile,
     /// The party's command pages on the inventory rail: the program errands and the
     /// routine errands, drawn from `App::command_rows` like the base's.
     PartyPrograms,
@@ -2535,10 +2532,10 @@ impl Mode {
             | Mode::Build
             | Mode::BuildDirection
             | Mode::BuildProgram
-            // Opened from the Research page, `BuildProgram`'s own reason —
-            // never reachable mid-battle at all.
+            // A Research tab, `BuildProgram`'s own reason — never reachable
+            // mid-battle at all.
             | Mode::PinSubject
-            // Opened from the Research page, `PinSubject`'s own reason.
+            // Opened from the structure hub, `PinSubject`'s own reason.
             | Mode::PinPrisoner
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
@@ -2685,10 +2682,7 @@ impl Mode {
             // Opened from the map with `b`, `BaseOutput`'s reason — never
             // layers over a fight.
             | Mode::BaseOverview
-            | Mode::BaseBuild
-            | Mode::BaseResearch
             | Mode::BaseTrade
-            | Mode::BaseCompile
             // Opened from the map with `p`, the base command pages' reason.
             | Mode::PartyPrograms
             | Mode::PartyRoutines
@@ -2933,7 +2927,7 @@ pub struct App {
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
     /// The category `Mode::Build` has open, or `None` on its top level.
-    /// Cleared on the way in from the Build page, so the menu never reopens
+    /// Cleared whenever the Deploy tab is entered, so the menu never reopens
     /// inside a category the player left by some other door.
     pub build_category: Option<feral_processes_engine::structures::StructureCategory>,
     /// Which item `Mode::TrapDirection` is about to place — `pending_structure`'s

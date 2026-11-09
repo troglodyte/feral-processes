@@ -100,7 +100,7 @@ fn i_reopens_on_a_party_page_and_the_base_keeps_its_own_slot() {
     assert_eq!(app.mode, Mode::Playing);
 
     press(&mut app, &[GameKey::Char('b'), GameKey::Char(']')]);
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
     press(&mut app, &[GameKey::Esc]);
 
     app.handle_key(GameKey::Char('i'));
@@ -108,7 +108,7 @@ fn i_reopens_on_a_party_page_and_the_base_keeps_its_own_slot() {
     assert!(app.hub_on_rail);
     press(&mut app, &[GameKey::Esc]);
     app.handle_key(GameKey::Char('b'));
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
 }
 
 #[test]

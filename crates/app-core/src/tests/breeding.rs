@@ -149,7 +149,12 @@ fn the_base_report_offers_breeding_only_once_a_bay_stands() {
 /// and Right moves the cursor into it.
 fn open_breeding_in_the_base_report(app: &mut App) {
     app.handle_key(GameKey::Char('b'));
-    app.handle_key(GameKey::Char('['));
+    for _ in 0..BASE_REPORT_PAGES.len() + 1 {
+        if app.mode == Mode::Breed {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
     app.handle_key(GameKey::Right);
 }
 

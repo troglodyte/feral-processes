@@ -277,7 +277,7 @@ fn the_weapons_research_tab_opens_from_the_research_page() {
     open_command(&mut app, "Weapon research");
     assert_eq!(app.mode, Mode::WeaponResearch);
     app.handle_key(GameKey::Esc);
-    assert_ne!(app.mode, Mode::WeaponResearch);
+    assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
 }
 
 #[test]

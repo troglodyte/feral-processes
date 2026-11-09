@@ -585,11 +585,11 @@ mod tests {
     fn the_keybar_names_the_hub_nav_keys() {
         let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
         let staff = pages.iter().position(|p| p.title == "Staff").unwrap();
-        let stock = pages.iter().position(|p| p.title == "Stock").unwrap();
+        let alerts = pages.iter().position(|p| p.title == "Alerts").unwrap();
         for on_rail in [false, true] {
             let multi = bar(&pages, staff, on_rail).join("|");
             assert!(multi.contains("Tab tab"), "{multi}");
-            let single = bar(&pages, stock, on_rail).join("|");
+            let single = bar(&pages, alerts, on_rail).join("|");
             assert!(!single.contains("Tab"), "{single}");
             assert!(!multi.contains("{ }"), "no sections here: {multi}");
             assert!(!multi.contains("screen"), "{multi}");
@@ -779,7 +779,8 @@ mod tests {
     #[test]
     fn the_strip_draws_names_with_the_current_one_bracketed() {
         let m = ui_metrics(720.0);
-        let pages = [BASE_REPORT_PAGES[6].page()];
+        let staff = BASE_REPORT_PAGES.iter().find(|p| p.title == "Staff");
+        let pages = [staff.unwrap().page()];
         let (_, shapes) = with_painter(|p| {
             paint_frame(
                 &FrameView {

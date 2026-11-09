@@ -22,11 +22,7 @@ fn the_upgrade_prompt_opens_from_the_build_page_and_esc_backs_into_it() {
     assert_eq!(app.mode, Mode::UpgradeDirection);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild, "Esc walks back up one level");
-    app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "Esc on the page goes to the rail");
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing, "and out to the map from there");
+    assert_eq!(app.mode, Mode::Playing, "opened with no menu behind it");
 }
 
 /// A structure the current zone caps at Mk1 is still offered, not filtered
@@ -76,25 +72,6 @@ fn deploy_home(app: &mut App) {
     // first keypress to a screen it never asked for.
     dismiss_notifications(app);
     stand_in_base(app);
-}
-
-/// Home declares no upgrade path, so a base consisting only of one leaves
-/// nothing to upgrade — and the Build page says so by not offering the
-/// row at all, rather than opening a picker with no entries in it.
-#[test]
-fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
-    let mut app = test_app(231);
-    deploy_home(&mut app);
-
-    let rows = command_labels_all(&mut app);
-    assert!(
-        rows.contains(&"Demolish a structure"),
-        "Home is deployed, so the rows that take any structure are live: {rows:?}"
-    );
-    assert!(
-        !rows.contains(&"Upgrade a structure"),
-        "Home has no upgrade path, so the row leads nowhere: {rows:?}"
-    );
 }
 
 /// Guards Finding 3: `handle_build_direction_key` must recognise Home by
@@ -247,7 +224,7 @@ fn working_a_structure_yourself_opens_the_same_structure_list() {
     assert_eq!(app.mode, Mode::WorkStructure);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild, "Esc backs into the Build page");
+    assert_eq!(app.mode, Mode::Playing, "opened with no menu behind it");
 }
 
 /// `d` + a direction demolishes what is on the neighbouring tile, without
@@ -1048,7 +1025,7 @@ fn an_order_at_the_top_refuses_to_move_up() {
 /// picker this task adds. Row 1, `extractor`, is the first structure that
 /// actually costs a program.
 fn deploy_second_structure(app: &mut App) {
-    app.mode = Mode::Build;
+    open_hub_screen(app, Mode::Build);
     // Row 2 is the first category after the Home; its row 1 is the first
     // structure past the Home in `StructureDb::all` order.
     pick_row(app, 1);
@@ -1706,11 +1683,8 @@ fn escaping_the_study_screen_pins_nobody() {
     open_command(&mut app, "Study a program");
     app.handle_key(GameKey::Esc);
 
-    assert_eq!(
-        app.mode,
-        Mode::BaseResearch,
-        "Esc from a group-menu screen returns to the menu it opened from"
-    );
+    assert_eq!(app.mode, Mode::PinSubject);
+    assert!(app.hub_on_rail, "Esc in the Study tab goes to the rail");
     assert_eq!(
         app.game.as_mut().unwrap().program_role(program),
         Some(ProgramRole::Staff),
@@ -1836,7 +1810,7 @@ fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
     assert_eq!(app.build_category, None);
     assert_eq!(app.menu_selected, row, "back on the category it opened");
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert!(app.hub_on_rail, "Esc on the category list goes to the rail");
 
     // Back in, and through to a deploy.
     app.handle_key(GameKey::Enter);

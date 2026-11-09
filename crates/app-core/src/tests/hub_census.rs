@@ -47,32 +47,48 @@ fn expect(rows: &[(&str, &[Mode])]) -> Vec<(String, Vec<Mode>)> {
 
 const BASE_RAIL: &[(&str, &[Mode])] = &[
     ("Overview", &[Mode::BaseOverview]),
-    ("Build", &[Mode::BaseBuild]),
-    ("Research", &[Mode::BaseResearch]),
-    ("Trade", &[Mode::BaseTrade]),
-    ("Compile", &[Mode::BaseCompile]),
-    ("Recipes", &[Mode::Recipes]),
+    (
+        "Build",
+        &[
+            Mode::Build,
+            Mode::BuildOrders,
+            Mode::DigOrders,
+            Mode::FloorOrders,
+        ],
+    ),
+    (
+        "Production",
+        &[
+            Mode::BaseOutput,
+            Mode::BaseMachines,
+            Mode::BasePower,
+            Mode::Recipes,
+            Mode::Craft,
+        ],
+    ),
+    ("Stock", &[Mode::BaseStock, Mode::WorkOrders]),
     (
         "Staff",
         &[
             Mode::StaffWellbeing,
             Mode::StaffCoverage,
             Mode::StaffDiscontent,
+            Mode::BaseStaff,
+            Mode::Structures,
         ],
     ),
     (
-        "Production",
-        &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
-    ),
-    ("Stock", &[Mode::BaseStock]),
-    ("Work orders", &[Mode::WorkOrders]),
-    ("Duties", &[Mode::BaseStaff]),
-    ("Staffing", &[Mode::Structures]),
-    (
-        "Build orders",
-        &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
+        "Research",
+        &[
+            Mode::Research,
+            Mode::RoutineResearch,
+            Mode::AffixResearch,
+            Mode::WeaponResearch,
+            Mode::PinSubject,
+        ],
     ),
     ("Alerts", &[Mode::Alerts]),
+    ("Trade", &[Mode::BaseTrade]),
 ];
 
 const INVENTORY_RAIL: &[(&str, &[Mode])] = &[
@@ -102,10 +118,12 @@ fn every_fixed_rail_reads_as_it_does_today() {
     let app = app_inside_a_small_base_with_programs(41001, false, 2);
     assert_eq!(plain(rail(&app, Hub::Base)), expect(BASE_RAIL));
 
-    // Base with a bay: Breed last; with the structure hub open: none.
+    // Base with a bay: Breed before Alerts; with the structure hub open:
+    // none.
     let mut app = app_with_a_breeding_bay(41002, 1, false);
     let mut with_breed = expect(BASE_RAIL);
-    with_breed.push(("Breed".to_string(), vec![Mode::Breed]));
+    let alerts = with_breed.iter().position(|(t, _)| t == "Alerts").unwrap();
+    with_breed.insert(alerts, ("Breed".to_string(), vec![Mode::Breed]));
     assert_eq!(plain(rail(&app, Hub::Base)), with_breed);
     app.handle_key(GameKey::Char('c'));
     assert!(app.structure_hub.is_some());
@@ -156,12 +174,13 @@ fn base_report_marks_are_its_flags() {
     for app in &apps {
         let flags = app.game.as_ref().unwrap().base_report_flags();
         let pages = rail(app, Hub::Base);
-        for (i, (_, _, marked)) in pages.iter().enumerate() {
-            if i < BASE_REPORT_PAGES.len() {
-                assert_eq!(*marked, base_page_flag(&flags, i).is_some(), "page {i}");
-                any_marked |= *marked;
-            } else {
-                assert!(!marked, "Breed is never marked");
+        for (title, _, marked) in &pages {
+            match BASE_REPORT_PAGES.iter().position(|p| p.title == *title) {
+                Some(i) => {
+                    assert_eq!(*marked, base_page_flag(&flags, i).is_some(), "{title}");
+                    any_marked |= *marked;
+                }
+                None => assert!(!marked, "Breed is never marked"),
             }
         }
     }
@@ -186,31 +205,31 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         &mut app,
         &[
             (Char('b'), at(Mode::BaseOverview, Hub::Base, 0, 0, true)),
-            (Down, at(Mode::BaseBuild, Hub::Base, 1, 0, true)),
-            (Down, at(Mode::BaseResearch, Hub::Base, 2, 0, true)),
-            (Right, at(Mode::BaseResearch, Hub::Base, 2, 0, false)),
-            (Esc, at(Mode::BaseResearch, Hub::Base, 2, 0, true)),
-            (Char(']'), at(Mode::BaseTrade, Hub::Base, 3, 0, true)),
-            (Char('['), at(Mode::BaseResearch, Hub::Base, 2, 0, true)),
+            (Down, at(Mode::Build, Hub::Base, 1, 0, true)),
+            (Down, at(Mode::BaseOutput, Hub::Base, 2, 0, true)),
+            (Right, at(Mode::BaseOutput, Hub::Base, 2, 0, false)),
+            (Esc, at(Mode::BaseOutput, Hub::Base, 2, 0, true)),
+            (Char(']'), at(Mode::BaseStock, Hub::Base, 3, 0, true)),
+            (Char('['), at(Mode::BaseOutput, Hub::Base, 2, 0, true)),
             (Esc, (Mode::Playing, None, true)),
         ],
     );
 
-    // The Staff page's three screens.
+    // The Staff page's first screens.
     let mut app = test_app(41021);
     let mut keys = vec![Char('b')];
-    keys.extend([Char(']'); 6]);
+    keys.extend([Char(']'); 4]);
     for k in keys {
         app.handle_key(k);
     }
     walk(
         &mut app,
         &[
-            (Right, at(Mode::StaffWellbeing, Hub::Base, 6, 0, false)),
-            (Tab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Tab, at(Mode::StaffDiscontent, Hub::Base, 6, 2, false)),
-            (ShiftTab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Left, at(Mode::StaffCoverage, Hub::Base, 6, 1, true)),
+            (Right, at(Mode::StaffWellbeing, Hub::Base, 4, 0, false)),
+            (Tab, at(Mode::StaffCoverage, Hub::Base, 4, 1, false)),
+            (Tab, at(Mode::StaffDiscontent, Hub::Base, 4, 2, false)),
+            (ShiftTab, at(Mode::StaffCoverage, Hub::Base, 4, 1, false)),
+            (Left, at(Mode::StaffCoverage, Hub::Base, 4, 1, true)),
         ],
     );
 
@@ -280,7 +299,7 @@ fn a_hub_reopens_where_it_was_left() {
     use GameKey::*;
     let mut app = test_app(41030);
     app.handle_key(Char('b'));
-    for _ in 0..6 {
+    for _ in 0..4 {
         app.handle_key(Char(']'));
     }
     app.handle_key(Right);
@@ -326,7 +345,7 @@ fn a_screen_reached_off_the_map_is_in_its_hub() {
 
     let mut app = test_app(41041);
     app.handle_key(GameKey::Char('N'));
-    assert_eq!(app.hub_at(), Some((Hub::Base, 13, 0)));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 6, 0)));
 
     // Overview Enter on its "Stock" row.
     let mut app = test_app(41042);
@@ -353,7 +372,7 @@ fn a_popup_over_a_hub_screen_keeps_its_parent_frame() {
     assert_eq!(app.mode, Mode::WorkOrderPick);
     assert_eq!(
         app.hub_for(base_popup_parent(app.mode).unwrap()),
-        Some((Hub::Base, 9, 0))
+        Some((Hub::Base, 3, 1))
     );
     assert_eq!(app.hub_at(), None);
 }
@@ -366,7 +385,7 @@ fn hub_for_answers_only_from_the_held_page() {
     assert_eq!(app.hub_for(Mode::BaseStock), None);
     let stock = HubPageKey::Named("Stock");
     app.turn_hub_to(Hub::Base, &stock);
-    assert_eq!(app.hub_at(), Some((Hub::Base, 8, 0)));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 3, 0)));
     assert_eq!(app.hub_page(), Some(&stock));
 }
 
@@ -419,7 +438,7 @@ fn enter_hub_at_holds_the_named_page() {
     let key = HubPageKey::Named("Staff");
     app.enter_hub_at(Hub::Base, key.clone(), Mode::StaffCoverage);
     assert_eq!(app.hub_page(), Some(&key));
-    assert_eq!(app.hub_at(), Some((Hub::Base, 6, 1)));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 4, 1)));
     app.settle_hub();
     assert_eq!(app.hub_page(), Some(&key), "settle keeps the held page");
 }

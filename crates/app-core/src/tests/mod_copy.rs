@@ -87,7 +87,7 @@ fn the_group_menu_row_opens_the_affix_research_view() {
     open_command(&mut app, "Affix research");
     assert_eq!(app.mode, Mode::AffixResearch);
     app.handle_key(GameKey::Esc);
-    assert_ne!(app.mode, Mode::AffixResearch);
+    assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
 }
 
 /// An over-cap copy (a drop can carry more affixes than its fusions buy

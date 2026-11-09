@@ -61,15 +61,11 @@ pub(crate) fn pick_row(app: &mut App, row: usize) {
     app.handle_key(GameKey::Enter);
 }
 
-/// The four command pages, in rail order.
-pub(crate) const COMMAND_PAGES: [Mode; 4] = [
-    Mode::BaseBuild,
-    Mode::BaseResearch,
-    Mode::BaseTrade,
-    Mode::BaseCompile,
-];
+/// The base's command pages: Trade alone since the hub merge made the other
+/// launchers' rows into tabs.
+pub(crate) const COMMAND_PAGES: [Mode; 1] = [Mode::BaseTrade];
 
-/// Every command row on offer right now, across all four pages.
+/// Every base command row on offer right now.
 pub(crate) fn command_labels_all(app: &mut App) -> Vec<&'static str> {
     COMMAND_PAGES
         .iter()
@@ -78,10 +74,40 @@ pub(crate) fn command_labels_all(app: &mut App) -> Vec<&'static str> {
         .collect()
 }
 
-/// Opens the command page that offers `label` through the hub and selects its
-/// row, the way a player does. Rows are filtered by what is currently
-/// possible, so the row is found by label rather than by position.
+/// Opens the screen a base launcher row `label` opened, the way a player
+/// reaches it now: a retired row through its tab (`open_hub_screen`), a
+/// Trade row through its page, highlighted and picked. Trade rows are
+/// filtered by what is currently possible, so they are found by label
+/// rather than by position.
 pub(crate) fn open_command(app: &mut App, label: &str) {
+    let tab = match label {
+        "Deploy a structure" => Some(Mode::Build),
+        "Research" => Some(Mode::Research),
+        "Routine research" => Some(Mode::RoutineResearch),
+        "Affix research" => Some(Mode::AffixResearch),
+        "Weapon research" => Some(Mode::WeaponResearch),
+        "Study a program" => Some(Mode::PinSubject),
+        "Compile an item" => Some(Mode::Craft),
+        _ => None,
+    };
+    if let Some(tab) = tab {
+        return open_hub_screen(app, tab);
+    }
+    // The structure verbs lost their launcher with the Build page and get
+    // their door in `i` in phase 3 of the hub merge; until then their
+    // screens' own tests open them directly.
+    let unhoused = match label {
+        "Work a structure yourself" => Some(Mode::WorkStructure),
+        "Upgrade a structure" => Some(Mode::UpgradeDirection),
+        "Demolish a structure" => Some(Mode::Remove),
+        "Hold a program" => Some(Mode::PinPrisoner),
+        _ => None,
+    };
+    if let Some(mode) = unhoused {
+        app.mode = mode;
+        app.menu_selected = 0;
+        return;
+    }
     let mut offered = Vec::new();
     for page in COMMAND_PAGES {
         let rows = app.command_rows(page).unwrap_or_default();
@@ -125,9 +151,16 @@ pub(crate) fn open_structure_page(app: &mut App) {
 
 /// Opens `target`'s hub with its own key, walks `]` to `target`'s page and
 /// Right off the rail and along its screens to `target`, the way a player
-/// reaches a screen that no longer has a menu row of its own.
+/// reaches a screen that no longer has a menu row of its own. The page is
+/// found by key, since a page the rail slots in (Breed) moves the ones after
+/// it.
 pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
-    let (hub, page, screen) = hub_of(target).expect("target is a hub screen");
+    let (hub, page, _) = hub_of(target).expect("target is a hub screen");
+    let table = match hub {
+        Hub::Base => BASE_REPORT_PAGES,
+        _ => INVENTORY_PAGES,
+    };
+    let key = HubPageKey::Named(table[page].title);
     app.handle_key(GameKey::Char(match hub {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
@@ -135,14 +168,20 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
             unreachable!("hub_of names the shared hubs only")
         }
     }));
-    for _ in 0..BASE_REPORT_PAGES.len().max(INVENTORY_PAGES.len()) {
-        if app.hub_at().map(|(_, p, _)| p) == Some(page) {
+    for _ in 0..=BASE_REPORT_PAGES.len().max(INVENTORY_PAGES.len()) {
+        if app.hub_page() == Some(&key) {
             break;
         }
         app.handle_key(GameKey::Char(']'));
     }
-    app.handle_key(GameKey::Right);
-    for _ in 0..screen {
+    if app.hub_on_rail {
+        app.handle_key(GameKey::Right);
+    }
+    // From the tab the page opened (or was left) on.
+    for _ in 0..table[page].tabs.len() {
+        if app.mode == target {
+            break;
+        }
         app.handle_key(GameKey::Tab);
     }
     assert_eq!(app.mode, target, "the hub reached {target:?}");

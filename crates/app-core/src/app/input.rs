@@ -426,12 +426,9 @@ impl App {
             | Mode::RoutesInFlight => self.handle_sites_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
-            Mode::BaseBuild
-            | Mode::BaseResearch
-            | Mode::BaseTrade
-            | Mode::BaseCompile
-            | Mode::PartyPrograms
-            | Mode::PartyRoutines => self.handle_command_page_key(key),
+            Mode::BaseTrade | Mode::PartyPrograms | Mode::PartyRoutines => {
+                self.handle_command_page_key(key)
+            }
             Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
                 self.handle_staff_key(key)
             }
@@ -530,6 +527,11 @@ impl App {
         // `keeps_highlight` pair to preserve it across.
         if self.mode != mode_before && self.mode == Mode::BaseStaff {
             self.work_column = 0;
+        }
+        // The Deploy tab opens on its list of categories, whichever way it
+        // was reached; only its own keys open one.
+        if self.mode != mode_before && self.mode == Mode::Build {
+            self.build_category = None;
         }
         // A group menu's origin only outlives the screen it opened. Landing
         // on the map means the errand is over — completing an action drops

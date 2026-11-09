@@ -259,33 +259,143 @@ fn the_structure_verbs_open_from_the_structures_page_of_b() {
     }
 }
 
+/// Walks `[c]`'s entries to the one named `name` and into its Info tab,
+/// cursor in the page, so the next key is the tab's own.
+fn on_the_info_tab_of(app: &mut App, name: &str) -> Entity {
+    app.handle_key(GameKey::Char('c'));
+    for _ in 0..8 {
+        if held_beside(app).name == name {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
+    assert_eq!(held_beside(app).name, name, "an entry for {name}");
+    let entity = held_beside(app).entity;
+    for _ in 0..16 {
+        if app.mode == Mode::StructureManifest {
+            break;
+        }
+        app.handle_key(GameKey::Tab);
+    }
+    assert_eq!(app.mode, Mode::StructureManifest, "the Info tab");
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail);
+    entity
+}
+
+fn is_beside(app: &App, entity: Entity) -> bool {
+    let game = app.game.as_ref().unwrap();
+    game.adjacent_structures()
+        .iter()
+        .any(|s| s.entity == entity)
+}
+
 /// Work, Upgrade and Demolish are keys on the structure's Info tab in `i`
 /// (decision 5: `W`, `U`, `X`, free on that tab and in the key-hint
 /// census), each aimed at the entry's own structure through the door the old
-/// launcher row used, and Hold is a Holding Cell's Hold tab.
+/// launcher row used.
 #[test]
-fn the_structure_launcher_verbs_are_keys_on_the_structure_in_i() {
-    for key in ['W', 'U', 'X'] {
-        let mut app = app_between_a_depot_and_a_machine(46014);
-        app.handle_key(GameKey::Char('c'));
-        let machine = app.held_structure().expect("a BESIDE YOU entry");
-        while app.mode != Mode::StructureManifest {
-            app.handle_key(GameKey::Tab);
-        }
-        app.handle_key(GameKey::Right);
-        let keys = Hub::Inventory.kind().extra_keys(&app);
-        assert!(keys.iter().any(|(k, _)| *k == key.to_string()), "{keys:?}");
-        app.handle_key(GameKey::Char(key));
-        assert_ne!(
-            app.mode,
-            Mode::StructureManifest,
-            "{key} on Info did nothing"
-        );
-        let beside = app.game.as_ref().unwrap().adjacent_structures();
-        let still_there = beside.iter().any(|s| s.entity == machine);
-        assert_eq!(still_there, key != 'X', "{key}: demolished only by X");
+fn the_structure_launcher_verbs_act_on_the_entry_they_are_pressed_on() {
+    // The fixture's Extractor east of the party, Home west.
+    let mut app = app_inside_a_small_base_with_programs(46014, false, 2);
+    on_the_info_tab_of(&mut app, "Extractor");
+    let keys = Hub::Inventory.kind().extra_keys(&app);
+    for key in ["W", "U", "X"] {
+        assert!(keys.iter().any(|(k, _)| *k == key), "{key} in {keys:?}");
+    }
+    app.handle_key(GameKey::Char('W'));
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.status_line, None, "the work order was taken");
+    let log = app.game.as_ref().unwrap().message_log(32);
+    assert!(
+        log.iter().any(|l| l.text.contains("You set to work")),
+        "W started work at the Extractor"
+    );
+
+    let mut app = app_inside_a_small_base_with_programs(46017, false, 2);
+    let node = on_the_info_tab_of(&mut app, "Extractor");
+    app.handle_key(GameKey::Char('U'));
+    assert_eq!(app.mode, Mode::BuildProgram, "the program picker is up");
+    match app.pending_build {
+        Some(PendingBuild::Upgrade { structure, .. }) => assert_eq!(structure, node),
+        _ => panic!("U leaves an upgrade of the Extractor pending"),
     }
 
+    let mut app = app_inside_a_small_base_with_programs(46018, false, 2);
+    let node = on_the_info_tab_of(&mut app, "Extractor");
+    let before = app.game.as_ref().unwrap().adjacent_structures().len();
+    app.handle_key(GameKey::Char('X'));
+    assert!(!is_beside(&app, node), "X demolished the Extractor");
+    let after = app.game.as_ref().unwrap().adjacent_structures().len();
+    assert_eq!(after, before - 1, "and only it");
+}
+
+/// Each door answers a refusal in its own words, aimed at the entry's own
+/// structure: the Breeding Bay is no node, has no upgrade path, and will not
+/// come down with a program incubating in it.
+#[test]
+fn the_structure_launcher_doors_refuse_in_their_own_sentences() {
+    let bay_info = |seed| {
+        let mut app = app_with_a_breeding_bay(seed, 1, false);
+        let bay = on_the_info_tab_of(&mut app, "Breeding Bay");
+        (app, bay)
+    };
+    let (mut app, _) = bay_info(46019);
+    app.handle_key(GameKey::Char('W'));
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("That structure can't be worked.")
+    );
+
+    let (mut app, _) = bay_info(46021);
+    app.handle_key(GameKey::Char('U'));
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Breeding Bay can't be upgraded.")
+    );
+
+    let (mut app, _) = bay_info(46022);
+    while app.mode != Mode::Breed {
+        app.handle_key(GameKey::Tab);
+    }
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::StructureManifest, "back on Info");
+    // The child is only in the bay once its parents' visit is over.
+    let path = scratch_path("launcher_x_refusal", 46022);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+    for slot in data
+        .structures
+        .iter_mut()
+        .filter(|s| s.kind == "breeding_bay")
+        .flat_map(|s| s.incubating.iter_mut())
+        .flatten()
+    {
+        slot.visit = None;
+        slot.due = u64::MAX / 2;
+    }
+    feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &test_assets_dir()).ok();
+    let _ = std::fs::remove_file(&path);
+    app.mode = Mode::Playing;
+    let bay = on_the_info_tab_of(&mut app, "Breeding Bay");
+    app.handle_key(GameKey::Char('X'));
+    assert!(
+        is_beside(&app, bay),
+        "the bay stands: {:?}",
+        app.status_line
+    );
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("A program is incubating — wait for it to hatch.")
+    );
+}
+
+/// Hold is a Holding Cell's Hold tab.
+#[test]
+fn hold_is_a_holding_cells_tab() {
     let mut app = app_beside_a_holding_cell(46015, Vec::new(), 0);
     app.handle_key(GameKey::Char('c'));
     for _ in 0..64 {

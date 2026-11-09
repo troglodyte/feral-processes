@@ -183,6 +183,13 @@ impl App {
                 None => self.mode = Mode::Playing,
             },
         }
+        // Every verb ends outside the hub: on the map, or on a picker (the
+        // upgrade's program, a Home's demolish confirmation) that is not one
+        // of this structure's tabs. Holding the entry on would have
+        // `refresh_beside` read the picker's mode as a tab the structure no
+        // longer offers and pull the player back to its first page.
+        self.hub_place = None;
+        self.hub_rail_seen = None;
     }
 
     /// The cell description is read-only and reached only from the corridor

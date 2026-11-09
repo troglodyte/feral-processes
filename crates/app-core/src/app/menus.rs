@@ -306,13 +306,8 @@ impl App {
 
     /// The structure roster. Scrolls like the history, and Enter staffs the
     /// highlighted structure — see `Mode::Structures` for why this one screen
-    /// acts where the other two read-only views don't.
-    ///
-    /// The refusals sit here rather than in the picker because the roster
-    /// cannot filter its rows the way `App::upgradeable_structures` does:
-    /// showing the whole base, workable or not, is what the screen is for. So
-    /// a row that takes no worker says so instead of opening a picker that
-    /// could only be refused on the far side.
+    /// acts where the other two read-only views don't. Every row takes a
+    /// worker (`roster_rows`), so the only refusal is the locale.
     pub(crate) fn handle_structures_key(&mut self, key: GameKey) {
         let Some(roster) = self.game.as_mut().map(Roster::of) else {
             return;
@@ -329,13 +324,8 @@ impl App {
             return;
         }
         let Some(target) = roster.target_of(roster.rows[idx]) else {
-            self.refuse("Nothing can be posted to that.");
             return;
         };
-        if !target.workable {
-            self.refuse("Nothing can be posted to that.");
-            return;
-        }
         self.pending_post_structure = Some(target.entity);
         self.mode = Mode::StructureAssign;
     }

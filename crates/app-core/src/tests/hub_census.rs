@@ -63,7 +63,8 @@ const BASE_RAIL: &[(&str, &[Mode])] = &[
     ),
     ("Stock", &[Mode::BaseStock]),
     ("Work orders", &[Mode::WorkOrders]),
-    ("Staffing", &[Mode::BaseStaff, Mode::Structures]),
+    ("Duties", &[Mode::BaseStaff]),
+    ("Staffing", &[Mode::Structures]),
     (
         "Build orders",
         &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
@@ -323,7 +324,7 @@ fn a_screen_reached_off_the_map_is_in_its_hub() {
 
     let mut app = test_app(41041);
     app.handle_key(GameKey::Char('N'));
-    assert_eq!(app.hub_at(), Some((Hub::Base, 12, 0)));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 13, 0)));
 
     // Overview Enter on its "Stock" row.
     let mut app = test_app(41042);

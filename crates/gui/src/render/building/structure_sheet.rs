@@ -1,7 +1,7 @@
 use super::*;
 
-/// The structure roster: everything standing in the zone and every program
-/// posted to it.
+/// The structure roster: everything standing in the zone that a program can
+/// work, and every program posted to it.
 ///
 /// Read-only, and the one screen that shows the base as a whole rather than
 /// what happens to be within `MENU_SCAN_RADIUS` — see
@@ -17,22 +17,23 @@ pub(crate) fn structures_rows(game: &mut Game, selected: usize) -> Vec<Row> {
         lines,
         rows: roster,
     } = Roster::of(game);
-    let assigned: usize = report.iter().map(|s| s.assignees.len()).sum();
-    let idle = StructureReport::idle_count(&report);
+    let workable: Vec<StructureReport> = report.iter().filter(|s| s.workable).cloned().collect();
+    let assigned: usize = workable.iter().map(|s| s.assignees.len()).sum();
+    let idle = StructureReport::idle_count(&workable);
     let (draw, supply) = game.base_power();
     let battery = game.base_battery();
     let mut rows = vec![
         text_row(format!(
             "{} structure{}, {assigned} program{} assigned, {idle} idle",
-            report.len(),
-            if report.len() == 1 { "" } else { "s" },
+            workable.len(),
+            if workable.len() == 1 { "" } else { "s" },
             if assigned == 1 { "" } else { "s" },
         )),
         grid_header_row(draw, supply, battery),
         text_row(""),
     ];
-    if report.is_empty() {
-        rows.push(text_row("You have deployed nothing yet."));
+    if roster.is_empty() {
+        rows.push(text_row("Nothing standing takes a worker yet."));
     }
     for (i, row) in roster.iter().enumerate() {
         // A structure's sub-lines are `Row::Item` (never selected) rather than

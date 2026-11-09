@@ -2232,10 +2232,12 @@ pub enum Mode {
     /// `FrameMap`. The pan centre is `App::world_map_center`, because
     /// `Mode` holds unit variants only.
     WorldMap,
-    /// Every structure in the zone and what is assigned to it — see
-    /// `Game::structure_report`. Enter on a workable row staffs it
-    /// (`Mode::StructureAssign`); demolishing and upgrading stay on their own
-    /// screens, since neither is something you go looking for here.
+    /// Every structure in the zone a program can work, and what is assigned
+    /// to it — see `Game::structure_report` and `roster_rows`. Enter staffs
+    /// the row (`Mode::StructureAssign`); demolishing and upgrading stay on
+    /// their own screens, since neither is something you go looking for here.
+    /// The base report's Staffing page, apart from the Duties table since
+    /// 2026-11-09.
     ///
     /// This screen was read-only until 2026-08-14, on the argument that it
     /// shouldn't become a second way to assign. What that missed is that the

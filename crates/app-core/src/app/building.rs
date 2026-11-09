@@ -14,10 +14,14 @@ use feral_processes_engine::{LineKey, LineReport, StructureReport};
 /// **This was a program picker until 2026-08-14.** Posting a program to a
 /// machine by hand is gone: `schedule_base_labour` decides who stands where,
 /// and what a player says about a particular machine is now "keep this one
-/// running" or "keep this one guarded". The spec's phrasing is the argument
-/// — the question "should this machine always be working" belongs to the
-/// machine, so it is a toggle on the structure screen rather than a menu
-/// row of its own.
+/// running". The spec's phrasing is the argument — the question "should
+/// this machine always be working" belongs to the machine, so it is a toggle
+/// on the structure screen rather than a menu row of its own.
+///
+/// **A standing guard is not offered here** (2026-11-09): staffing is for the
+/// factory, and a body posted to a wall or a door to blunt a sweep read as
+/// nonsense. `StandingJob::guard` stays in the engine for a defence feature
+/// to come.
 pub struct Staffing {
     pub target: String,
     pub rows: Vec<StaffRow>,
@@ -47,8 +51,6 @@ pub enum StaffAction {
     /// Toggle `StandingJob::work` — keep a body on this machine whenever no
     /// order needs it elsewhere.
     StandingWork,
-    /// Toggle `StandingJob::guard`.
-    StandingGuard,
     /// Work it yourself, right now. Not a standing anything.
     WorkYourself,
 }
@@ -106,12 +108,14 @@ impl Roster {
     }
 }
 
-/// One row per structure, except that a line of two or more is one row at
-/// its first member's position and its other members get none.
+/// One row per structure a program can work, except that a line of two or
+/// more is one row at its first workable member's position and its other
+/// members get none. A Home, a wall or a door has no row: staffing is for the
+/// factory.
 pub fn roster_rows(reports: &[StructureReport], lines: &[LineReport]) -> Vec<RosterRow> {
     let mut seen: Vec<LineKey> = Vec::new();
     let mut rows = Vec::with_capacity(reports.len());
-    for (i, s) in reports.iter().enumerate() {
+    for (i, s) in reports.iter().enumerate().filter(|(_, s)| s.workable) {
         match s.line.filter(|key| lines.iter().any(|l| l.key == *key)) {
             None => rows.push(RosterRow::Structure(i)),
             Some(key) if !seen.contains(&key) => {
@@ -177,9 +181,9 @@ impl App {
         Some(BuildMenu::of(self.game.as_ref()?, self.build_category))
     }
 
-    /// What can be said about `pending_post_structure`: the two standing
-    /// instructions it can carry, and — if you are standing beside it — the
-    /// offer to work it yourself.
+    /// What can be said about `pending_post_structure`: the standing work
+    /// instruction, and — if you are standing beside it — the offer to work
+    /// it yourself.
     ///
     /// The "yourself" row is filtered on `StructureReport::player_adjacent`
     /// rather than offered everywhere and refused, matching
@@ -187,10 +191,9 @@ impl App {
     /// four orthogonal neighbours, and the roster is zone-wide, so on almost
     /// every row that offer would be a dead end.
     ///
-    /// A standing *work* job is offered only where a program could be
-    /// posted, and a standing *guard* only where a sweep could land — the
-    /// same two questions `Game::set_standing_job` refuses on, asked here so
-    /// the screen cannot list a row the engine would reject.
+    /// A standing work job is offered only where a program could be posted —
+    /// the question `Game::set_standing_job` refuses on, asked here so the
+    /// screen cannot list a row the engine would reject.
     pub fn staffing(&mut self) -> Option<Staffing> {
         let structure = self.pending_post_structure?;
         let row = self
@@ -200,7 +203,7 @@ impl App {
             .unwrap_or_default()
             .into_iter()
             .find(|s| s.entity == structure)?;
-        let (work, guard) = self
+        let (work, _) = self
             .game
             .as_ref()
             .and_then(|g| g.standing_job(structure))
@@ -211,13 +214,6 @@ impl App {
                 label: "Keep this machine running".to_string(),
                 kind: StaffAction::StandingWork,
                 on: Some(work),
-            });
-        }
-        if row.durability.is_some() {
-            rows.push(StaffRow {
-                label: "Keep a guard on this".to_string(),
-                kind: StaffAction::StandingGuard,
-                on: Some(guard),
             });
         }
         if row.player_adjacent {
@@ -236,8 +232,8 @@ impl App {
     /// Applies whichever instruction was picked to the structure the roster
     /// was showing, and goes back to that row — see `Mode::StructureAssign`.
     ///
-    /// A toggle stays on the screen so a player can set both; working it
-    /// yourself leaves, because it spends the turn.
+    /// A toggle stays on the screen; working it yourself leaves, because it
+    /// spends the turn.
     pub(crate) fn handle_structure_assign_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.leave_staffing();
@@ -261,10 +257,6 @@ impl App {
         match kind {
             StaffAction::StandingWork => {
                 self.status_line = game.set_standing_job(structure, !work, guard).err();
-                self.menu_selected = idx;
-            }
-            StaffAction::StandingGuard => {
-                self.status_line = game.set_standing_job(structure, work, !guard).err();
                 self.menu_selected = idx;
             }
             StaffAction::WorkYourself => {

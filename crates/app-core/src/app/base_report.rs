@@ -53,8 +53,12 @@ pub const BASE_REPORT_PAGES: &[FixedPage] = &[
         screens: &[Mode::WorkOrders],
     },
     FixedPage {
+        title: "Duties",
+        screens: &[Mode::BaseStaff],
+    },
+    FixedPage {
         title: "Staffing",
-        screens: &[Mode::BaseStaff, Mode::Structures],
+        screens: &[Mode::Structures],
     },
     FixedPage {
         title: "Build orders",

@@ -1735,6 +1735,29 @@ pub(crate) fn app_inside_a_small_base_with_programs(
     app
 }
 
+/// `app_inside_a_small_base_with_programs` with a second Extractor beside
+/// the first, so the roster has two rows and a restored highlight can be
+/// told from the default one.
+pub(crate) fn app_inside_a_small_base_with_two_extractors(seed: u32) -> App {
+    let mut app = app_inside_a_small_base_with_programs(seed, false, 1);
+    let path = scratch_path("two_extractors", seed);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = save::load_from_file(&path).unwrap();
+    // `StructureSave` is not `Clone`; a second read of the same file is.
+    let mut second = save::load_from_file(&path)
+        .unwrap()
+        .structures
+        .into_iter()
+        .find(|s| s.kind == "extractor")
+        .expect("the fixture deploys one");
+    second.position = (1, 1);
+    data.structures.push(second);
+    save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &test_assets_dir()).ok();
+    let _ = std::fs::remove_file(&path);
+    app
+}
+
 /// The same, with the two build rolls set — the other thing about a program
 /// no public `Game` method can write, and the axis `Game::build_candidates`
 /// sorts on.

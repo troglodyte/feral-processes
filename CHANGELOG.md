@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.55
+
+**Report pages now name their tabs, and every report steps through them the same way.** A page with more than one tab shows their names beside its title, with the current one highlighted and in brackets; dots appear only if the names would not fit. `Tab` and `Shift+Tab` move between a page's tabs, `[` and `]` move between pages, and `{` and `}` jump to the next or previous section. `←` and `→` no longer change tabs: inside a page they belong to the row, and `←` from the left edge goes back to the page list. A text filter keeps the braces while it is typed or applied. The keybar teaches the new keys. On the structure screen `Tab` still moves to the next structure, and `Shift+Tab` now goes to the previous one. Off a report, `Shift+Tab` does what `Tab` does.
+
 ## 0.21.54
 
 **The base AI no longer shows a health bar after it fuses with its Research Station.** A program that was hurt when the base AI claimed it carried that wound into the fusion, and since nothing damages or repairs it after that, the map showed it as hurt staff forever. Fusing now restores it to full Integrity, and a save where this already happened is fixed when it loads.

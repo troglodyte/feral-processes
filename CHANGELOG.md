@@ -53,6 +53,10 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.54
+
+**The base AI no longer shows a health bar after it fuses with its Research Station.** A program that was hurt when the base AI claimed it carried that wound into the fusion, and since nothing damages or repairs it after that, the map showed it as hurt staff forever. Fusing now restores it to full Integrity, and a save where this already happened is fixed when it loads.
+
 ## 0.21.53
 
 **Staffing structures now has its own page on the base report, and it lists only the structures your factory runs on.** The page that used to be called Staffing is now Duties, the table of which programs take which kinds of job. The new Staffing page right after it holds the structure list: machines, resource nodes, Teardown Rigs and Holding Cells, with a production line shown as one row. Walls, doors, shields and the Home are no longer listed, and the staffing popup no longer offers "Keep a guard on this". A base with nothing a program can work says so instead of showing an empty list.

@@ -47,6 +47,11 @@ impl Game {
     /// blocks every walker, so standing there changes no route, and the map
     /// gives an actor the tile's glyph over a structure, which is what
     /// draws the AI inside its station.
+    ///
+    /// It is made whole here too: the body is part of the station now, and
+    /// nothing reaches it to wound or mend it again, so a wound carried
+    /// into the fusion would read as hurt staff forever. Doing it on every
+    /// seat, load included, mends a save fused before this rule.
     fn seat_fused_host(&mut self) {
         if !matches!(self.storyline.base_ai, BaseAi::Fused(_)) {
             return;
@@ -59,6 +64,9 @@ impl Game {
         };
         if let Some(mut pos) = self.world.get_mut::<Position>(host) {
             *pos = anchor;
+        }
+        if let Some(mut stats) = self.world.get_mut::<Stats>(host) {
+            stats.hp = stats.max_hp;
         }
     }
 

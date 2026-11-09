@@ -485,6 +485,37 @@ mod in_a_game {
         assert_eq!(anchor_of(&loaded, host), anchor_of(&loaded, station));
     }
 
+    fn hurt(game: &mut Game, e: Entity) {
+        let mut stats = game.world.get_mut::<Stats>(e).unwrap();
+        stats.hp = stats.max_hp / 2;
+    }
+
+    fn whole(game: &Game, e: Entity) -> bool {
+        let stats = game.world.get::<Stats>(e).unwrap();
+        stats.hp == stats.max_hp
+    }
+
+    #[test]
+    fn a_host_hurt_during_the_claim_fuses_at_full_integrity() {
+        let mut f = fixture();
+        set_researched(&mut f.game, 25);
+        f.game.tick();
+        let host = f.staff[1];
+        assert!(f.game.world.get::<components::BaseAiHost>(host).is_some());
+        hurt(&mut f.game, host);
+        tick_until(&mut f.game, 400, is_fused);
+        assert!(whole(&f.game, host));
+    }
+
+    #[test]
+    fn a_save_with_a_hurt_fused_host_loads_it_at_full_integrity() {
+        let (mut f, host) = fused_fixture();
+        hurt(&mut f.game, host);
+        let id = program_id(&f.game, host);
+        let loaded = round_trip(&mut f.game, "hurt_host");
+        assert!(whole(&loaded, loaded.program_entity(id).unwrap()));
+    }
+
     #[test]
     fn a_host_downed_mid_walk_abandons_and_the_next_claim_does_not_re_announce() {
         let mut f = fixture();

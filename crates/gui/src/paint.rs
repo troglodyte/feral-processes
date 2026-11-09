@@ -573,10 +573,20 @@ impl Painter {
     /// every `Row::Item` label carries a two-space prefix — measuring the
     /// ink there puts the next thing two characters back on top of the row.
     pub fn measure_ui_advance(&self, text: impl AsRef<str>, size: u16) -> f32 {
+        self.measure_advance(Face::Ui, text, size)
+    }
+
+    /// `measure_ui_advance` in the bold face, for text drawn with `ui_bold`:
+    /// bold glyphs are wider, so the regular width under-reports it.
+    pub fn measure_ui_bold_advance(&self, text: impl AsRef<str>, size: u16) -> f32 {
+        self.measure_advance(Face::UiBold, text, size)
+    }
+
+    fn measure_advance(&self, face: Face, text: impl AsRef<str>, size: u16) -> f32 {
         self.painter
             .layout_no_wrap(
                 text.as_ref().to_owned(),
-                Face::Ui.font_id(size),
+                face.font_id(size),
                 egui::Color32::WHITE,
             )
             .rect

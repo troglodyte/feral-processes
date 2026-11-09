@@ -81,6 +81,15 @@ fn tab_moves_focus_to_the_list_where_up_down_move_the_highlight_and_the_centre_s
 }
 
 #[test]
+fn shift_tab_moves_focus_like_tab_off_a_hub() {
+    let mut app = open(922);
+    app.handle_key(GameKey::ShiftTab);
+    assert!(app.world_map_list_focused);
+    app.handle_key(GameKey::ShiftTab);
+    assert!(!app.world_map_list_focused);
+}
+
+#[test]
 fn tab_again_returns_arrows_to_panning() {
     let mut app = open(919);
     let home = app.world_map_center;

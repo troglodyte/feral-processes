@@ -57,8 +57,12 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 - **A group menu's rows are hidden dynamically**, so `command_rows`
   must be the *only* source of them, for the base's pages and the party's.
 - **Every hub — `b`, `i`, `c`, `w` and Esc's game menu — walks one nav rule,
-  `App::handle_hub_nav`, `App::screen_claims` is the one place a page
-  takes an arrow or `Esc` back from it, and what a hub is lives in its
+  `App::handle_hub_nav` (ADR 0045: arrows move the cursor, `Tab`/`Shift+Tab`
+  (`GameKey::ShiftTab`, folded to `Tab` for every other screen) switch the
+  highlighted page's `HubTab`s from either half, `[ ]` step the rail, `{ }`
+  jump `HubPage::section`s and `Left` from the page's leftmost position
+  returns to the rail), `App::screen_claims` is the one place a page
+  takes an arrow, `Esc` or a brace back from it, and what a hub is lives in its
   `HubKind` impl, never in a `match hub`; the rail is `HubKind::pages` and
   nothing else, the page is held in `App` by `HubPageKey` and checked
   against the `Mode` (`hub_at` is `None` off the held page's screens),

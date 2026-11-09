@@ -187,25 +187,21 @@ fn the_rail_is_towns_then_outposts_then_caravans() {
 }
 
 #[test]
-fn every_site_page_walks_its_tabs_with_left_and_right() {
+fn every_site_page_walks_its_tabs_with_tab() {
     let mut app = app_with_far_sites(7105);
     app.handle_key(GameKey::Char('w'));
     app.handle_key(GameKey::Right);
     assert!(!app.hub_on_rail);
     let mut seen = vec![app.mode];
-    for _ in 0..6 {
-        app.handle_key(GameKey::Right);
-        if seen.last() != Some(&app.mode) {
-            seen.push(app.mode);
-        }
+    for _ in 1..TOWN_TABS.len() {
+        app.handle_key(GameKey::Tab);
+        seen.push(app.mode);
     }
-    assert_eq!(seen, TOWN_TABS);
+    assert_eq!(seen, TOWN_TABS.iter().map(|t| t.mode).collect::<Vec<_>>());
     assert_eq!(app.mode, Mode::SiteLog);
-    for _ in 0..TOWN_TABS.len() {
-        app.handle_key(GameKey::Left);
-    }
+    app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail);
-    assert_eq!(app.mode, Mode::SiteStatus);
+    assert_eq!(app.mode, Mode::SiteLog);
 }
 
 #[test]
@@ -213,7 +209,7 @@ fn turning_pages_keeps_the_site_when_tabs_share_a_mode() {
     let mut app = app_with_far_sites(7106);
     app.handle_key(GameKey::Char('w'));
     app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::SiteGoods);
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::SiteStatus);
@@ -259,8 +255,7 @@ fn caravans_has_its_own_two_tabs() {
     }
     assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Caravans")));
     assert_eq!(app.mode, Mode::CaravanSchedule);
-    app.handle_key(GameKey::Right);
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::RoutesInFlight);
 }
 

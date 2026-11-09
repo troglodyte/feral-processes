@@ -7,20 +7,23 @@
 use crate::*;
 use feral_processes_engine::sites::{SiteSection, TownGoods};
 
-pub const TOWN_TABS: &[Mode] = &[
-    Mode::SiteStatus,
-    Mode::SiteGoods,
-    Mode::SiteRoutes,
-    Mode::SiteJobs,
-    Mode::SiteLog,
+pub const TOWN_TABS: &[HubTab] = &[
+    HubTab::new("Status", Mode::SiteStatus),
+    HubTab::new("Goods", Mode::SiteGoods),
+    HubTab::new("Routes", Mode::SiteRoutes),
+    HubTab::new("Jobs", Mode::SiteJobs),
+    HubTab::new("Log", Mode::SiteLog),
 ];
-pub const OUTPOST_TABS: &[Mode] = &[
-    Mode::OutpostStatus,
-    Mode::OutpostCrew,
-    Mode::OutpostStock,
-    Mode::SiteLog,
+pub const OUTPOST_TABS: &[HubTab] = &[
+    HubTab::new("Status", Mode::OutpostStatus),
+    HubTab::new("Crew", Mode::OutpostCrew),
+    HubTab::new("Stock", Mode::OutpostStock),
+    HubTab::new("Log", Mode::SiteLog),
 ];
-pub const CARAVAN_TABS: &[Mode] = &[Mode::CaravanSchedule, Mode::RoutesInFlight];
+pub const CARAVAN_TABS: &[HubTab] = &[
+    HubTab::new("Schedule", Mode::CaravanSchedule),
+    HubTab::new("In flight", Mode::RoutesInFlight),
+];
 
 const CARAVANS_TITLE: &str = "Caravans";
 
@@ -52,7 +55,7 @@ impl HubKind for SitesHub {
         let mut pages = Vec::new();
         let mut last = None;
         for entry in game.site_rail() {
-            let screens = match entry.site {
+            let tabs = match entry.site {
                 RouteDestinationId::Settlement(_) => TOWN_TABS,
                 RouteDestinationId::Outpost(_) => OUTPOST_TABS,
             };
@@ -61,7 +64,7 @@ impl HubKind for SitesHub {
                 title: entry.name,
                 glyph: Some(entry.glyph),
                 section: (last != Some(entry.section)).then(|| section_title(entry.section)),
-                screens,
+                tabs,
                 marked: entry.attention,
                 name_cut_at_end: true,
             });
@@ -72,7 +75,7 @@ impl HubKind for SitesHub {
             title: CARAVANS_TITLE.to_string(),
             glyph: Some('~'),
             section: Some("Traffic"),
-            screens: CARAVAN_TABS,
+            tabs: CARAVAN_TABS,
             marked: game.route_reports().iter().any(|r| r.stalled),
             name_cut_at_end: false,
         });
@@ -210,7 +213,7 @@ impl App {
                 .kind()
                 .pages(self)
                 .iter()
-                .any(|p| &p.key == key && p.screens.contains(mode))
+                .any(|p| &p.key == key && p.offers(*mode))
         });
         match back {
             Some((key, mode)) => {

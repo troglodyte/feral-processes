@@ -10,63 +10,71 @@ use feral_processes_engine::BaseReportFlags;
 pub const BASE_REPORT_PAGES: &[FixedPage] = &[
     FixedPage {
         title: "Overview",
-        screens: &[Mode::BaseOverview],
+        tabs: &[HubTab::new("Overview", Mode::BaseOverview)],
     },
     FixedPage {
         title: "Build",
-        screens: &[Mode::BaseBuild],
+        tabs: &[HubTab::new("Build", Mode::BaseBuild)],
     },
     FixedPage {
         title: "Research",
-        screens: &[Mode::BaseResearch],
+        tabs: &[HubTab::new("Research", Mode::BaseResearch)],
     },
     FixedPage {
         title: "Trade",
-        screens: &[Mode::BaseTrade],
+        tabs: &[HubTab::new("Trade", Mode::BaseTrade)],
     },
     FixedPage {
         title: "Compile",
-        screens: &[Mode::BaseCompile],
+        tabs: &[HubTab::new("Compile", Mode::BaseCompile)],
     },
     FixedPage {
         title: "Recipes",
-        screens: &[Mode::Recipes],
+        tabs: &[HubTab::new("Recipes", Mode::Recipes)],
     },
     FixedPage {
         title: "Staff",
-        screens: &[
-            Mode::StaffWellbeing,
-            Mode::StaffCoverage,
-            Mode::StaffDiscontent,
+        tabs: &[
+            HubTab::new("Wellbeing", Mode::StaffWellbeing),
+            HubTab::new("Coverage", Mode::StaffCoverage),
+            HubTab::new("Discontent", Mode::StaffDiscontent),
         ],
     },
     FixedPage {
         title: "Production",
-        screens: &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
+        tabs: &[
+            HubTab::new("Output", Mode::BaseOutput),
+            HubTab::new("Machines", Mode::BaseMachines),
+            HubTab::new("Power", Mode::BasePower),
+        ],
     },
     FixedPage {
         title: "Stock",
-        screens: &[Mode::BaseStock],
+        tabs: &[HubTab::new("Stock", Mode::BaseStock)],
     },
     FixedPage {
         title: "Work orders",
-        screens: &[Mode::WorkOrders],
+        tabs: &[HubTab::new("Work orders", Mode::WorkOrders)],
     },
     FixedPage {
         title: "Duties",
-        screens: &[Mode::BaseStaff],
+        tabs: &[HubTab::new("Duties", Mode::BaseStaff)],
     },
     FixedPage {
         title: "Staffing",
-        screens: &[Mode::Structures],
+        tabs: &[HubTab::new("Staffing", Mode::Structures)],
     },
     FixedPage {
         title: "Build orders",
-        screens: &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
+        tabs: &[
+            HubTab::new("Build", Mode::BuildOrders),
+            HubTab::new("Dig", Mode::DigOrders),
+            HubTab::new("Floor", Mode::FloorOrders),
+        ],
     },
     FixedPage {
         title: "Alerts",
-        screens: &[Mode::Alerts],
+        tabs: &[HubTab::new("Alerts", Mode::Alerts)],
     },
 ];
 
@@ -75,7 +83,7 @@ pub const BASE_REPORT_PAGES: &[FixedPage] = &[
 /// read it by.
 const BREED_PAGE: FixedPage = FixedPage {
     title: "Breed",
-    screens: &[Mode::Breed],
+    tabs: &[HubTab::new("Breed", Mode::Breed)],
 };
 
 /// The base report as a hub: a fixed table, the attention marks off
@@ -116,7 +124,7 @@ impl HubKind for BaseReport {
 /// Why `page` is flagged, if it is: the engine's reason for the page's
 /// first screen. A page the engine has no flag for is never flagged.
 pub fn base_page_flag(flags: &BaseReportFlags, page: usize) -> Option<&str> {
-    match BASE_REPORT_PAGES[page].screens[0] {
+    match BASE_REPORT_PAGES[page].tabs[0].mode {
         Mode::StaffWellbeing => flags.staff.as_deref(),
         Mode::BaseOutput => flags.production.as_deref(),
         Mode::BaseStock => flags.stock.as_deref(),

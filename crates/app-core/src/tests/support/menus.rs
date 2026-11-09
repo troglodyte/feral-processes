@@ -105,9 +105,9 @@ pub(crate) fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
     .into_iter()
     .find_map(|(hub, table)| {
         table.iter().enumerate().find_map(|(p, page)| {
-            page.screens
+            page.tabs
                 .iter()
-                .position(|&s| s == mode)
+                .position(|t| t.mode == mode)
                 .map(|s| (hub, p, s))
         })
     })
@@ -142,13 +142,8 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
         app.handle_key(GameKey::Char(']'));
     }
     app.handle_key(GameKey::Right);
-    // Right walks the page's screens; the duty table spends it on its
-    // columns first, hence the bound rather than exactly `screen` presses.
-    for _ in 0..screen * 16 {
-        if app.mode == target {
-            break;
-        }
-        app.handle_key(GameKey::Right);
+    for _ in 0..screen {
+        app.handle_key(GameKey::Tab);
     }
     assert_eq!(app.mode, target, "the hub reached {target:?}");
     assert!(!app.hub_on_rail, "the cursor is on the screen's rows");

@@ -25,8 +25,20 @@ pub enum HubPageKey {
     Site(RouteDestinationId),
 }
 
-/// One page of a hub: a rail entry, and the screens `Right`/`Left` step
-/// through on it.
+/// One tab of a page: the name the title row draws and the screen it shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HubTab {
+    pub name: &'static str,
+    pub mode: Mode,
+}
+
+impl HubTab {
+    pub const fn new(name: &'static str, mode: Mode) -> Self {
+        Self { name, mode }
+    }
+}
+
+/// One page of a hub: a rail entry, and the tabs `Tab` cycles on it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HubPage {
     pub key: HubPageKey,
@@ -34,7 +46,7 @@ pub struct HubPage {
     pub glyph: Option<char>,
     /// A header drawn above this page on the rail.
     pub section: Option<&'static str>,
-    pub screens: &'static [Mode],
+    pub tabs: &'static [HubTab],
     /// The rail's `!`.
     pub marked: bool,
     /// A name the rail may cut: the tail gives way ("Outpost north-e…"),
@@ -45,7 +57,18 @@ pub struct HubPage {
 /// A fixed hub's table row: what `HubPage` was. Keeps the tables `const`.
 pub struct FixedPage {
     pub title: &'static str,
-    pub screens: &'static [Mode],
+    pub tabs: &'static [HubTab],
+}
+
+impl HubPage {
+    /// The screens the page's tabs show, in tab order.
+    pub fn modes(&self) -> impl Iterator<Item = Mode> + '_ {
+        self.tabs.iter().map(|t| t.mode)
+    }
+
+    pub fn offers(&self, mode: Mode) -> bool {
+        self.modes().any(|m| m == mode)
+    }
 }
 
 impl FixedPage {
@@ -55,7 +78,7 @@ impl FixedPage {
             title: self.title.to_string(),
             glyph: None,
             section: None,
-            screens: self.screens,
+            tabs: self.tabs,
             marked: false,
             name_cut_at_end: false,
         }
@@ -85,7 +108,7 @@ pub trait HubKind: Sync {
 
     /// Shows page `page`, on its first screen.
     fn turn(&self, app: &mut App, page: usize) {
-        app.mode = self.pages(app)[page].screens[0];
+        app.mode = self.pages(app)[page].tabs[0].mode;
     }
 
     /// `Esc` on the rail.
@@ -149,6 +172,25 @@ pub(crate) struct HubPlace {
     pub key: HubPageKey,
 }
 
+/// The first page of the section `step` sections along from the one
+/// holding `page`, wrapping; `None` when the rail has fewer than two
+/// sections, so the keys do nothing on a hub without them.
+fn section_start(pages: &[HubPage], page: usize, step: isize) -> Option<usize> {
+    let starts: Vec<usize> = (0..pages.len())
+        .filter(|&i| pages[i].section.is_some())
+        .collect();
+    if starts.len() < 2 {
+        return None;
+    }
+    let here = starts.iter().rposition(|&s| s <= page);
+    let to = match (here, step > 0) {
+        (Some(i), _) => (i as isize + step).rem_euclid(starts.len() as isize) as usize,
+        (None, true) => 0,
+        (None, false) => starts.len() - 1,
+    };
+    Some(starts[to])
+}
+
 impl App {
     /// Which hub the current mode belongs to and where it sits there.
     pub fn hub_at(&self) -> Option<(Hub, usize, usize)> {
@@ -162,7 +204,7 @@ impl App {
         let place = self.hub_place.as_ref()?;
         let pages = place.hub.kind().pages(self);
         let page = pages.iter().position(|p| p.key == place.key)?;
-        let screen = pages[page].screens.iter().position(|&s| s == mode)?;
+        let screen = pages[page].tabs.iter().position(|t| t.mode == mode)?;
         Some((place.hub, page, screen))
     }
 
@@ -184,11 +226,7 @@ impl App {
         let last = self.hub_last[hub.slot()]
             .clone()
             .filter(|_| kind.remembers())
-            .filter(|(key, mode)| {
-                pages
-                    .iter()
-                    .any(|p| &p.key == key && p.screens.contains(mode))
-            });
+            .filter(|(key, mode)| pages.iter().any(|p| &p.key == key && p.offers(*mode)));
         match last {
             Some((key, mode)) => {
                 self.hub_place = Some(HubPlace { hub, key });
@@ -232,7 +270,7 @@ impl App {
             hub.kind()
                 .pages(self)
                 .iter()
-                .any(|p| p.key == key && p.screens.contains(&mode)),
+                .any(|p| p.key == key && p.offers(mode)),
             "{key:?} does not offer {mode:?}"
         );
         self.hub_place = Some(HubPlace { hub, key });
@@ -253,13 +291,10 @@ impl App {
         let shown = base_popup_parent(self.mode).unwrap_or(self.mode);
         if let Some(place) = &self.hub_place {
             let pages = place.hub.kind().pages(self);
-            if pages
-                .iter()
-                .any(|p| p.key == place.key && p.screens.contains(&shown))
-            {
+            if pages.iter().any(|p| p.key == place.key && p.offers(shown)) {
                 return;
             }
-            if let Some(page) = pages.iter().find(|p| p.screens.contains(&shown)) {
+            if let Some(page) = pages.iter().find(|p| p.offers(shown)) {
                 let key = page.key.clone();
                 if let Some(place) = &mut self.hub_place {
                     place.key = key;
@@ -270,7 +305,7 @@ impl App {
         let mut offered = Vec::new();
         for hub in Hub::ALL {
             for page in hub.kind().pages(self) {
-                if page.screens.contains(&shown) {
+                if page.offers(shown) {
                     offered.push(HubPlace { hub, key: page.key });
                 }
             }
@@ -281,23 +316,22 @@ impl App {
     }
 
     /// Runs ahead of every hub screen's own handler and answers whether it
-    /// took the key. One rule for every hub. The hub has one cursor, on the
-    /// rail or in the screen (`hub_on_rail`). On the rail, Up/Down walk the
-    /// pages (wrapping), Right or Enter moves the cursor into the screen, Esc
-    /// leaves the hub (`HubKind::leave`), and every other key is swallowed —
-    /// a row jump or a screen action with no cursor on the screen would act
-    /// on a row the player cannot see is chosen. In the screen, a page's
-    /// screens lie in a row to the right of the rail: Right steps to the
-    /// next (stopping at the last), Left to the previous and off the first
-    /// back to the rail, and Esc goes straight to the rail — unless the
-    /// screen claims the key first (`screen_claims`). Everything else falls
-    /// through. `[`/`]` turn pages from either half, and a hub's own keys
+    /// took the key. One rule for every hub (ADR 0045). The hub has one
+    /// cursor, on the rail or in the page (`hub_on_rail`). On the rail,
+    /// Up/Down walk the pages (wrapping), Right or Enter moves the cursor
+    /// into the page, Esc leaves the hub (`HubKind::leave`), and every other
+    /// key is swallowed: a row jump or a page action with no cursor on the
+    /// page would act on a row the player cannot see is chosen. In the page,
+    /// Left (off its leftmost position) and Esc go back to the rail, unless
+    /// the page claims the key first (`screen_claims`); Right is the page's
+    /// own. From either half, `Tab`/`Shift+Tab` switch the page's tabs,
+    /// `[`/`]` turn pages and `{`/`}` jump sections, and a hub's own keys
     /// (`HubKind::key`) are asked before any of it.
     ///
     /// `Esc` on the rail leaves the hub rather than stepping back a page:
     /// the rail is a set of siblings, not a history.
     pub(crate) fn handle_hub_nav(&mut self, key: GameKey) -> bool {
-        let Some((hub, page, screen)) = self.hub_at() else {
+        let Some((hub, page, tab)) = self.hub_at() else {
             return false;
         };
         let kind = hub.kind();
@@ -306,11 +340,22 @@ impl App {
         }
         let pages = kind.pages(self);
         let count = pages.len();
-        let screens = pages[page].screens;
         let (next, prev) = ((page + 1) % count, (page + count - 1) % count);
         match key {
             GameKey::Char(']') => self.turn_hub_to_index(hub, next),
             GameKey::Char('[') => self.turn_hub_to_index(hub, prev),
+            GameKey::Char('}') if !self.screen_claims(key) => {
+                if let Some(to) = section_start(&pages, page, 1) {
+                    self.turn_hub_to_index(hub, to);
+                }
+            }
+            GameKey::Char('{') if !self.screen_claims(key) => {
+                if let Some(to) = section_start(&pages, page, -1) {
+                    self.turn_hub_to_index(hub, to);
+                }
+            }
+            GameKey::Tab => self.step_hub_tab(&pages[page], tab, 1),
+            GameKey::ShiftTab => self.step_hub_tab(&pages[page], tab, -1),
             _ if self.hub_on_rail => match key {
                 GameKey::Down => self.turn_hub_to_index(hub, next),
                 GameKey::Up => self.turn_hub_to_index(hub, prev),
@@ -319,21 +364,23 @@ impl App {
                 _ => {}
             },
             _ if self.screen_claims(key) => return false,
-            GameKey::Esc => self.hub_on_rail = true,
-            GameKey::Left => match screen.checked_sub(1) {
-                Some(prev) => self.mode = screens[prev],
-                None => self.hub_on_rail = true,
-            },
-            GameKey::Right if screen + 1 < screens.len() => self.mode = screens[screen + 1],
+            GameKey::Esc | GameKey::Left => self.hub_on_rail = true,
             _ => return false,
         }
         true
     }
 
-    /// Whether the screen in the hub wants `key` before the hub's own rule
-    /// does: an arrow or `Esc` the screen spends on a cursor or a question of
-    /// its own.
-    fn screen_claims(&mut self, key: GameKey) -> bool {
+    /// Shows the tab `step` along from `tab` on `page`, wrapping. A page
+    /// with one tab has nowhere to go, and the key is still the hub's: a
+    /// `Tab` that fell through would be a second meaning on that page.
+    fn step_hub_tab(&mut self, page: &HubPage, tab: usize, step: isize) {
+        let to = (tab as isize + step).rem_euclid(page.tabs.len() as isize) as usize;
+        self.mode = page.tabs[to].mode;
+    }
+
+    /// Whether the page wants `key` before the hub's own rule does: a key
+    /// the page spends on a cursor or a question of its own.
+    pub(crate) fn screen_claims(&mut self, key: GameKey) -> bool {
         match key {
             // With a program picked Esc steps back to the list, which the
             // downed-program handler owns; Left would strand that pick on
@@ -349,24 +396,25 @@ impl App {
                     .is_some_and(|s| s.confirm.is_some())
                     || self.quit_unsaved_pending
             }
-            // A level row spends Left and Right on the level; a toggle's
-            // Left still goes to the rail.
+            // A manifest shown as a hub tab walks its faces with the arrows
+            // (`step_manifest_face`); off its first face Left is still its
+            // own, and from the first it goes to the rail.
+            GameKey::Left if self.mode == Mode::Manifest => self.manifest_tab != ManifestTab::Stats,
+            // A page with a filter keeps the braces for it.
+            GameKey::Char('{' | '}') => self.filter_applied(),
+            // A level row spends Left on the level; a toggle's Left still
+            // goes to the rail. (Right is the page's on every page, so it
+            // needs no claim.)
             GameKey::Left if self.quit_unsaved_pending => true,
-            GameKey::Left | GameKey::Right if self.on_level_row() => true,
-            // The duty table spends Left and Right on its column cursor, so
-            // it only leaves off its first and last columns.
+            GameKey::Left if self.on_level_row() => true,
+            // The duty table spends Left on its column cursor, so it only
+            // leaves off its first column.
             GameKey::Left => self.mode == Mode::BaseStaff && self.work_column > 0,
-            GameKey::Right => self.on_inner_staff_column(),
             _ => false,
         }
     }
 
     fn in_downed_drill_down(&self) -> bool {
         self.mode == Mode::DownedPrograms && self.pending_downed_program_index.is_some()
-    }
-
-    /// Whether Right on the duty table still has a column to move to.
-    fn on_inner_staff_column(&mut self) -> bool {
-        self.mode == Mode::BaseStaff && self.work_column + 1 < self.base_staff_table().columns.len()
     }
 }

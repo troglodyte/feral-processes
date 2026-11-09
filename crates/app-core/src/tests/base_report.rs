@@ -11,7 +11,7 @@ use crate::*;
 fn page_modes() -> Vec<Mode> {
     BASE_REPORT_PAGES
         .iter()
-        .map(|p| p.screens[0])
+        .map(|p| p.tabs[0].mode)
         .collect::<Vec<_>>()
 }
 
@@ -228,7 +228,7 @@ fn the_screens_inside_the_hub_cost_no_game_time() {
 }
 
 #[test]
-fn right_walks_the_three_staff_screens_and_left_walks_back_to_the_rail() {
+fn tab_walks_the_three_staff_tabs_and_left_goes_back_to_the_rail() {
     let mut app = test_app(30015);
     open_hub_screen(&mut app, Mode::StaffWellbeing);
     let walk = |app: &mut App, key| -> Vec<Mode> {
@@ -240,27 +240,25 @@ fn right_walks_the_three_staff_screens_and_left_walks_back_to_the_rail() {
             .collect()
     };
     assert_eq!(
-        walk(&mut app, GameKey::Right),
+        walk(&mut app, GameKey::Tab),
         vec![
             Mode::StaffCoverage,
             Mode::StaffDiscontent,
-            Mode::StaffDiscontent
+            Mode::StaffWellbeing
         ],
-        "Right stops at the last screen"
+        "Tab wraps past the last tab"
     );
     assert!(!app.hub_on_rail);
     assert_eq!(
-        walk(&mut app, GameKey::Left),
+        walk(&mut app, GameKey::ShiftTab),
         vec![
+            Mode::StaffDiscontent,
             Mode::StaffCoverage,
-            Mode::StaffWellbeing,
             Mode::StaffWellbeing
         ]
     );
-    assert!(
-        app.hub_on_rail,
-        "Left off the first screen reaches the rail"
-    );
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail, "Left from any tab reaches the rail");
 }
 
 #[test]
@@ -269,11 +267,11 @@ fn the_staff_screens_scroll_by_cursor_and_start_each_screen_at_the_top() {
     open_hub_screen(&mut app, Mode::StaffWellbeing);
     let rows = app.game.as_ref().unwrap().need_coverage().len();
     assert!(rows >= 2, "the shipped catalogue has two needs");
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::StaffCoverage);
     app.handle_key(GameKey::Down);
     assert_eq!(app.menu_selected, 1);
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.menu_selected, 0, "a new screen starts at the top");
 }
 
@@ -517,7 +515,7 @@ fn the_full_rail_walks_forward_and_back() {
 }
 
 #[test]
-fn right_walks_production_and_build_orders_screens() {
+fn tab_walks_production_and_build_orders_tabs() {
     let mut app = test_app(30018);
     app.hub_on_rail = false;
     for screens in [
@@ -526,21 +524,12 @@ fn right_walks_production_and_build_orders_screens() {
     ] {
         app.mode = screens[0];
         for &next in &screens[1..] {
-            app.handle_key(GameKey::Right);
+            app.handle_key(GameKey::Tab);
             assert_eq!(app.mode, next);
         }
-        app.handle_key(GameKey::Right);
-        assert_eq!(app.mode, screens[2], "Right stops at the last screen");
+        app.handle_key(GameKey::Tab);
+        assert_eq!(app.mode, screens[0], "Tab wraps past the last tab");
     }
-}
-
-#[test]
-fn tab_no_longer_turns_a_pages_screens() {
-    let mut app = test_app(30019);
-    app.mode = Mode::BaseOutput;
-    app.hub_on_rail = false;
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.mode, Mode::BaseOutput);
 }
 
 /// The cursor walks the report each screen draws and wraps at its ends, and
@@ -747,9 +736,14 @@ fn no_mode_is_in_two_hubs() {
     let mut seen = Vec::new();
     for hub in Hub::ALL {
         let mut in_hub = Vec::new();
-        for mode in hub.kind().pages(&app).iter().flat_map(|p| p.screens) {
-            assert!(!seen.contains(mode), "{mode:?} is in two hubs");
-            in_hub.push(*mode);
+        for mode in hub
+            .kind()
+            .pages(&app)
+            .iter()
+            .flat_map(|p| p.modes().collect::<Vec<_>>())
+        {
+            assert!(!seen.contains(&mode), "{mode:?} is in two hubs");
+            in_hub.push(mode);
         }
         seen.extend(in_hub);
     }

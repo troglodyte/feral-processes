@@ -16,7 +16,10 @@ fn rail(app: &App, hub: Hub) -> Vec<(String, Vec<Mode>, bool)> {
     hub.kind()
         .pages(app)
         .into_iter()
-        .map(|p| (p.title, p.screens.to_vec(), p.marked))
+        .map(|p| {
+            let modes = p.modes().collect::<Vec<_>>();
+            (p.title, modes, p.marked)
+        })
         .collect()
 }
 
@@ -204,11 +207,10 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         &mut app,
         &[
             (Right, at(Mode::StaffWellbeing, Hub::Base, 6, 0, false)),
-            (Right, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Right, at(Mode::StaffDiscontent, Hub::Base, 6, 2, false)),
-            (Left, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Left, at(Mode::StaffWellbeing, Hub::Base, 6, 0, false)),
-            (Left, at(Mode::StaffWellbeing, Hub::Base, 6, 0, true)),
+            (Tab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
+            (Tab, at(Mode::StaffDiscontent, Hub::Base, 6, 2, false)),
+            (ShiftTab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
+            (Left, at(Mode::StaffCoverage, Hub::Base, 6, 1, true)),
         ],
     );
 
@@ -281,9 +283,9 @@ fn a_hub_reopens_where_it_was_left() {
     for _ in 0..6 {
         app.handle_key(Char(']'));
     }
-    for _ in 0..3 {
-        app.handle_key(Right);
-    }
+    app.handle_key(Right);
+    app.handle_key(Tab);
+    app.handle_key(Tab);
     assert_eq!(app.mode, Mode::StaffDiscontent);
     app.handle_key(Esc);
     app.handle_key(Esc);
@@ -435,7 +437,7 @@ fn shared_screens_of(app: &App, hubs: &[Hub]) -> Vec<Mode> {
     let mut counts: Vec<(Mode, usize)> = Vec::new();
     for hub in hubs {
         for page in hub.kind().pages(app) {
-            for &mode in page.screens {
+            for mode in page.modes() {
                 match counts.iter_mut().find(|(m, _)| *m == mode) {
                     Some((_, n)) => *n += 1,
                     None => counts.push((mode, 1)),

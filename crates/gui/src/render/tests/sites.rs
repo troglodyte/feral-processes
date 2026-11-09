@@ -161,7 +161,7 @@ fn every_sites_tab_draws_as_many_selectable_rows_as_app_core_counts() {
                 );
                 seen += 1;
                 n += 1;
-                app.handle_key(GameKey::Right);
+                app.handle_key(GameKey::Tab);
             }
             n
         };
@@ -278,7 +278,7 @@ fn no_sites_row_shows_a_tick() {
         for line in crate::paint::painted_text(&shapes) {
             assert!(!tick(&line), "{:?} shows a tick figure: {line}", app.mode);
         }
-        app.handle_key(GameKey::Right);
+        app.handle_key(GameKey::Tab);
     }
 }
 
@@ -324,10 +324,9 @@ fn unavailable_actions_are_still_on_the_keybar() {
     // when it is used, so the pair must be drawn regardless.
     let keys = feral_processes_app_core::sites_screen_keys(Mode::SiteGoods);
     assert!(keys.iter().any(|(_, verb)| *verb == "trade"));
-    for _ in 0..2 {
-        app.handle_key(GameKey::Right);
-    }
-    assert_eq!(app.mode, TOWN_TABS[1]);
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, TOWN_TABS[1].mode);
     let mut fx = Fx::new();
     let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
     let text = crate::paint::painted_text(&shapes).join("\n");
@@ -356,7 +355,7 @@ fn every_sites_tab_draws_a_refusal_once() {
                 .count();
             assert_eq!(drawn, 1, "{:?} drew the refusal {drawn} times", app.mode);
             modes.insert(format!("{:?}", app.mode));
-            app.handle_key(GameKey::Right);
+            app.handle_key(GameKey::Tab);
         }
         for _ in 0..8 {
             if app.hub_on_rail {
@@ -449,7 +448,7 @@ fn every_site_page_draws_a_refusal_once() {
                 .count();
             assert_eq!(drawn, 1, "{:?} painted the refusal {drawn} times", app.mode);
             seen.insert(format!("{:?}", app.mode));
-            app.handle_key(GameKey::Right);
+            app.handle_key(GameKey::Tab);
         }
         for _ in 0..8 {
             if app.hub_on_rail {

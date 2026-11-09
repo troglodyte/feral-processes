@@ -134,7 +134,7 @@ fn breed_on_base_rail(app: &App) -> bool {
         .kind()
         .pages(app)
         .iter()
-        .any(|p| p.screens == [Mode::Breed])
+        .any(|p| p.modes().eq([Mode::Breed]))
 }
 
 #[test]

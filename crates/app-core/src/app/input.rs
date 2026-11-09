@@ -268,6 +268,12 @@ impl App {
         let mode_before = self.mode;
         let row_before = self.menu_selected;
         let hub_took_it = self.handle_hub_nav(key);
+        // Only the hub rule tells the two Tabs apart.
+        let key = if key == GameKey::ShiftTab {
+            GameKey::Tab
+        } else {
+            key
+        };
         match self.mode {
             _ if hub_took_it => {}
             Mode::MainMenu => self.handle_main_menu_key(key),

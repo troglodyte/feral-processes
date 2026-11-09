@@ -136,9 +136,25 @@
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
   `require_field`'s caller list.
-- **Every hub — `b`, `i` and `c` — walks one nav rule,
+- **Every hub — `b`, `i`, `c`, `w` and the game menu — walks one nav rule,
   `App::handle_hub_nav`, and `App::screen_claims` is the one place a page
-  takes an arrow or `Esc` back from it.** The structure hub had its own rule
+  takes an arrow, `Esc` or a brace back from it.** The rule (ADR 0045):
+  arrows move the cursor, so `Right` in a page is the page's own and `Left`
+  from its leftmost position returns to the rail; `Tab`/`Shift+Tab` switch
+  the page's `HubTab`s (a named `{ name, mode }`, drawn as the title row's
+  strip, dots only when `tab_strip_fits` says no), wrapping, in the half the
+  cursor is in, and are the hub's even on a one-tab page so a `Tab` never
+  falls through to a second meaning; `{ }` jump to the first page of the
+  next/previous `section` and do nothing on a rail with fewer than two. The
+  trap is the old overloading: `←/→` once switched tabs *and* moved a cursor,
+  so the Duties table changed meaning partway across it. **`ShiftTab` exists
+  only for this rule**: `App::handle_key` folds it to `Tab` after the hub has
+  had it, so the canvas editor, help links and the map's manifest keep a
+  Shift-held Tab. **A manifest shown as a hub tab** gives `Tab` to the hub and
+  its faces to `→/←` (`step_manifest_face`); off every hub (the map's sheet)
+  it keeps `Tab`, because the hub rule is not running. The structure hub's
+  own `Tab` (next structure, `Shift+Tab` back) stays until it folds into `i`.
+  The structure hub had its own rule
   (open in the page, Left/Right to the page, rail by `Esc` alone) and read as
   a different screen from the base report's; a page that wants an arrow adds
   an arm to `screen_claims`, never a guard inside the nav match or a second

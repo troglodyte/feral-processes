@@ -2696,7 +2696,7 @@ impl Mode {
             | Mode::BaseMachines
             | Mode::BasePower
             | Mode::BaseStock
-            // Opened from the map with `w`, a hub page: never over a fight.
+            // Opened from `w` or `b`'s site pages, a hub page: never over a fight.
             | Mode::SiteStatus
             | Mode::SiteGoods
             | Mode::SiteRoutes

@@ -5,6 +5,7 @@ mod support;
 mod achievements;
 mod alerts;
 mod arena;
+mod b_rail;
 mod base_report;
 mod battle;
 mod breeding;

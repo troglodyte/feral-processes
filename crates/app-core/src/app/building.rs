@@ -516,7 +516,6 @@ impl App {
             let Some(game) = &mut self.game else { return };
             let outcome = game.unpin_subject(subject);
             self.report(outcome);
-            self.mode = Mode::Playing;
             return;
         }
         // With no station there is no pen, so no row to pick: the screen
@@ -538,7 +537,6 @@ impl App {
         };
         let outcome = game.pin_subject(staff[idx], station);
         self.report(outcome);
-        self.mode = Mode::Playing;
     }
 
     /// Confirms `Mode::PinPrisoner`'s picker: the row is a downed-program

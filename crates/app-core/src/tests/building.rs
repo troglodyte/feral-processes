@@ -1624,7 +1624,7 @@ fn picking_a_program_in_the_study_screen_pins_it() {
     assert_eq!(app.mode, Mode::PinSubject);
     pick_row(&mut app, 0);
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::PinSubject, "a pick stays on the Study tab");
     assert_eq!(
         app.game.as_mut().unwrap().program_role(program),
         Some(ProgramRole::UnderStudy),
@@ -1664,11 +1664,73 @@ fn the_study_screen_unpins_the_current_subject_through_its_one_row() {
     assert_eq!(app.mode, Mode::PinSubject);
     pick_row(&mut app, 0);
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::PinSubject, "a pick stays on the Study tab");
     assert_eq!(
         app.game.as_mut().unwrap().program_role(program),
         Some(ProgramRole::Staff),
         "the one row on screen must have released the subject"
+    );
+}
+
+/// The Study tab is reachable from the Stack, but the pen is up on the
+/// field: the pin door refuses in its own words, and nobody is pinned.
+#[test]
+fn the_study_tab_refuses_a_pin_from_underground() {
+    let mut app = app_owning_a_program_and_a_research_station(888);
+    stand_in_base(&mut app);
+    go_underground(&mut app);
+    assert!(app.game.as_ref().unwrap().is_underground(), "precondition");
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+
+    open_hub_screen(&mut app, Mode::PinSubject);
+    pick_row(&mut app, 0);
+
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Not down here — that's back up on the field.")
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().program_role(program),
+        Some(ProgramRole::Staff),
+        "a refused pin pins nobody"
+    );
+}
+
+/// Unpinning is the same door's other half and refuses the same way.
+#[test]
+fn the_study_tab_refuses_an_unpin_from_underground() {
+    let mut app = app_owning_a_program_and_a_research_station(889);
+    stand_in_base(&mut app);
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+    let station = app.game.as_mut().unwrap().study_station().unwrap();
+    app.game
+        .as_mut()
+        .unwrap()
+        .pin_subject(program, station)
+        .unwrap();
+    for _ in 0..8 {
+        app.game.as_mut().unwrap().wait();
+    }
+    go_underground(&mut app);
+    // The reload mints new entities, so the subject is read back after it.
+    let program = app
+        .game
+        .as_mut()
+        .unwrap()
+        .pinned_subject()
+        .expect("precondition: the subject reached the pen and stays pinned underground");
+
+    open_hub_screen(&mut app, Mode::PinSubject);
+    pick_row(&mut app, 0);
+
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Not down here — that's back up on the field.")
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().program_role(program),
+        Some(ProgramRole::UnderStudy),
+        "a refused unpin leaves the subject pinned"
     );
 }
 

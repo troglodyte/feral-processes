@@ -199,7 +199,7 @@ impl Game {
             return Err("No outpost stands there.".into());
         }
         if !self.standing_at_outpost(tile) {
-            return Err("You need to be standing at the outpost to post someone there.".into());
+            return Err(crate::outposts::POST_REACH_REFUSAL.into());
         }
         if self.outpost_crew(tile).len() >= OUTPOST_CREW_CAP {
             return Err(format!(
@@ -856,7 +856,7 @@ impl Game {
             return Err("No outpost stands there.".into());
         }
         if !self.standing_at_outpost(tile) {
-            return Err("You need to be standing at the outpost to take its stock.".into());
+            return Err(crate::outposts::TAKE_REACH_REFUSAL.into());
         }
         let mut moved = Moved::new();
         for (item, want) in &basket.take {

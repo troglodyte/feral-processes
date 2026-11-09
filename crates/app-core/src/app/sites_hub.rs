@@ -6,6 +6,7 @@
 //! allow and refuse in those doors' own words.
 
 use crate::*;
+use feral_processes_engine::outposts::{POST_REACH_REFUSAL, TAKE_REACH_REFUSAL};
 use feral_processes_engine::sites::{SiteSection, TownGoods};
 
 pub const TOWN_TABS: &[HubTab] = &[
@@ -38,6 +39,12 @@ const SORTIES_TITLE: &str = "Sorties";
 pub(crate) const WALK_TO_TRADE: &str = "You'd have to walk over there to trade.";
 pub(crate) const WALK_TO_BOARD: &str = "You'd have to walk over there to read their board.";
 pub(crate) const NO_STANDING_ROUTE: &str = "There's no standing route there to cut.";
+/// Recalling crew and stopping a route are run from the base, or standing
+/// at the site itself — where `w` used to open before `b` held the sites.
+pub(crate) const RECALL_REACH_REFUSAL: &str =
+    "Recall crew from the base, or standing at the outpost.";
+pub(crate) const SEVER_REACH_REFUSAL: &str =
+    "Stop a route from the base, or standing at the place it runs to.";
 
 fn section_title(section: SiteSection) -> &'static str {
     match section {
@@ -115,10 +122,6 @@ pub fn sites_screen_keys(mode: Mode) -> &'static [(&'static str, &'static str)] 
         Mode::RoutesInFlight => &[("↑/↓", "select"), ("S", "stop repeating")],
         _ => &[],
     }
-}
-
-fn walk_over(name: &str, to: &str) -> String {
-    format!("Walk over to {name} {to}.")
 }
 
 impl App {
@@ -244,14 +247,10 @@ impl App {
         reach.is_some_and(|r| r.beside.is_some() && r.beside == self.held_site())
     }
 
-    fn held_site_name(&self) -> String {
-        let (Some(site), Some(game)) = (self.held_site(), self.game.as_ref()) else {
-            return String::new();
-        };
-        game.site_rail()
-            .into_iter()
-            .find(|entry| entry.site == site)
-            .map_or_else(String::new, |entry| entry.name)
+    /// At base, or beside `site` itself.
+    fn reaches_site(&self, site: RouteDestinationId) -> bool {
+        let reach = self.game.as_ref().map(|g| g.site_reach());
+        reach.is_some_and(|r| r.on_base || r.beside == Some(site))
     }
 
     pub(crate) fn handle_sites_key(&mut self, key: GameKey) {
@@ -297,8 +296,7 @@ impl App {
             }
             (Mode::SiteGoods, Some(RouteDestinationId::Settlement(k)), GameKey::Enter) => {
                 if !self.beside_held_site() {
-                    let line = walk_over(&self.held_site_name(), "to trade");
-                    self.refuse(line);
+                    self.refuse(WALK_TO_TRADE);
                     return;
                 }
                 self.pending_settlement = Some(k);
@@ -310,8 +308,7 @@ impl App {
             }
             (Mode::SiteJobs, Some(RouteDestinationId::Settlement(k)), GameKey::Enter) => {
                 if !self.beside_held_site() {
-                    let line = walk_over(&self.held_site_name(), "to read their board");
-                    self.refuse(line);
+                    self.refuse(WALK_TO_BOARD);
                     return;
                 }
                 self.pending_settlement = Some(k);
@@ -352,6 +349,10 @@ impl App {
                 self.open_outpost_name(t, true)
             }
             (Mode::OutpostCrew, Some(RouteDestinationId::Outpost(t)), GameKey::Char('U')) => {
+                if !self.reaches_site(RouteDestinationId::Outpost(t)) {
+                    self.refuse(RECALL_REACH_REFUSAL);
+                    return;
+                }
                 let Some(game) = &mut self.game else { return };
                 let Some(&entity) = game.outpost_crew(t).get(row) else {
                     self.refuse("Select a crew row to recall.");
@@ -376,8 +377,7 @@ impl App {
         match (self.mode, site, key) {
             (Mode::OutpostStock, Some(RouteDestinationId::Outpost(t)), GameKey::Char('C')) => {
                 if !self.beside_held_site() {
-                    let line = walk_over(&self.held_site_name(), "to take stock");
-                    self.refuse(line);
+                    self.refuse(TAKE_REACH_REFUSAL);
                     return;
                 }
                 let Some(game) = &mut self.game else { return };
@@ -439,6 +439,10 @@ impl App {
     }
 
     fn sever_from_hub(&mut self, site: RouteDestinationId) {
+        if !self.reaches_site(site) {
+            self.refuse(SEVER_REACH_REFUSAL);
+            return;
+        }
         let Some(game) = &mut self.game else { return };
         if game.sever_route(site) {
             self.status_line = None;
@@ -462,8 +466,7 @@ impl App {
 
     fn post_from_hub(&mut self, tile: (i32, i32)) {
         if !self.beside_held_site() {
-            let line = walk_over(&self.held_site_name(), "to post a program");
-            self.refuse(line);
+            self.refuse(POST_REACH_REFUSAL);
             return;
         }
         self.pending_outpost = Some(tile);

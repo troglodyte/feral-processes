@@ -22,6 +22,14 @@ use crate::tuning::{
 };
 use crate::world::Biome;
 
+/// What `Game::post_to_outpost` says away from the outpost; `b`'s Crew tab
+/// says it before opening the picker.
+pub const POST_REACH_REFUSAL: &str =
+    "You need to be standing at the outpost to post someone there.";
+/// What `Game::take_from_outpost` says away from the outpost; `b`'s Stock
+/// tab says it before opening the take.
+pub const TAKE_REACH_REFUSAL: &str = "You need to be standing at the outpost to take its stock.";
+
 /// One growth tier's yield table, keyed by the biome under the outpost.
 #[derive(Clone, Debug, Default, Deserialize)]
 pub struct OutpostTierDef {

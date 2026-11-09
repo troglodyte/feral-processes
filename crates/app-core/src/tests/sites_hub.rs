@@ -496,7 +496,7 @@ fn an_at_site_action_is_refused_on_another_sites_entry() {
     assert_eq!(app.mode, Mode::SiteGoods);
     assert_eq!(
         app.status_line.as_deref(),
-        Some("Walk over to Alder to trade.")
+        Some(crate::app::sites_hub::WALK_TO_TRADE)
     );
     assert_eq!(tick(&app), before);
 }
@@ -827,7 +827,7 @@ fn an_unvisited_town_refuses_its_beside_only_actions_from_the_base() {
     assert_eq!(app.mode, Mode::SiteGoods);
     assert_eq!(
         app.status_line.as_deref(),
-        Some("Walk over to Test Settlement to trade.")
+        Some(crate::app::sites_hub::WALK_TO_TRADE)
     );
 }
 
@@ -970,13 +970,13 @@ fn far_outpost() -> HubPageKey {
 #[test]
 fn goods_off_site_refuses_in_the_markets_words() {
     let line = refused_off_site(7160, site(TOWN_B), Mode::SiteGoods, GameKey::Enter);
-    assert_eq!(line, "Walk over to <site> to trade.");
+    assert_eq!(line, crate::app::sites_hub::WALK_TO_TRADE);
 }
 
 #[test]
 fn jobs_off_site_refuses_in_the_boards_words() {
     let line = refused_off_site(7161, site(TOWN_B), Mode::SiteJobs, GameKey::Enter);
-    assert_eq!(line, "Walk over to <site> to read their board.");
+    assert_eq!(line, crate::app::sites_hub::WALK_TO_BOARD);
 }
 
 #[test]
@@ -991,11 +991,48 @@ fn a_new_route_off_site_refuses_in_the_relays_words() {
 #[test]
 fn posting_off_site_refuses_in_the_posts_words() {
     let line = refused_off_site(7163, far_outpost(), Mode::OutpostCrew, GameKey::Char('P'));
-    assert_eq!(line, "Walk over to <site> to post a program.");
+    assert_eq!(line, feral_processes_engine::outposts::POST_REACH_REFUSAL);
 }
 
 #[test]
 fn taking_stock_off_site_refuses_in_the_takes_words() {
     let line = refused_off_site(7164, far_outpost(), Mode::OutpostStock, GameKey::Char('C'));
-    assert_eq!(line, "Walk over to <site> to take stock.");
+    assert_eq!(line, feral_processes_engine::outposts::TAKE_REACH_REFUSAL);
+}
+
+#[test]
+fn recalling_crew_off_site_refuses_in_plain_words() {
+    let line = refused_off_site(7165, far_outpost(), Mode::OutpostCrew, GameKey::Char('U'));
+    assert_eq!(line, crate::app::sites_hub::RECALL_REACH_REFUSAL);
+}
+
+/// A standing route sent from the base is not cut from out in the field,
+/// and it stays standing.
+#[test]
+fn stopping_a_route_off_site_refuses_and_keeps_it_standing() {
+    let mut app = app_with_far_sites(7166);
+    let sent = app.game.as_mut().unwrap().dispatch_route(
+        TOWN_A,
+        vec![(ItemId::from("cache_grain"), 3)],
+        true,
+    );
+    assert!(sent.is_ok(), "{sent:?}");
+    walk_far_from_the_base(&mut app);
+    for (page, tab) in [
+        (site(TOWN_A), Mode::SiteRoutes),
+        (HubPageKey::Named("Caravans"), Mode::RoutesInFlight),
+    ] {
+        app.handle_key(GameKey::Char('b'));
+        app.enter_hub_at(Hub::Base, page, tab);
+        app.hub_on_rail = false;
+        app.status_line = None;
+        app.handle_key(GameKey::Char('S'));
+        assert_eq!(
+            app.status_line.as_deref(),
+            Some(crate::app::sites_hub::SEVER_REACH_REFUSAL),
+            "{tab:?}"
+        );
+        let reports = app.game.as_ref().unwrap().route_reports();
+        assert!(reports[0].standing, "{tab:?} cut the route");
+    }
 }

@@ -1,7 +1,7 @@
 # 0045 Two hubs split by subject, and Tab switches tabs
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user
+- Status: Agreed
+- Decided by: user, on Claude's proposal (approved 2026-11-09)
 - Date: 2026-11-09
 - Pattern: Strategy (`app::hub::HubKind`), as reshaped by 0043
 - Depends on: [0043](0043-a-hub-rail-is-runtime-data-and-its-page-is-held.md), [0014](0014-per-screen-state-and-one-screen-table.md)

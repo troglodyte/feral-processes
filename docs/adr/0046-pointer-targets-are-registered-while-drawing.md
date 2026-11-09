@@ -1,7 +1,7 @@
 # 0046 Pointer targets are registered while drawing, and a hit is a key
 
-- Status: Proposed
-- Decided by: Claude — proposed, awaiting the user (the shared layer and migrating both existing users were the user's picks, 2026-11-09)
+- Status: Agreed
+- Decided by: user, on Claude's proposal (approved 2026-11-09; the shared layer and migrating both existing users were the user's picks)
 - Date: 2026-11-09
 - Pattern: Adapter (port), extending 0018; immediate-mode hit list
 - Depends on: [0018](0018-only-paint-names-a-graphics-library.md), [0045](0045-two-hubs-split-by-subject-and-tab-switches-tabs.md)

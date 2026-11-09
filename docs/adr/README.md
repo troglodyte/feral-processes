@@ -112,8 +112,8 @@ Do not duplicate between them; point instead.
 | [0042](0042-storylines-are-plain-rust-arcs-owned-by-game.md) | Storylines are plain Rust arcs owned by Game | Agreed | user, on Claude's proposal | Plain structs owned in one place; Functional core, imperative shell |
 | [0043](0043-a-hub-rail-is-runtime-data-and-its-page-is-held.md) | A hub's rail is runtime data and its page is held, not derived | Agreed | user, on Claude's proposal | Strategy (`HubKind`, reshaped) |
 | [0044](0044-a-bounty-is-a-rust-rolled-contract-that-owns-its-quarry.md) | A bounty is a Rust-rolled contract that owns its quarry | Agreed | user, on Claude's proposal | Plain structs owned in one place; Functional core, imperative shell; Tolerant reader |
-| [0045](0045-two-hubs-split-by-subject-and-tab-switches-tabs.md) | Two hubs split by subject, and Tab switches tabs | Proposed | Claude — proposed, awaiting the user | Strategy (`HubKind`) |
-| [0046](0046-pointer-targets-are-registered-while-drawing.md) | Pointer targets are registered while drawing, and a hit is a key | Proposed | Claude — proposed, awaiting the user | Adapter (port); Immediate-mode hit list (Proposed) |
+| [0045](0045-two-hubs-split-by-subject-and-tab-switches-tabs.md) | Two hubs split by subject, and Tab switches tabs | Agreed | user, on Claude's proposal | Strategy (`HubKind`) |
+| [0046](0046-pointer-targets-are-registered-while-drawing.md) | Pointer targets are registered while drawing, and a hit is a key | Agreed | user, on Claude's proposal | Adapter (port); Immediate-mode hit list |
 
 ## Pattern index
 
@@ -142,4 +142,4 @@ A pattern not listed here, or listed only as (Proposed), is not yet agreed: it n
 | Edge trigger (Proposed) | [0028](0028-announcements-fire-on-a-crossing.md) | `Outpost::announced` (latch form) |
 | Builder, parts compiled into a value | [0029](0029-player-routines-are-compiled-from-a-rust-part-catalogue.md) | none yet (proposed `routine_craft::compile`) |
 | Layered lookup (user over shipped, per name) | [0030](0030-player-sprites-override-shipped-art-per-name.md) | `crates/gui/src/sprite_layers.rs` |
-| Immediate-mode hit list (Proposed) | [0046](0046-pointer-targets-are-registered-while-drawing.md) | none yet (proposed `Painter::target`, `gui::pointer`) |
+| Immediate-mode hit list | [0046](0046-pointer-targets-are-registered-while-drawing.md) | none yet (proposed `Painter::target`, `gui::pointer`) |

@@ -1,7 +1,7 @@
 # Hub merge, named tabs and mouse — design
 
 **Date:** 2026-11-09 · **Branch:** `worktree-hub-merge-design`
-**ADRs:** [0045](../../adr/0045-two-hubs-split-by-subject-and-tab-switches-tabs.md) (hubs and nav), [0046](../../adr/0046-pointer-targets-are-registered-while-drawing.md) (pointer layer). Both are Proposed, and no code until they are Agreed.
+**ADRs:** [0045](../../adr/0045-two-hubs-split-by-subject-and-tab-switches-tabs.md) (hubs and nav), [0046](../../adr/0046-pointer-targets-are-registered-while-drawing.md) (pointer layer). Both Agreed (user, 2026-11-09).
 **Mockup:** https://claude.ai/artifact/C55zQrJ26S9kwVMaMGoDiX
 
 ## Intent

@@ -181,7 +181,7 @@ fn every_deploy_description_stays_inside_the_scrollable_body() {
         let rows = build_menu_rows(&entries, selected, shortfall);
         let last_item = rows
             .iter()
-            .rposition(|r| matches!(r, Row::Item { .. }))
+            .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(..)))
             .expect("a structure is an item row");
         assert_eq!(
             last_item,
@@ -286,7 +286,10 @@ fn no_deploy_row_overflows_its_popup_in_pixels() {
             .chain(prompt.iter())
         {
             let text = match row {
-                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t.clone(),
+                Row::Text(t)
+                | Row::TextColored(t, _)
+                | Row::Detail(t, _)
+                | Row::TextEntry { text: t, .. } => t.clone(),
                 // `draw_row`'s own prefix on an item row.
                 Row::Item { text, .. } => format!("     {text}"),
             };

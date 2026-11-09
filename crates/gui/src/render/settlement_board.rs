@@ -163,6 +163,7 @@ mod tests {
             .map(|r| match r {
                 Row::Text(t)
                 | Row::TextColored(t, _)
+                | Row::Detail(t, _)
                 | Row::TextEntry { text: t, .. }
                 | Row::Item { text: t, .. } => t.as_str(),
             })
@@ -231,7 +232,10 @@ mod tests {
             let mut measured = 0;
             for row in &rows {
                 let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, .. } => text,
                 };
                 measured += 1;

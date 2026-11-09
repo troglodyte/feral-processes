@@ -21,9 +21,9 @@ pub(super) fn recipe_rows(chains: &[RecipeChain], selected: usize) -> Vec<Row> {
     for (i, chain) in chains.iter().enumerate() {
         rows.push(colored_item_row(chain.product.clone(), i == selected, TEXT));
         for line in chain_rows(chain) {
-            rows.push(colored_item_row(line, false, TEXT_DIM));
+            rows.push(Row::Detail(line, TEXT_DIM));
         }
-        rows.push(colored_item_row("", false, TEXT_DIM));
+        rows.push(Row::Detail(String::new(), TEXT_DIM));
     }
     rows
 }

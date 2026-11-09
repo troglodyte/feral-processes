@@ -621,7 +621,9 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
                     vec![body(format!("  {t}"))],
                     suffix.map(|s| vec![dim(s)]).unwrap_or_default(),
                 ),
-                PopupRow::TextColored(t, _) => text(vec![dim(format!("  {t}"))]),
+                PopupRow::TextColored(t, _) | PopupRow::Detail(t, _) => {
+                    text(vec![dim(format!("  {t}"))])
+                }
                 PopupRow::Text(t) => text(vec![dim(format!("  {t}"))]),
                 PopupRow::TextEntry { text: t, .. } => text(vec![dim(format!("  {t}"))]),
             });

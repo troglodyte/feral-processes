@@ -286,9 +286,8 @@ pub(super) fn material_rows(materials: &[ResearchMaterial], columns: usize) -> V
     wrap_text(&line, columns)
         .into_iter()
         .map(|l| {
-            colored_item_row(
+            Row::Detail(
                 format!("{DESCRIPTION_INDENT}{l}"),
-                false,
                 if short { LOCKED_BY_PREREQ } else { TEXT_DIM },
             )
         })
@@ -304,14 +303,14 @@ pub(super) fn material_rows(materials: &[ResearchMaterial], columns: usize) -> V
 /// (the Research Data header), which is exactly what a conversion is about.
 /// It is not a state colour, so it cannot collide with `row_color`'s five.
 ///
-/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
-/// the last item row to the foot of the box, where it would be torn off the
+/// `Row::Detail`s, `material_rows`' reason: `popup_layout` pins anything
+/// after the body to the foot of the box, where it would be torn off the
 /// node it belongs to.
 pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row> {
     conversions
         .iter()
         .flat_map(|line| wrap_text(line, columns))
-        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, CYAN))
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), CYAN))
         .collect()
 }
 
@@ -324,13 +323,13 @@ pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row
 /// Cyan for `conversion_rows`' reason and the same meaning: it names the
 /// concrete thing the node buys, against the dim prose around it.
 ///
-/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
-/// the last item row to the foot of the box.
+/// `Row::Detail`s, `material_rows`' reason: `popup_layout` pins anything
+/// after the body to the foot of the box.
 pub(super) fn unlock_rows(unlocks: Option<&String>, columns: usize) -> Vec<Row> {
     unlocks
         .into_iter()
         .flat_map(|line| wrap_text(line, columns))
-        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, CYAN))
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), CYAN))
         .collect()
 }
 
@@ -387,19 +386,13 @@ pub(super) fn research_header(active: Option<&(String, u32, u32)>) -> String {
 /// wrapped, so this is the only place it fits. Amber, `row_color`'s reason: it
 /// is a wall the player clears by building what it names.
 ///
-/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
-/// the last item row to the foot of the box.
+/// `Row::Detail`s, `material_rows`' reason: `popup_layout` pins anything
+/// after the body to the foot of the box.
 pub(super) fn block_rows(blocked_by: Option<&String>, columns: usize) -> Vec<Row> {
     blocked_by
         .into_iter()
         .flat_map(|line| wrap_text(line, columns))
-        .map(|line| {
-            colored_item_row(
-                format!("{DESCRIPTION_INDENT}{line}"),
-                false,
-                LOCKED_BY_PREREQ,
-            )
-        })
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), LOCKED_BY_PREREQ))
         .collect()
 }
 
@@ -842,7 +835,7 @@ mod tests {
         let rows = research_menu_rows(&[node], 0, "Research Data", None, false, None);
         let at = |needle: &str| {
             rows.iter()
-                .position(|r| matches!(r, Row::Item { text, .. } if text.contains(needle)))
+                .position(|r| matches!(r, Row::Item { text, .. } | Row::Detail(text, _) if text.contains(needle)))
                 .unwrap_or_else(|| panic!("{needle:?} must reach the screen as a row"))
         };
 
@@ -852,7 +845,7 @@ mod tests {
             "the unlocks line leads both the prose and the conversions"
         );
         assert!(
-            matches!(&rows[unlocks], Row::Item { color, .. } if *color == CYAN),
+            matches!(&rows[unlocks], Row::Detail(_, color) if *color == CYAN),
             "cyan, the colour this screen already spends on what a node buys"
         );
     }
@@ -883,20 +876,20 @@ mod tests {
 
         let conversion = rows
             .iter()
-            .find(|r| matches!(r, Row::Item { text, .. } if text.contains("into Blank Substrate")))
+            .find(|r| matches!(r, Row::Detail(text, _) if text.contains("into Blank Substrate")))
             .expect("the conversion must reach the screen as a row of its own");
         assert!(
-            matches!(conversion, Row::Item { color, .. } if *color == CYAN),
+            matches!(conversion, Row::Detail(_, color) if *color == CYAN),
             "a conversion takes cyan so it is findable against the dim description"
         );
         let description = rows
             .iter()
-            .position(|r| matches!(r, Row::Item { text, .. } if text.contains("Blank media")))
+            .position(|r| matches!(r, Row::Detail(text, _) if text.contains("Blank media")))
             .expect("the description is still drawn");
         let position = rows
             .iter()
             .position(
-                |r| matches!(r, Row::Item { text, .. } if text.contains("into Blank Substrate")),
+                |r| matches!(r, Row::Detail(text, _) if text.contains("into Blank Substrate")),
             )
             .expect("found above");
         assert!(
@@ -1110,8 +1103,8 @@ mod tests {
             let m = ui_metrics(900.0);
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for row in &rows {
-                let Row::Item { text, .. } = row else {
-                    panic!("a block row is a Row::Item, popup_layout's reason");
+                let Row::Detail(text, _) = row else {
+                    panic!("a block row is a Row::Detail, popup_layout's reason");
                 };
                 // `draw_row`'s own two columns for the selection caret.
                 let drawn = p.measure_ui_advance(format!("  {text}"), m.font_size);
@@ -1186,7 +1179,9 @@ mod tests {
                     // of the drawn line as the text is.
                     let drawn_text = match row {
                         Row::Text(text) => text.clone(),
-                        Row::TextColored(text, _) | Row::TextEntry { text, .. } => text.clone(),
+                        Row::TextColored(text, _)
+                        | Row::Detail(text, _)
+                        | Row::TextEntry { text, .. } => text.clone(),
                         Row::Item { text, .. } => format!("  {text}"),
                     };
                     measured += 1;
@@ -1267,9 +1262,10 @@ mod tests {
         let texts: Vec<&str> = rows
             .iter()
             .map(|r| match r {
-                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
-                    t.as_str()
-                }
+                Row::Text(t)
+                | Row::TextColored(t, _)
+                | Row::Detail(t, _)
+                | Row::TextEntry { text: t, .. } => t.as_str(),
                 Row::Item { text, .. } => text.as_str(),
             })
             .collect();

@@ -247,8 +247,8 @@ mod tests {
         let rows: Vec<Row> = description_rows(long).collect();
         assert!(rows.len() > 1, "a paragraph this long is more than one row");
         for row in &rows {
-            let Row::Item { text, .. } = row else {
-                panic!("`description_rows` builds item rows");
+            let Row::Detail(text, _) = row else {
+                panic!("`description_rows` builds detail rows");
             };
             assert!(
                 text.chars().count() <= DESCRIBE_WRAP_COLUMNS,
@@ -278,7 +278,7 @@ mod tests {
             held_rows(std::slice::from_ref(contract), usize::MAX)
                 .into_iter()
                 .filter_map(|r| match r {
-                    Row::Item { text, .. } => Some(text),
+                    Row::Item { text, .. } | Row::Detail(text, _) => Some(text),
                     _ => None,
                 })
                 .collect()

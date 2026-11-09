@@ -7,7 +7,10 @@ use crate::render::test_pet;
 
 fn row_text(row: &Row) -> &str {
     match row {
-        Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+        Row::Text(t)
+        | Row::TextColored(t, _)
+        | Row::Detail(t, _)
+        | Row::TextEntry { text: t, .. } => t,
         Row::Item { text, .. } => text,
     }
 }
@@ -327,9 +330,10 @@ fn no_picker_row_overflows_its_popup_in_pixels() {
         for commit in &commits {
             for row in build_program_rows(Some(commit), &candidates, 0) {
                 let text = match &row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
-                        t.clone()
-                    }
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t.clone(),
                     // `draw_row`'s own prefix on an item row.
                     Row::Item { text, .. } => format!("     {text}"),
                 };

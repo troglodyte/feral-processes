@@ -114,7 +114,7 @@ pub(crate) fn build_menu_rows(
         // does not run into the next one's name; a heading brings its own.
         rows.push(blank_row());
         if let Some(heading) = heading {
-            rows.push(colored_item_row(heading, false, TEXT_DIM));
+            rows.push(Row::Detail(heading.to_string(), TEXT_DIM));
         }
         push_entry_rows(&mut rows, entry, i == selected, shortfall);
     }
@@ -122,10 +122,10 @@ pub(crate) fn build_menu_rows(
     rows
 }
 
-/// A `Row::Item` rather than `Row::Text`, for the reason `build_menu_rows`
-/// gives.
+/// A `Row::Detail` rather than `Row::Text`, for the reason `build_menu_rows`
+/// gives, and not a `Row::Item`, which would be a row the cursor counts.
 pub(super) fn blank_row() -> Row {
-    colored_item_row("", false, TEXT_DIM)
+    Row::Detail(String::new(), TEXT_DIM)
 }
 
 /// What both levels of the deploy menu open with.

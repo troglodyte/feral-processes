@@ -1058,7 +1058,10 @@ mod tests {
     /// here records).
     fn row_text(row: &Row) -> &str {
         match row {
-            Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+            Row::Text(t)
+            | Row::TextColored(t, _)
+            | Row::Detail(t, _)
+            | Row::TextEntry { text: t, .. } => t,
             Row::Item { text, .. } => text,
         }
     }

@@ -341,7 +341,10 @@ mod tests {
         let text = |rows: Vec<Row>| -> Vec<String> {
             rows.into_iter()
                 .map(|row| match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, suffix, .. } => {
                         format!("{text}|{}", suffix.unwrap_or_default())
                     }

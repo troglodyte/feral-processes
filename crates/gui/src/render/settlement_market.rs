@@ -291,7 +291,10 @@ mod tests {
         let text = |rows: Vec<Row>| -> Vec<String> {
             rows.into_iter()
                 .map(|row| match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, suffix, .. } => {
                         format!("{text}|{}", suffix.unwrap_or_default())
                     }
@@ -379,9 +382,10 @@ mod tests {
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for row in &rows {
                 let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
-                        t.clone()
-                    }
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t.clone(),
                     Row::Item {
                         text, tag, suffix, ..
                     } => {
@@ -449,7 +453,10 @@ mod tests {
         let joined = rows
             .iter()
             .map(|row| match row {
-                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t.clone(),
+                Row::Text(t)
+                | Row::TextColored(t, _)
+                | Row::Detail(t, _)
+                | Row::TextEntry { text: t, .. } => t.clone(),
                 Row::Item { text, .. } => text.clone(),
             })
             .collect::<Vec<_>>()

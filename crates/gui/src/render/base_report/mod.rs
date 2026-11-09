@@ -197,7 +197,7 @@ pub(super) fn draw_popup_parent(parent: Option<&HubFrame>, painter: &Painter, m:
 
 /// The rows of one hub screen. Every figure comes from the engine; this only
 /// formats.
-fn screen_rows(
+pub(super) fn screen_rows(
     game: &mut Game,
     mode: Mode,
     selected: usize,
@@ -298,7 +298,10 @@ pub(in crate::render) mod fit {
 
     pub(super) fn text_of(row: &Row) -> &str {
         match row {
-            Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+            Row::Text(t)
+            | Row::TextColored(t, _)
+            | Row::Detail(t, _)
+            | Row::TextEntry { text: t, .. } => t,
             Row::Item { text, .. } => text,
         }
     }

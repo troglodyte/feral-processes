@@ -39,6 +39,15 @@ pub(super) enum Row {
         /// copy was compiled, which nothing else on the row can say.
         tag: Option<ItemTag>,
     },
+    /// A line that belongs to the entry above it — an authored description
+    /// or a hint — drawn dim under that entry's text. Never selectable, so
+    /// `Row::Item` ordinals stay the handler's indices, but part of the
+    /// scrolling body: `page_rows` ends the body at the last `Item` or
+    /// `Detail`, so the last entry keeps its prose. The text is the
+    /// entry's, unprefixed; the row lines up under an unselected item. The
+    /// colour is the line's own (dim prose, or cyan for what a research
+    /// node buys).
+    Detail(String, Color),
     /// A text field being typed into, with a blinking bar before byte
     /// `caret` of `text`. The bar is painted over the text rather than
     /// spliced into it, so the text does not shift as it blinks.
@@ -706,7 +715,9 @@ fn popup_layout<'a>(
 /// rect both call it, so they cannot scroll differently.
 fn page_rows<'a>(rows: &'a [Row], rows_shown: usize, status: usize, h: f32) -> PopupLayout<'a> {
     let first_item = rows.iter().position(|r| matches!(r, Row::Item { .. }));
-    let last_item = rows.iter().rposition(|r| matches!(r, Row::Item { .. }));
+    let last_item = rows
+        .iter()
+        .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(_, _)));
     let (header, body, footer): (&[Row], &[Row], &[Row]) = match (first_item, last_item) {
         (Some(first), Some(last)) => (&rows[..first], &rows[first..=last], &rows[last + 1..]),
         _ => (rows, &[], &[]),
@@ -978,6 +989,7 @@ pub(super) const fn row_prefix(selected: bool) -> &'static str {
 pub(super) fn row_label_text(row: &Row) -> String {
     match row {
         Row::Text(s) | Row::TextColored(s, _) | Row::TextEntry { text: s, .. } => s.clone(),
+        Row::Detail(s, _) => format!("{}{s}", row_prefix(false)),
         Row::Item {
             text,
             selected,
@@ -1065,6 +1077,9 @@ pub(super) fn draw_row(
         }
         Row::TextColored(s, color) => {
             painter.ui(s, x + m.pad, cy, m.font_size, *color);
+        }
+        Row::Detail(_, color) => {
+            painter.ui(row_label_text(row), x + m.pad, cy, m.font_size, *color);
         }
         Row::TextEntry { text, caret } => {
             painter.ui(text, x + m.pad, cy, m.font_size, TEXT);
@@ -1282,11 +1297,10 @@ pub(super) fn continuation_lines_within(text: &str, columns: usize) -> Vec<Strin
 /// indent.
 pub(super) const DESCRIPTION_INDENT: &str = "";
 
-/// Whether `row` came out of `description_rows`: an unselected `Item` in the
-/// dim prose colour.
+/// Whether `row` came out of `description_rows`.
 #[cfg(test)]
 pub(super) fn is_description_row(row: &Row) -> bool {
-    matches!(row, Row::Item { color, selected: false, .. } if *color == TEXT_DIM)
+    matches!(row, Row::Detail(_, color) if *color == TEXT_DIM)
 }
 
 /// One entry's authored description, wrapped to the popup and indented under
@@ -1305,10 +1319,11 @@ pub(super) fn is_description_row(row: &Row) -> bool {
 /// screen wraps a product's description to, so no two screens can disagree
 /// about how wide the game's prose runs.
 ///
-/// The lines stay `Row::Item`, which `perks_menu_rows` and `build_menu_rows`
-/// both document as load-bearing: `popup_layout` cuts the scrollable body at
-/// the last `Row::Item`, so a description made of `Row::Text` is torn off the
-/// entry it describes and pinned to the foot of the box.
+/// The lines are `Row::Detail`, not `Row::Text`: `popup_layout` cuts the
+/// scrollable body at the last `Row::Item` or `Row::Detail`, so a
+/// description made of `Row::Text` is torn off the entry it describes and
+/// pinned to the foot of the box. Not `Row::Item` either, which would count
+/// as a row the handler can select.
 pub(super) fn description_rows(description: &str) -> impl Iterator<Item = Row> + '_ {
     description_rows_at(
         description,
@@ -1324,7 +1339,7 @@ pub(super) fn description_rows_at(
 ) -> impl Iterator<Item = Row> + '_ {
     wrap_text(description, columns)
         .into_iter()
-        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, TEXT_DIM))
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), TEXT_DIM))
 }
 
 /// A menu row wrapped onto indented continuation lines at its own segment
@@ -1428,8 +1443,8 @@ mod tests {
     fn detail_and_description_start_under_the_row_name() {
         let lines = continuation_lines("detail");
         assert_eq!(lines[0], format!("{ICON_SLOT}detail"));
-        let Some(Row::Item { text, .. }) = description_rows("prose").next() else {
-            panic!("a description is an item row");
+        let Some(Row::Detail(text, _)) = description_rows("prose").next() else {
+            panic!("a description is a detail row");
         };
         assert_eq!(text, "prose", "no icon, so no indent past the prefix");
     }

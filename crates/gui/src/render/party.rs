@@ -1372,7 +1372,10 @@ mod tests {
     fn joined(rows: &[Row]) -> String {
         rows.iter()
             .map(|r| match r {
-                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t.clone(),
+                Row::Text(t)
+                | Row::TextColored(t, _)
+                | Row::Detail(t, _)
+                | Row::TextEntry { text: t, .. } => t.clone(),
                 Row::Item { text, .. } => text.clone(),
             })
             .collect::<Vec<_>>()
@@ -1676,7 +1679,10 @@ mod tests {
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for row in &rows {
                 let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, .. } => text,
                 };
                 let drawn = p.measure_ui_advance(line, m.font_size);

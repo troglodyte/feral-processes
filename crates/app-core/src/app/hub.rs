@@ -396,6 +396,11 @@ impl App {
                     .is_some_and(|s| s.confirm.is_some())
                     || self.quit_unsaved_pending
             }
+            // A manifest shown as a hub tab walks its faces with the arrows
+            // (`step_manifest_face`); off its first face Left is still its
+            // own, and from the first it goes to the rail.
+            GameKey::Right if self.mode == Mode::Manifest => true,
+            GameKey::Left if self.mode == Mode::Manifest => self.manifest_tab != ManifestTab::Stats,
             // A page with a filter keeps the braces for it.
             GameKey::Char('{' | '}') => self.filter_applied(),
             // A level row spends Left on the level; a toggle's Left still

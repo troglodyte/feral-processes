@@ -305,8 +305,15 @@ impl App {
             self.open_manifest_memories();
             return;
         }
-        if key == GameKey::Tab {
+        // Off a hub the sheet owns Tab; on one the hub does, and the arrows
+        // walk the faces instead.
+        let in_hub = self.hub_at().is_some();
+        if key == GameKey::Tab && !in_hub {
             self.toggle_manifest_tab();
+            return;
+        }
+        if in_hub && matches!(key, GameKey::Left | GameKey::Right) {
+            self.step_manifest_face(if key == GameKey::Right { 1 } else { -1 });
             return;
         }
         if self.manifest_tab == ManifestTab::Stats {
@@ -393,21 +400,39 @@ impl App {
     /// SCORE face; on anyone else the key is
     /// not bound, so the tab can never be left pointing at nothing.
     fn toggle_manifest_tab(&mut self) {
+        let faces = self.manifest_faces();
+        let at = faces.iter().position(|&f| f == self.manifest_tab);
+        self.manifest_tab = faces[at.map_or(0, |i| (i + 1) % faces.len())];
+    }
+
+    /// The faces the sheet has, in order: an owned program's Stats, Social
+    /// and Talk, the player's Stats and Score, and Stats alone for anyone
+    /// else.
+    fn manifest_faces(&self) -> Vec<ManifestTab> {
         let owned = self
             .pending_manifest
             .is_some_and(|e| self.game.as_ref().is_some_and(|g| g.is_owned_program(e)));
         if owned {
-            self.manifest_tab = match self.manifest_tab {
-                ManifestTab::Stats => ManifestTab::Social,
-                ManifestTab::Social => ManifestTab::Talk,
-                ManifestTab::Talk | ManifestTab::Score => ManifestTab::Stats,
-            };
+            vec![ManifestTab::Stats, ManifestTab::Social, ManifestTab::Talk]
         } else if self.manifest_is_own() {
-            self.manifest_tab = match self.manifest_tab {
-                ManifestTab::Score => ManifestTab::Stats,
-                _ => ManifestTab::Score,
-            };
+            vec![ManifestTab::Stats, ManifestTab::Score]
+        } else {
+            vec![ManifestTab::Stats]
         }
+    }
+
+    /// Inside a hub the sheet's faces are the page's own cursor, so
+    /// `Tab` is the hub's and `→` steps toward the last face, stopping
+    /// there; `←` steps back and, off the first face, is the hub's and
+    /// returns to the rail (`App::screen_claims`).
+    pub(crate) fn step_manifest_face(&mut self, step: isize) {
+        let faces = self.manifest_faces();
+        let at = faces
+            .iter()
+            .position(|&f| f == self.manifest_tab)
+            .unwrap_or(0);
+        let to = (at as isize + step).clamp(0, faces.len() as isize - 1);
+        self.manifest_tab = faces[to as usize];
     }
 
     /// The sheet's program, when it is one with points to hold and spend: a

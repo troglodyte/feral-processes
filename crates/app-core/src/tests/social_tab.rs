@@ -153,3 +153,28 @@ fn paging_from_the_social_face_to_the_player_falls_back_to_stats() {
     assert_eq!(app.pending_manifest, Some(me), "paging reaches the player");
     assert_eq!(app.manifest_tab, ManifestTab::Stats);
 }
+
+#[test]
+fn the_map_manifest_is_off_every_hub_so_it_keeps_tab() {
+    let (mut app, a, _) = owned_pair(7410);
+    open(&mut app, a);
+    assert_eq!(app.hub_at(), None);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+}
+
+/// The arrows' job when the manifest is a hub tab (phase 3 puts it on a
+/// page): step toward the last face and stop, never wrap.
+#[test]
+fn stepping_faces_stops_at_both_ends() {
+    let (mut app, a, _) = owned_pair(7411);
+    open(&mut app, a);
+    app.step_manifest_face(-1);
+    assert_eq!(app.manifest_tab, ManifestTab::Stats);
+    for want in [ManifestTab::Social, ManifestTab::Talk, ManifestTab::Talk] {
+        app.step_manifest_face(1);
+        assert_eq!(app.manifest_tab, want);
+    }
+    app.step_manifest_face(-1);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+}

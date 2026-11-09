@@ -1,7 +1,7 @@
 use super::*;
 
 /// Every `Mode`, as the status-line census below drives them.
-const ALL_MODES: [Mode; 181] = [
+const ALL_MODES: [Mode; 182] = [
     Mode::Dossier,
     Mode::TacticalBattle,
     Mode::TacticalRoutine,
@@ -78,6 +78,7 @@ const ALL_MODES: [Mode; 181] = [
     Mode::DownedPrograms,
     Mode::Tools,
     Mode::Companion,
+    Mode::PartyMember,
     Mode::CompanionEquip,
     Mode::CompanionMemories,
     Mode::Fuse,
@@ -195,7 +196,9 @@ pub(super) const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
 /// Each draws nothing at all here, so the census can say where a refusal
 /// must *not* appear on them but not where it must. Their `draw_popup`
 /// calls are threaded the same way every other one is.
-const NEEDS_PENDING_STATE: [Mode; 41] = [
+const NEEDS_PENDING_STATE: [Mode; 42] = [
+    // A member's page needs a held member, which a fresh run has not got.
+    Mode::PartyMember,
     // The Sites tabs are shared by every site, so `settle_hub` cannot adopt
     // one without a held key; `sites::every_sites_tab_draws_a_refusal_once`
     // drives them held instead.

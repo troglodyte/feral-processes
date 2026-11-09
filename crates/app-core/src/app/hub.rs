@@ -23,6 +23,8 @@ pub enum HubPageKey {
     Named(&'static str),
     /// A site on `b`'s rail.
     Site(RouteDestinationId),
+    /// A party member on `i`'s rail.
+    Member(Entity),
 }
 
 /// One tab of a page: the name the title row draws and the screen it shows.
@@ -106,9 +108,17 @@ pub trait HubKind: Sync {
         true
     }
 
-    /// Shows page `page`, on its first screen.
-    fn turn(&self, app: &mut App, page: usize) {
-        app.mode = self.pages(app)[page].tabs[0].mode;
+    /// The tab a turn to `page` opens on: its first, unless the hub says
+    /// entries carry the tab being shown over to one that has it.
+    fn entry_tab(&self, _app: &App, _page: &HubPage) -> usize {
+        0
+    }
+
+    /// Shows `tab` of `page`: the screen, and whatever that screen needs
+    /// set up on `App` before it draws (a structure's page opens for that
+    /// structure, a member's for that member).
+    fn show_tab(&self, app: &mut App, page: &HubPage, tab: usize) {
+        app.mode = page.tabs[tab].mode;
     }
 
     /// `Esc` on the rail.
@@ -288,7 +298,7 @@ impl App {
                     hub,
                     key: first.key.clone(),
                 });
-                kind.turn(self, 0);
+                kind.show_tab(self, first, 0);
             }
         }
         self.hub_on_rail = true;
@@ -303,13 +313,18 @@ impl App {
 
     fn turn_hub_to_index(&mut self, hub: Hub, page: usize) {
         let kind = hub.kind();
-        let Some(key) = kind.pages(self).get(page).map(|p| p.key.clone()) else {
+        let pages = kind.pages(self);
+        let Some(to) = pages.get(page) else {
             return;
         };
         // Held before the turn: a turn that closes the hub is then cleared
         // by `settle_hub` rather than left naming a page it never showed.
-        self.hub_place = Some(HubPlace { hub, key });
-        kind.turn(self, page);
+        self.hub_place = Some(HubPlace {
+            hub,
+            key: to.key.clone(),
+        });
+        let tab = kind.entry_tab(self, to);
+        kind.show_tab(self, to, tab);
     }
 
     /// The explicit door (ADR 0043): holds `key` in `hub` and shows `mode`,
@@ -435,9 +450,11 @@ impl App {
                     self.turn_hub_to_index(hub, to);
                 }
             }
-            GameKey::Tab if !self.screen_claims(key) => self.step_hub_tab(&pages[page], tab, 1),
+            GameKey::Tab if !self.screen_claims(key) => {
+                self.step_hub_tab(hub, &pages[page], tab, 1)
+            }
             GameKey::ShiftTab if !self.screen_claims(key) => {
-                self.step_hub_tab(&pages[page], tab, -1)
+                self.step_hub_tab(hub, &pages[page], tab, -1)
             }
             _ if self.hub_on_rail => match key {
                 GameKey::Down => self.turn_hub_to_index(hub, next),
@@ -456,9 +473,9 @@ impl App {
     /// Shows the tab `step` along from `tab` on `page`, wrapping. A page
     /// with one tab has nowhere to go, and the key is still the hub's: a
     /// `Tab` that fell through would be a second meaning on that page.
-    fn step_hub_tab(&mut self, page: &HubPage, tab: usize, step: isize) {
+    fn step_hub_tab(&mut self, hub: Hub, page: &HubPage, tab: usize, step: isize) {
         let to = (tab as isize + step).rem_euclid(page.tabs.len() as isize) as usize;
-        self.mode = page.tabs[to].mode;
+        hub.kind().show_tab(self, page, to);
     }
 
     /// Whether the page wants `key` before the hub's own rule does: a key

@@ -200,8 +200,13 @@ impl HubKind for StructureHubKind {
         false
     }
 
-    fn turn(&self, app: &mut App, page: usize) {
-        app.enter_structure_page(page);
+    fn show_tab(&self, app: &mut App, page: &HubPage, _tab: usize) {
+        let at = self
+            .pages(app)
+            .iter()
+            .position(|p| p.key == page.key)
+            .unwrap_or(0);
+        app.enter_structure_page(at);
     }
 
     fn leave(&self, app: &mut App) {

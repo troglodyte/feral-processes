@@ -2286,6 +2286,11 @@ pub enum Mode {
     /// routine errands, drawn from `App::command_rows` like the base's.
     PartyPrograms,
     PartyRoutines,
+    /// One party member's page on the inventory rail: their roster row's
+    /// facts and the keys that act on them (`P`, `< >`, `N`, `E`, `U`, `M`,
+    /// `R`), through the same handler the roster uses. The member is the
+    /// held page's key (`HubPageKey::Member`), not the highlight.
+    PartyMember,
     /// The Staff page's first screen: every staff program, worst morale
     /// first, with its mood, health, needs and what it is doing — see
     /// `Game::staff_wellbeing`. Scrolls by cursor. `Enter` is unbound: the
@@ -2616,6 +2621,7 @@ impl Mode {
             | Mode::DownedPrograms
             | Mode::Tools
             | Mode::Companion
+            | Mode::PartyMember
             | Mode::CompanionEquip
             | Mode::CompanionMemories
             | Mode::Dossier

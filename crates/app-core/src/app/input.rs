@@ -354,6 +354,7 @@ impl App {
             Mode::DownedPrograms => self.handle_downed_programs_key(key),
             Mode::Tools => self.handle_tools_key(key),
             Mode::Companion => self.handle_companion_key(key),
+            Mode::PartyMember => self.handle_party_member_key(key),
             Mode::CompanionEquip => self.handle_companion_equip_key(key),
             Mode::CompanionMemories => self.handle_companion_memories_key(key),
             Mode::Dossier => self.handle_dossier_key(key),

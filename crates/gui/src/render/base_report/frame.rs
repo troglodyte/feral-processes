@@ -439,7 +439,7 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
             keycap("I", "inspect"),
             keycap("D", "downed"),
         ],
-        Mode::Companion => party::ROSTER_KEYS
+        Mode::Companion | Mode::PartyMember => party::ROSTER_KEYS
             .iter()
             .map(|(key, verb)| keycap(key, verb))
             .collect(),

@@ -368,3 +368,81 @@ fn i_reopening_on_perks_refreshes_the_previews() {
         .collect();
     assert_eq!(app.perk_previews, fresh);
 }
+
+// ----- PARTY: one entry per member -----
+
+/// A run owning `count` programs, every one of them stood in the party.
+fn app_with_a_party(seed: u32, count: i32) -> App {
+    let mut app = app_owning_distant_programs(seed, count);
+    let game = app.game.as_mut().unwrap();
+    for pet in game.owned_pets() {
+        game.add_companion(pet.entity).expect("room in the party");
+    }
+    app
+}
+
+fn member_entities(app: &mut App) -> Vec<Entity> {
+    let mut pets = app.game.as_mut().unwrap().owned_pets();
+    pets.retain(|p| p.party_slot.is_some());
+    pets.sort_by_key(|p| p.party_slot);
+    pets.into_iter().map(|p| p.entity).collect()
+}
+
+#[test]
+fn party_has_one_entry_per_member_between_you_and_programs() {
+    let mut app = app_with_a_party(31030, 2);
+    let members = member_entities(&mut app);
+    assert_eq!(members.len(), 2);
+    let pages = Hub::Inventory.kind().pages(&app);
+    let titles: Vec<_> = pages.iter().map(|p| p.title.as_str()).collect();
+    assert_eq!(titles[0], "You");
+    assert_eq!(&titles[3..], ["Roster", "Downed"]);
+    assert_eq!(pages[1].section, Some("PARTY"));
+    assert_eq!(pages[2].section, None);
+    assert_eq!(pages[3].section, Some("PROGRAMS"));
+    for (page, member) in pages[1..3].iter().zip(&members) {
+        assert_eq!(page.key, HubPageKey::Member(*member));
+        assert_eq!(page.modes().collect::<Vec<_>>(), [Mode::PartyMember]);
+    }
+}
+
+#[test]
+fn a_member_page_acts_on_its_own_member_whatever_the_roster_row_was() {
+    let mut app = app_with_a_party(31031, 2);
+    let members = member_entities(&mut app);
+    app.handle_key(GameKey::Char('i'));
+    press(&mut app, &[GameKey::Char(']'), GameKey::Char(']')]);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Member(members[1])));
+    app.handle_key(GameKey::Right);
+    assert_in_page(&app, Mode::PartyMember);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('E'));
+    assert_eq!(app.mode, Mode::CompanionEquip);
+    assert_eq!(app.pending_equip_program, Some(members[1]));
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::PartyMember);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Member(members[1])));
+}
+
+#[test]
+fn a_member_who_leaves_the_party_takes_their_entry_with_them() {
+    let mut app = app_with_a_party(31032, 2);
+    let members = member_entities(&mut app);
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Member(members[0])));
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('P'));
+    let pages = Hub::Inventory.kind().pages(&app);
+    assert!(
+        pages
+            .iter()
+            .all(|p| p.key != HubPageKey::Member(members[0]))
+    );
+    assert_eq!(
+        app.hub_page(),
+        Some(&HubPageKey::Member(members[1])),
+        "the hold moves to the next member"
+    );
+    assert_eq!(app.mode, Mode::PartyMember);
+}

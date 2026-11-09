@@ -578,7 +578,7 @@ impl App {
                 if let Some(row) = self.roster_row_of(self.pending_manifest) {
                     self.menu_selected = row;
                 }
-                self.mode = Mode::Companion;
+                self.mode = self.roster_mode();
             }
         }
     }

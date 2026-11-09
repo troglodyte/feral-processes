@@ -20,6 +20,12 @@ pub const ROSTER_TABS: &[HubTab] = &[
     HubTab::new("Errands", Mode::PartyPrograms),
 ];
 
+/// A party member's tabs. One: the equipment, memories and manifest are
+/// popups over the hub (`draw_popup`, and the swap picker's chain returns to
+/// whoever opened it), so they stay keys on this tab.
+pub const MEMBER_TABS: &[HubTab] = &[HubTab::new("Overview", Mode::PartyMember)];
+
+pub const PARTY_SECTION: &str = "PARTY";
 pub const YOU_SECTION: &str = "YOU";
 pub const PROGRAMS_SECTION: &str = "PROGRAMS";
 
@@ -49,21 +55,52 @@ impl HubKind for InventoryHub {
         "INVENTORY"
     }
 
-    fn pages(&self, _app: &App) -> Vec<HubPage> {
+    fn pages(&self, app: &App) -> Vec<HubPage> {
         let [you, roster, downed] = INVENTORY_PAGES else {
             unreachable!("the fixed table is three entries")
         };
-        vec![
-            HubPage {
-                section: Some(YOU_SECTION),
-                ..you.page()
-            },
-            HubPage {
-                section: Some(PROGRAMS_SECTION),
-                ..roster.page()
-            },
-            downed.page(),
-        ]
+        let mut pages = vec![HubPage {
+            section: Some(YOU_SECTION),
+            ..you.page()
+        }];
+        let members = app
+            .game
+            .as_ref()
+            .map(|g| g.party_info())
+            .unwrap_or_default();
+        for (i, member) in members.into_iter().enumerate() {
+            pages.push(HubPage {
+                key: HubPageKey::Member(member.entity),
+                title: member.name,
+                glyph: None,
+                section: (i == 0).then_some(PARTY_SECTION),
+                tabs: MEMBER_TABS,
+                marked: false,
+                name_cut_at_end: true,
+            });
+        }
+        pages.push(HubPage {
+            section: Some(PROGRAMS_SECTION),
+            ..roster.page()
+        });
+        pages.push(downed.page());
+        pages
+    }
+
+    /// Entries that do not share a tab list keep the tab being shown when
+    /// the new entry has it, so turning along BESIDE YOU stays on Info.
+    fn entry_tab(&self, app: &App, page: &HubPage) -> usize {
+        page.tabs
+            .iter()
+            .position(|t| t.mode == app.mode)
+            .unwrap_or(0)
+    }
+
+    fn show_tab(&self, app: &mut App, page: &HubPage, tab: usize) {
+        app.mode = page.tabs[tab].mode;
+        if let HubPageKey::Member(member) = page.key {
+            app.select_member(member);
+        }
     }
 
     /// Enter or Right on the Manifests rail entry opens the sheet itself,

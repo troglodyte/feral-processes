@@ -77,6 +77,7 @@ fn tab_rows(app: &mut App) -> Option<Vec<Row>> {
         mode => {
             let screens = AppScreens {
                 site,
+                member: None,
                 list_filter: "",
                 commands: commands.as_deref(),
                 command_counts: &command_counts,

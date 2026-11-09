@@ -1052,6 +1052,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let site = app.held_site();
     let app_screens = base_report::AppScreens {
         site,
+        member: app.held_member(),
         list_filter: &list_filter,
         commands: commands.as_deref(),
         command_counts: &command_counts,

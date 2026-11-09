@@ -424,6 +424,24 @@ pub(super) fn roster_rows(game: &mut Game, selected: usize) -> Vec<Row> {
     rows
 }
 
+/// A member's page: their roster row and its continuation lines as plain
+/// text, since nothing on the page is picked (the member is the page's key,
+/// not a highlight, so an `Item` here would claim an ordinal the cursor
+/// never has).
+pub(super) fn member_rows(game: &mut Game, member: Option<Entity>) -> Vec<Row> {
+    let pets = game.owned_pets();
+    let Some(pet) = pets.iter().find(|p| Some(p.entity) == member) else {
+        return vec![text_row("That program is gone.")];
+    };
+    companion_rows(pet, false, &[], HUB_WRAP_COLUMNS)
+        .into_iter()
+        .map(|row| match row {
+            Row::Item { text, color, .. } => Row::TextColored(text, color),
+            other => other,
+        })
+        .collect()
+}
+
 /// Formats one fuse-candidate row with the full stat line a fusion
 /// decision depends on.
 fn fuse_candidate_label(p: &PetInfo) -> String {

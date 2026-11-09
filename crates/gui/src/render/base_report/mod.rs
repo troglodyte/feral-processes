@@ -47,6 +47,8 @@ pub(super) struct AppScreens<'a> {
     pub(super) list_filter: &'a str,
     /// `App::held_site`: the site the Sites tabs are about.
     pub(super) site: Option<RouteDestinationId>,
+    /// `App::held_member`: the party member a member page is about.
+    pub(super) member: Option<Entity>,
 }
 
 /// Where a mode sits in its hub and what the frame says about it, taken off
@@ -241,6 +243,7 @@ pub(super) fn screen_rows(
         Mode::DownedPrograms => extraction::downed_program_list_rows(game, selected),
         Mode::Tools => tools::tools_rows(game, selected),
         Mode::Companion => party::roster_rows(game, selected),
+        Mode::PartyMember => party::member_rows(game, app_screens.member),
         Mode::ManifestIntro => party::manifest_intro_rows(),
         Mode::Perks => progression::perks_rows(game, app_screens.perk_previews, selected),
         Mode::SiteStatus

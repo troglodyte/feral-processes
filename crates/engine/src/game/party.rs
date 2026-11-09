@@ -726,7 +726,7 @@ impl Game {
 
     /// Snapshot of every current party member (see `resources::Party`), in
     /// party-slot order.
-    pub(crate) fn party_info(&self) -> Vec<CompanionInfo> {
+    pub fn party_info(&self) -> Vec<CompanionInfo> {
         self.world
             .resource::<Party>()
             .0

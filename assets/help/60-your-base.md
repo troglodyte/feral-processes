@@ -119,7 +119,7 @@ Work orders page of the base report (b, then down the rail to Work orders and Ri
 another, and Backspace drops the highlighted one. Orders and the duty table are edited from the base itself,
 not from out on the open grid, and the rail marks the page with a ! while an order is stalled.
 
-The Staffing page of the base report opens a table, one row per program and one column per kind of
+The Duties page of the base report opens a table, one row per program and one column per kind of
 job — Operate, Guard, Dig, Build. Space unchecks or rechecks the highlighted cell, [A] does the
 whole column at once, and an unchecked column is a program that will never be handed that kind of
 job, however short-handed the base gets; leave every box checked (the default for a program you
@@ -128,6 +128,11 @@ who the scheduler tries first when more than one program could take the same job
 override the priority above, so a Guard-only program still waits behind a build request it cannot
 help with anyway. Once a Drop Pod Terminal stands the table grows a POD column
 too; see [drop pods](drop-pods).
+
+The Staffing page, next on the rail, lists every structure a program can work: machines,
+resource nodes, Teardown Rigs and Holding Cells, with a production line as one row. Enter on a row
+sets it to be kept running, so a program stands on it whenever no order needs one elsewhere, or, from
+the next tile, works it yourself. Walls, doors and the Home take no worker and are not listed.
 
 The rest of what a base does:
 

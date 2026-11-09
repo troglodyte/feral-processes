@@ -16,7 +16,7 @@ fn page_modes() -> Vec<Mode> {
 }
 
 #[test]
-fn the_rail_runs_all_thirteen_pages_in_order() {
+fn the_rail_runs_all_fourteen_pages_in_order() {
     assert_eq!(
         page_modes(),
         vec![
@@ -31,14 +31,15 @@ fn the_rail_runs_all_thirteen_pages_in_order() {
             Mode::BaseStock,
             Mode::WorkOrders,
             Mode::BaseStaff,
+            Mode::Structures,
             Mode::BuildOrders,
             Mode::Alerts
         ]
     );
     assert_eq!(hub_of(Mode::BaseOutput), Some((Hub::Base, 7, 0)));
     assert_eq!(hub_of(Mode::BasePower), Some((Hub::Base, 7, 2)));
-    assert_eq!(hub_of(Mode::Structures), Some((Hub::Base, 10, 1)));
-    assert_eq!(hub_of(Mode::FloorOrders), Some((Hub::Base, 11, 2)));
+    assert_eq!(hub_of(Mode::Structures), Some((Hub::Base, 11, 0)));
+    assert_eq!(hub_of(Mode::FloorOrders), Some((Hub::Base, 12, 2)));
     assert_eq!(hub_of(Mode::WorkOrderPick), None);
     assert_eq!(hub_of(Mode::WorkOrderQuantity), None);
     assert_eq!(hub_of(Mode::StructureAssign), None);
@@ -326,7 +327,6 @@ fn page_keys_inside_a_work_order_popup_do_not_change_page() {
 fn page_keys_inside_the_staffing_popup_do_not_change_page() {
     let mut app = app_inside_a_small_base_with_programs(30021, false, 1);
     open_hub_screen(&mut app, Mode::Structures);
-    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign);
 
@@ -340,7 +340,7 @@ fn page_keys_inside_the_staffing_popup_do_not_change_page() {
     }
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Structures, "Esc returns to the roster");
-    assert_eq!(app.menu_selected, 1, "on the row that was staffed");
+    assert_eq!(app.menu_selected, 0, "on the row that was staffed");
 }
 
 #[test]
@@ -465,8 +465,10 @@ fn stepping_back_into_the_duty_table_resets_its_column_cursor() {
     );
     assert_eq!(app.mode, Mode::BaseStaff);
     app.handle_key(GameKey::Right);
-    assert_eq!(app.mode, Mode::Structures, "and then steps to the roster");
-    app.handle_key(GameKey::Left);
+    assert_eq!(app.mode, Mode::BaseStaff, "the duty table is its own page");
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.mode, Mode::Structures, "the roster is the next page");
+    app.handle_key(GameKey::Char('['));
 
     assert_eq!(app.mode, Mode::BaseStaff);
     assert_eq!(
@@ -476,21 +478,20 @@ fn stepping_back_into_the_duty_table_resets_its_column_cursor() {
 }
 
 /// The roster's `keeps_highlight` pair: the staffing popup's Esc lands on
-/// the row it was opened from even though the roster was stepped onto from
-/// the duty table.
+/// the row it was opened from, not wherever the popup's own cursor was left.
 #[test]
 fn the_roster_keeps_its_highlight_across_the_staffing_popup() {
     let mut app = app_inside_a_small_base_with_programs(30025, false, 1);
     open_hub_screen(&mut app, Mode::Structures);
     assert_eq!(app.menu_selected, 0, "entered at the top");
-    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign);
+    app.handle_key(GameKey::Down);
 
     app.handle_key(GameKey::Esc);
 
     assert_eq!(app.mode, Mode::Structures);
-    assert_eq!(app.menu_selected, 1);
+    assert_eq!(app.menu_selected, 0, "back on the Extractor's row");
 }
 
 /// `]` from Overview walks every page once and wraps; `[` walks it back.

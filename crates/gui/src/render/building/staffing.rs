@@ -2,7 +2,7 @@ use super::*;
 use feral_processes_engine::views::SkillView;
 
 /// The roster's standing-instruction toggles for the structure highlighted
-/// there: keep it running, keep it guarded, or work it yourself right now.
+/// there: keep it running, or work it yourself right now.
 ///
 /// Which rows exist is `App::staffing`'s decision — it asks the same two
 /// questions `Game::set_standing_job` and `Game::work_structure` refuse on —

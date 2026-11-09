@@ -347,59 +347,6 @@ fn the_demolish_key_opens_in_the_stack_and_the_direction_refuses() {
     assert_eq!(structure_count(&mut app), before);
 }
 
-/// Enter on a roster row posts a worker, and both actions behind it —
-/// `Game::assign_cronjob` and `Game::work_structure` — are `require_base`.
-/// So the keypress is refused anywhere else rather than opening a picker
-/// whose every row the engine would turn down.
-///
-/// The roster itself still reads from any locale, which is why it carries no
-/// `base_only` flag: the same fixture opens the screen in both halves below
-/// and only the Enter differs.
-#[test]
-fn enter_on_a_roster_row_is_refused_outside_base_space() {
-    let mut outside = app_owning_a_program_and_an_extractor(2432, &[]);
-    open_hub_screen(&mut outside, Mode::Structures);
-    assert_eq!(
-        outside.mode,
-        Mode::Structures,
-        "the roster reads fine from the open grid"
-    );
-
-    outside.handle_key(GameKey::Enter);
-
-    assert_eq!(
-        outside.mode,
-        Mode::Structures,
-        "the staffing picker must not open from the open grid"
-    );
-    assert!(
-        outside.status_line.is_some(),
-        "a refused key says why rather than doing nothing"
-    );
-
-    // The same row, the same key, from the one locale the engine accepts.
-    let mut inside = app_owning_a_program_and_an_extractor(2432, &[]);
-    stand_in_base(&mut inside);
-    open_hub_screen(&mut inside, Mode::Structures);
-    let workable = inside
-        .game
-        .as_mut()
-        .unwrap()
-        .structure_report()
-        .iter()
-        .position(|r| r.workable)
-        .expect("the fixture's Extractor is workable");
-    for _ in 0..workable {
-        inside.handle_key(GameKey::Down);
-    }
-    inside.handle_key(GameKey::Enter);
-    assert_eq!(
-        inside.mode,
-        Mode::StructureAssign,
-        "the row is workable, so inside the base it must open"
-    );
-}
-
 /// The roster is where you go to find out what is *idle*; making the player
 /// back out to a program-first picker to act on what they just found is the
 /// friction Enter removes.
@@ -407,7 +354,6 @@ fn enter_on_a_roster_row_is_refused_outside_base_space() {
 fn enter_on_a_workable_roster_row_opens_the_staffing_picker() {
     let mut app = app_inside_a_small_base_with_programs(244, false, 1);
     open_hub_screen(&mut app, Mode::Structures);
-    app.handle_key(GameKey::Down);
     assert_eq!(
         node_row(&mut app),
         app.menu_selected,
@@ -425,7 +371,6 @@ fn enter_on_a_workable_roster_row_opens_the_staffing_picker() {
 fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
     let mut app = app_inside_a_small_base_with_programs(245, false, 1);
     open_hub_screen(&mut app, Mode::Structures);
-    app.handle_key(GameKey::Down);
     let row = app.menu_selected;
     app.handle_key(GameKey::Enter);
 
@@ -444,8 +389,7 @@ fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
         "the instruction stuck: {:?}",
         app.status_line
     );
-    let node = app.game.as_mut().unwrap().structure_report().remove(row);
-    assert_eq!(node.kind, "extractor", "sanity: the right row");
+    assert_eq!(row, node_row(&mut app), "sanity: the right row");
 }
 
 /// Esc is a way back into the roster, not out of it: the pick was a
@@ -454,7 +398,6 @@ fn a_standing_job_set_from_the_roster_sticks_and_stays_on_screen() {
 fn esc_from_the_staffing_picker_returns_to_the_roster() {
     let mut app = app_inside_a_small_base_with_programs(246, false, 1);
     open_hub_screen(&mut app, Mode::Structures);
-    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign);
 
@@ -463,25 +406,46 @@ fn esc_from_the_staffing_picker_returns_to_the_roster() {
     assert_eq!(app.mode, Mode::Structures);
 }
 
-/// The roster lists everything standing, and most of it takes no worker.
-/// Enter on a Home has to say so rather than be a dead key — the roster
-/// cannot filter those rows out the way `App::upgradeable_structures` can,
-/// because showing the whole base is what the screen is for.
+/// Staffing is for the factory: a Home, a wall or a door takes no worker,
+/// so the roster lists only what `Game::accepts_a_program` would take.
 #[test]
-fn enter_on_a_row_that_takes_no_worker_says_so() {
+fn the_roster_lists_only_what_a_program_can_work() {
     let mut app = app_inside_a_small_base_with_programs(247, false, 1);
-    open_hub_screen(&mut app, Mode::Structures);
+    let roster = Roster::of(app.game.as_mut().unwrap());
     assert!(
-        app.game.as_mut().unwrap().structure_report()[app.menu_selected].is_home,
-        "precondition: the roster opens on the Home"
+        roster.reports.iter().any(|s| s.is_home),
+        "precondition: the Home stands"
     );
 
+    let listed: Vec<_> = roster
+        .rows
+        .iter()
+        .map(|row| roster.target_of(*row).expect("every row has a target"))
+        .collect();
+
+    assert_eq!(listed.len(), 1, "the Extractor alone");
+    assert!(listed.iter().all(|s| s.workable && !s.is_home));
+}
+
+/// Keeping a guard on a structure is not a staffing choice the player makes;
+/// the popup offers the work toggle and, from beside it, working it yourself.
+#[test]
+fn the_staffing_popup_offers_no_guard() {
+    let mut app = app_inside_a_small_base_with_programs(251, false, 1);
+    open_hub_screen(&mut app, Mode::Structures);
     app.handle_key(GameKey::Enter);
 
-    assert_eq!(app.mode, Mode::Structures, "the picker must not open");
-    assert!(
-        app.status_line.is_some(),
-        "a refused key says why rather than doing nothing"
+    let kinds: Vec<_> = app
+        .staffing()
+        .expect("the popup is open")
+        .rows
+        .iter()
+        .map(|r| r.kind)
+        .collect();
+
+    assert_eq!(
+        kinds,
+        vec![StaffAction::StandingWork, StaffAction::WorkYourself]
     );
 }
 
@@ -493,7 +457,6 @@ fn enter_on_a_row_that_takes_no_worker_says_so() {
 fn working_it_yourself_is_offered_only_from_the_next_tile() {
     let mut app = app_inside_a_small_base_with_programs(248, false, 1);
     open_hub_screen(&mut app, Mode::Structures);
-    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert!(
         app.staffing()
@@ -509,15 +472,7 @@ fn working_it_yourself_is_offered_only_from_the_next_tile() {
     let mut far = app_owning_a_program_and_an_extractor(249, &[]);
     stand_in_base(&mut far);
     open_hub_screen(&mut far, Mode::Structures);
-    let extractor = far
-        .game
-        .as_mut()
-        .unwrap()
-        .structure_report()
-        .iter()
-        .position(|s| s.kind == "extractor")
-        .expect("the fixture deploys one");
-    far.menu_selected = extractor;
+    far.menu_selected = node_row(&mut far);
     far.handle_key(GameKey::Enter);
     assert_eq!(
         far.mode,
@@ -546,7 +501,6 @@ fn the_roster_does_not_staff_anything_underground() {
         "precondition: the fixture really went down"
     );
     open_hub_screen(&mut app, Mode::Structures);
-    app.handle_key(GameKey::Down);
 
     app.handle_key(GameKey::Enter);
 
@@ -732,10 +686,10 @@ fn space_and_a_toggle_the_drop_trooper_column() {
 }
 
 /// `Right` walks the column cursor across every `Duty` — there is no wrap,
-/// unlike `Up`/`Down` on the row cursor — and past the last one steps on to
-/// the Staffing page's next screen.
+/// unlike `Up`/`Down` on the row cursor — and stops on the last one, since
+/// the duty table is the only screen on its page.
 #[test]
-fn right_moves_the_column_cursor_then_steps_off_the_end() {
+fn right_moves_the_column_cursor_and_stops_at_the_end() {
     let mut app = app_owning_distant_programs(761, 1);
     stand_in_base(&mut app);
     app.mode = Mode::BaseStaff;
@@ -751,7 +705,8 @@ fn right_moves_the_column_cursor_then_steps_off_the_end() {
 
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Right);
-    assert_eq!(app.mode, Mode::Structures);
+    assert_eq!(app.mode, Mode::BaseStaff);
+    assert_eq!(app.work_column, 3);
 }
 
 /// `A` toggles the whole highlighted column at once, off if every row in it
@@ -893,14 +848,18 @@ fn lowercase_a_does_nothing() {
 /// The roster sorts the Home first and the node after it, so one Down from
 /// the opening row is the workable structure — asserted rather than assumed,
 /// since every staffing test above rides on it.
+/// The roster row the fixture's Extractor is drawn in.
 fn node_row(app: &mut App) -> usize {
-    app.game
-        .as_mut()
-        .unwrap()
+    let game = app.game.as_mut().unwrap();
+    let extractor = game
         .structure_report()
-        .iter()
-        .position(|s| s.kind == "extractor")
+        .into_iter()
+        .find(|s| s.kind == "extractor")
         .expect("the fixture deploys one")
+        .entity;
+    Roster::of(game)
+        .row_of(extractor)
+        .expect("an Extractor is listed")
 }
 
 /// The one key slice 2 adds to the map screen, driven end to end: swing at
@@ -1759,16 +1718,15 @@ fn escaping_the_study_screen_pins_nobody() {
     );
 }
 
-/// Home, then the line: the Lathe and the Extractor it is fed by fold into
-/// the one row the Lathe stands at.
+/// The Lathe and the Extractor it is fed by fold into one row; the Home
+/// takes no worker and has none.
 #[test]
 fn a_line_of_two_machines_is_one_roster_row() {
     let mut app = app_inside_a_base_with_a_production_line(260);
     let roster = Roster::of(app.game.as_mut().unwrap());
     assert_eq!(roster.reports.len(), 3);
-    assert_eq!(roster.rows.len(), 2, "{:?}", roster.rows);
-    assert_eq!(roster.rows[0], RosterRow::Structure(0));
-    assert!(matches!(roster.rows[1], RosterRow::Line(_)));
+    assert_eq!(roster.rows.len(), 1, "{:?}", roster.rows);
+    assert!(matches!(roster.rows[0], RosterRow::Line(_)));
     assert_eq!(roster.lines.len(), 1);
 }
 
@@ -1776,17 +1734,17 @@ fn a_line_of_two_machines_is_one_roster_row() {
 fn a_line_of_one_keeps_the_rows_it_had() {
     let mut app = app_inside_a_small_base_with_programs(261, false, 1);
     let roster = Roster::of(app.game.as_mut().unwrap());
-    let all: Vec<_> = (0..roster.reports.len())
+    let workable: Vec<_> = (0..roster.reports.len())
+        .filter(|i| roster.reports[*i].workable)
         .map(RosterRow::Structure)
         .collect();
-    assert_eq!(roster.rows, all);
+    assert_eq!(roster.rows, workable);
 }
 
 #[test]
 fn enter_on_a_line_row_and_toggling_standing_reaches_every_member() {
     let mut app = app_inside_a_base_with_a_production_line(262);
     open_hub_screen(&mut app, Mode::Structures);
-    app.handle_key(GameKey::Down);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::StructureAssign, "{:?}", app.status_line);
     let toggle = app
@@ -1806,7 +1764,7 @@ fn enter_on_a_line_row_and_toggling_standing_reaches_every_member() {
     }
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Structures);
-    assert_eq!(app.menu_selected, 1, "back on the line row");
+    assert_eq!(app.menu_selected, 0, "back on the line row");
 }
 
 /// The deploy menu opens on its categories, with the Home the one structure

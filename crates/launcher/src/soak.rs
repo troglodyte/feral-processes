@@ -268,7 +268,7 @@ mod tests {
         }
         assert_eq!(
             alphabet.len(),
-            18 + (LAST_PRINTABLE - FIRST_PRINTABLE + 1) as usize
+            GameKey::NAMED.len() + (LAST_PRINTABLE - FIRST_PRINTABLE + 1) as usize
         );
     }
 

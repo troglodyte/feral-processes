@@ -50,11 +50,11 @@ The user wants **one key for things that are not about a specific character or e
 | TOWNS | one per known town/city | Status · Goods · Routes · Jobs · Log | Sites hub |
 | OUTPOSTS | one per outpost | Status · Crew · Stock · Log | Sites hub |
 | TRAFFIC | Caravans | Schedule · In flight · Trader | Sites hub's Caravans; Trade → Caravan |
-| | Sorties | — | Trade → Dispatch (sorties) |
+| | Sorties | — | Trade → Dispatch (sorties); its own entry (user, 2026-11-09) |
 
 - **Contracts.** *Held* lists every held contract. Each row names its issuer ("Broker", or "for Ashford · hand in there") from `ContractRow::issuer_name`, which the popup never drew. *Board* is the Broker's offers, with today's header variants (off base, onboarding). The entry is present once a Broker stands or a contract is held, as the Trade row was.
 - **The remaining launcher verbs** go to the entity they act on, in `i` (below): *Work a structure yourself*, *Upgrade*, *Demolish*, *Hold a program*.
-- **`b` opens anywhere**, including the Stack, as now. Site pages are readable anywhere. Their actions refuse through `App::refuse` in the doors' own words (`WALK_TO_TRADE`, `WALK_TO_BOARD`, …). This reverses the Sites spec's "opens only at base" (see Open questions).
+- **`b` opens anywhere**, including the Stack, as now. Site pages are readable anywhere. Their actions refuse through `App::refuse` in the doors' own words (`WALK_TO_TRADE`, `WALK_TO_BOARD`, …). This reverses the Sites spec's "opens only at base" (user confirmed, 2026-11-09).
 - **`w`** opens `b` on the site beside the party, else on the first TOWNS entry. `SITES_OPEN_REFUSAL` is deleted.
 
 ### `i` — one thing
@@ -62,8 +62,8 @@ The user wants **one key for things that are not about a specific character or e
 | Section | Page | Tabs |
 |---|---|---|
 | YOU | You | Items · Tools · Phase keys · Routines · Perks · Manifests |
-| PARTY | Companions | as today |
-| PROGRAMS | Roster | as today's Programs |
+| PARTY | one per party member (user, 2026-11-09) | that member's views from today's Companions page, split into tabs (builder's call on the split) |
+| PROGRAMS | Roster | as today's Programs: base staff stays one entry, never one per program (user, 2026-11-09) |
 | | Downed | as today's Downed programs |
 | BESIDE YOU | one per adjacent structure (`Game::adjacent_structures`) | that structure's structure-hub pages (Inventory · Recipe · … · Info) |
 
@@ -129,11 +129,11 @@ If the strip does not fit the title row, it falls back to the dots. A census mea
 - Pointer: headless egui frames (the `handle_map_pointer` test precedent). Hover follows the previous frame's targets, a press while armed-false does nothing, double-click is Enter, a click on a keycap equals its key, and the wheel equals `↑/↓`.
 - Migrated sprite editor and map tests pass unchanged in intent.
 
-## Open questions (the user's)
+## Answered questions (user, 2026-11-09)
 
-1. `b` opening anywhere reverses the Sites spec's "opens only at base" decision. Confirm.
-2. PARTY: one Companions page (as today), or one entry per companion?
-3. TRAFFIC: Sorties as its own entry, or a tab on Caravans?
+1. `b` opens anywhere, like today, including the merged site pages.
+2. PARTY has one entry per party member. Base staff stays a single Roster entry.
+3. Sorties is its own TRAFFIC entry.
 
 ## Calls made after the builder check (Claude's, for the user to check)
 

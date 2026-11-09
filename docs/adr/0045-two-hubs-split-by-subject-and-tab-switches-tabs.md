@@ -24,7 +24,7 @@ Which hub holds a page has followed history rather than a rule:
 
 - **The rail lists nouns, tabs are aspects of the highlighted noun, and actions are keys on a tab.** No launcher pages: a verb lives on the tab of the noun it acts on.
 - **`b` holds everything not about one entity**, in sections: BASE (Overview, Build, Production, Stock, Staff, Research, Breed, Alerts, each with its former sibling pages as tabs), JOBS (Contracts), TOWNS, OUTPOSTS, TRAFFIC (Caravans). The Sites hub folds into it.
-- **`i` holds everything about one entity**, in sections: YOU, PARTY, PROGRAMS, BESIDE YOU (one entry per adjacent structure, with the structure hub's pages as its tabs). The structure hub folds into it.
+- **`i` holds everything about one entity**, in sections: YOU, PARTY (one entry per party member), PROGRAMS (base staff as one Roster entry, plus Downed), BESIDE YOU (one entry per adjacent structure, with the structure hub's pages as its tabs). The structure hub folds into it.
 - **`b` opens anywhere** and `i` opens anywhere it does today. A page is readable anywhere, and an action refuses in its own door's words when out of reach. A subject is hidden only when it does not exist, never because of where the party stands.
 - **`w` and `c` stay as shortcuts** that open `b` on the Sites section (or the site beside the party) and `i` on the structure beside the party.
 - **The nav rule** (one rule for every hub, still `App::handle_hub_nav`):
@@ -47,7 +47,7 @@ Which hub holds a page has followed history rather than a rule:
 ## Consequences
 
 - `b` loses its launcher pages, and every verb they listed needs a destination tab. The spec carries the table.
-- The Sites spec's "opens only at base" rule (user's decision, 2026-11-06) is reversed for the merged hub. The doors keep their own reach checks, so nothing becomes doable from further away.
+- The Sites spec's "opens only at base" rule (user's decision, 2026-11-06) is reversed for the merged hub (user confirmed, 2026-11-09). The doors keep their own reach checks, so nothing becomes doable from further away.
 - `screen_claims` shrinks: `Left` no longer has to be claimed against a tab switch, only against the rail step.
 - `GameKey` gains `ShiftTab`, and `{`/`}` become hub keys.
 - `shared_screens_are_pinned` and `hub_census` change with the rails. The seams-screens hub rule gains the nav clauses. Update the rules file, the `seams` skill and the `seam:` entry.

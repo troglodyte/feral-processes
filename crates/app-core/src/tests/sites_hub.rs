@@ -305,8 +305,10 @@ fn a_site_that_left_the_rail_reopens_on_the_first_page() {
     );
 }
 
+/// Every site gone at once while one is open: TOWNS has nothing left, so
+/// the hold falls to `b`'s first page and the key is the Overview's.
 #[test]
-fn a_held_site_that_vanishes_does_not_panic() {
+fn a_held_site_that_vanishes_falls_back_to_the_first_page() {
     for key in [GameKey::Esc, GameKey::Down, GameKey::Char('T')] {
         let mut app = app_with_far_sites(7110);
         app.handle_key(GameKey::Char('w'));
@@ -315,7 +317,8 @@ fn a_held_site_that_vanishes_does_not_panic() {
         assert_eq!(app.hub_at(), None);
         assert_eq!(app.held_site(), None);
         app.handle_key(key);
-        assert_eq!(app.mode, Mode::Playing, "{key:?} must not strand the tab");
+        assert_eq!(app.mode, Mode::BaseOverview, "{key:?}");
+        assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Overview")));
     }
 }
 

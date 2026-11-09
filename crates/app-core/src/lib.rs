@@ -2960,6 +2960,9 @@ pub struct App {
     /// The hub that is open and its page's key, checked against `mode` on
     /// every read (ADR 0043). `None` whenever the player is not in a hub.
     hub_place: Option<app::hub::HubPlace>,
+    /// The rail the held page was last shown on, for `settle_hub` to find
+    /// where the hold goes if that page leaves the rail while open.
+    hub_rail_seen: Option<app::hub::RailSeen>,
     /// The Sites page and tab a launched site screen (market, board, post
     /// picker, outpost take, route cargo) was opened from, so its Esc lands
     /// back on that exact tab (`App::leave_site_screen`). Cleared with

@@ -164,6 +164,65 @@ pub(crate) struct HubPlace {
     pub key: HubPageKey,
 }
 
+/// The rail as it stood the last time the held page was shown: each page's
+/// key and the section it sat in, and the held page's tabs. What the hold
+/// falls back on when its page leaves the rail while open, since by then
+/// the rail no longer says where the page was.
+#[derive(Clone, Debug)]
+pub(crate) struct RailSeen {
+    hub: Hub,
+    held: HubPageKey,
+    tabs: &'static [HubTab],
+    /// `(key, section index)` in rail order.
+    pages: Vec<(HubPageKey, usize)>,
+}
+
+impl RailSeen {
+    fn of(hub: Hub, pages: &[HubPage], held: usize) -> Self {
+        let mut section = 0;
+        let keyed = pages
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if i > 0 && p.section.is_some() {
+                    section += 1;
+                }
+                (p.key.clone(), section)
+            })
+            .collect();
+        RailSeen {
+            hub,
+            held: pages[held].key.clone(),
+            tabs: pages[held].tabs,
+            pages: keyed,
+        }
+    }
+}
+
+/// Where the hold goes when the page `seen` held has left the rail `now`:
+/// the next surviving entry of its section, else the section's previous
+/// one, else the hub's first page.
+fn successor(seen: &RailSeen, now: &[HubPage]) -> usize {
+    let Some(at) = seen.pages.iter().position(|(k, _)| *k == seen.held) else {
+        return 0;
+    };
+    let section = seen.pages[at].1;
+    first_on_rail(seen.pages[at + 1..].iter(), section, now)
+        .or_else(|| first_on_rail(seen.pages[..at].iter().rev(), section, now))
+        .unwrap_or(0)
+}
+
+/// The first of `side`, walked while it stays in `section`, that is on the
+/// rail `now`, as its index there.
+fn first_on_rail<'a>(
+    side: impl Iterator<Item = &'a (HubPageKey, usize)>,
+    section: usize,
+    now: &[HubPage],
+) -> Option<usize> {
+    side.take_while(|(_, s)| *s == section)
+        .find_map(|(key, _)| now.iter().position(|p| &p.key == key))
+}
+
 /// The first page of the section `step` sections along from the one
 /// holding `page`, wrapping; `None` when the rail has fewer than two
 /// sections, so the keys do nothing on a hub without them.
@@ -270,20 +329,45 @@ impl App {
     }
 
     /// The default for a jump that names no page: keeps the held page while
-    /// it offers the screen shown, else moves to another page of the same
-    /// hub that does, else adopts the one page across every hub that offers
-    /// it. A screen offered by several pages is never adopted by guess, and
-    /// a screen no page offers (a launched screen) leaves the place alone,
-    /// where `hub_at` answers `None` until the mode comes back.
+    /// it offers the screen shown, else — the held page having left the
+    /// rail while it was shown — moves to its successor (`successor`) with
+    /// the cursor where it was, else moves to another page of the same hub
+    /// that offers the screen, else adopts the one page across every hub
+    /// that offers it. A screen offered by several pages is never adopted
+    /// by guess, and a screen no page offers (a launched screen) leaves the
+    /// place alone, where `hub_at` answers `None` until the mode comes back.
     pub fn settle_hub(&mut self) {
         if matches!(self.mode, Mode::Playing | Mode::MainMenu) {
             self.hub_place = None;
+            self.hub_rail_seen = None;
             return;
         }
         let shown = base_popup_parent(self.mode).unwrap_or(self.mode);
         if let Some(place) = &self.hub_place {
             let pages = place.hub.kind().pages(self);
-            if pages.iter().any(|p| p.key == place.key && p.offers(shown)) {
+            if let Some(held) = pages
+                .iter()
+                .position(|p| p.key == place.key && p.offers(shown))
+            {
+                self.hub_rail_seen = Some(RailSeen::of(place.hub, &pages, held));
+                return;
+            }
+            let vanished = !pages.iter().any(|p| p.key == place.key)
+                && self.hub_rail_seen.as_ref().is_some_and(|seen| {
+                    seen.hub == place.hub
+                        && seen.held == place.key
+                        && seen.tabs.iter().any(|t| t.mode == shown)
+                });
+            if vanished && let Some(seen) = &self.hub_rail_seen {
+                let to = &pages[successor(seen, &pages)];
+                let hub = place.hub;
+                self.hub_place = Some(HubPlace {
+                    hub,
+                    key: to.key.clone(),
+                });
+                if !to.offers(self.mode) {
+                    self.mode = to.tabs[0].mode;
+                }
                 return;
             }
             if let Some(page) = pages.iter().find(|p| p.offers(shown)) {

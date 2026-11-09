@@ -299,3 +299,120 @@ fn the_structure_launcher_verbs_are_keys_on_the_structure_in_i() {
     }
     assert_eq!(app.mode, Mode::PinPrisoner, "the cell's Hold tab");
 }
+
+// ----- a held page that leaves the rail while it is open -----
+
+fn held(app: &App) -> Option<HubPageKey> {
+    app.hub_page().cloned()
+}
+
+/// Beside Birch with the onboarding chain done and one of Birch's jobs in
+/// hand, and no Broker: that job alone keeps Contracts on the rail.
+fn app_holding_one_town_job(seed: u32) -> (App, feral_processes_engine::contracts::ContractId) {
+    let mut app = crate::tests::sites_hub::app_beside_birch(seed);
+    skip_tutorial(&mut app);
+    let town = crate::tests::sites_hub::TOWN_B;
+    let game = app.game.as_mut().unwrap();
+    let rows = game.settlement_board(town).expect("beside the counter");
+    let id = rows.iter().find(|r| !r.tutorial).expect("a job").id.clone();
+    assert!(game.accept_contract(&id, Some(town)).is_ok());
+    assert_eq!(game.broker_reach(), BrokerReach::NoBroker, "precondition");
+    assert_eq!(game.active_contracts().len(), 1, "precondition");
+    (app, id)
+}
+
+/// The last contract leaves hand while Contracts → Held is open: JOBS has
+/// no other entry, so the hold falls to the hub's first page, and the
+/// cursor stays in the page.
+#[test]
+fn a_contract_leaving_hand_while_held_is_open_moves_to_the_first_page() {
+    let (mut app, id) = app_holding_one_town_job(46020);
+    assert_eq!(
+        reach_in_b(&mut app, "Contracts", "Held"),
+        Mode::ContractsHeld
+    );
+    app.handle_key(GameKey::Right);
+    // Settled elsewhere: the engine drops it between two keys.
+    app.game.as_mut().unwrap().abandon_contract(&id);
+    app.handle_key(GameKey::Down);
+    assert_eq!(held(&app), Some(HubPageKey::Named("Overview")));
+    assert_eq!(app.mode, Mode::BaseOverview);
+    assert!(!app.hub_on_rail, "focus is unchanged");
+}
+
+/// The same through the tab's own `[A]`.
+#[test]
+fn giving_back_the_last_contract_on_held_moves_to_the_first_page() {
+    let (mut app, _) = app_holding_one_town_job(46021);
+    reach_in_b(&mut app, "Contracts", "Held");
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('A'));
+    assert!(app.game.as_ref().unwrap().active_contracts().is_empty());
+    app.handle_key(GameKey::Down);
+    assert_eq!(held(&app), Some(HubPageKey::Named("Overview")));
+    assert!(!app.hub_on_rail);
+}
+
+/// An outpost lost while its Crew tab is open: the next outpost in the
+/// section takes the hold, on the same tab, with the cursor where it was;
+/// the last outpost lost falls back to the one before it. Three outposts,
+/// so neither is the first page that happens to offer the tab.
+#[test]
+fn an_outpost_lost_while_open_moves_to_the_next_then_the_previous() {
+    use crate::tests::sites_hub::{FAR_TILE, TOWN_B, set_sites};
+    let tiles = [(520, 500), (530, 500), (540, 500)];
+    let outpost = |tile| HubPageKey::Site(RouteDestinationId::Outpost(tile));
+    let with = |app: &mut App, kept: &[(i32, i32)]| {
+        let posts: Vec<_> = kept.iter().map(|&t| (t, Vec::new())).collect();
+        set_sites(app, &[(TOWN_B, "Alder", FAR_TILE)], &posts);
+    };
+    let names = |app: &App| -> Vec<HubPageKey> {
+        Hub::Base
+            .kind()
+            .pages(app)
+            .into_iter()
+            .map(|p| p.key)
+            .filter(|k| matches!(k, HubPageKey::Site(RouteDestinationId::Outpost(_))))
+            .collect()
+    };
+
+    let mut app = crate::tests::sites_hub::app_with_far_sites(46022);
+    with(&mut app, &tiles);
+    let order = names(&app);
+    assert_eq!(order.len(), 3, "precondition");
+    app.handle_key(GameKey::Char('b'));
+    app.enter_hub_at(Hub::Base, order[1].clone(), Mode::OutpostCrew);
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Up);
+    let kept: Vec<_> = tiles
+        .iter()
+        .copied()
+        .filter(|&t| outpost(t) != order[1])
+        .collect();
+    with(&mut app, &kept);
+    app.handle_key(GameKey::Down);
+    assert_eq!(held(&app), Some(order[2].clone()), "the next in OUTPOSTS");
+    assert_eq!(app.mode, Mode::OutpostCrew, "the tab is kept");
+    assert!(!app.hub_on_rail);
+
+    let mut app = crate::tests::sites_hub::app_with_far_sites(46023);
+    with(&mut app, &tiles);
+    app.handle_key(GameKey::Char('b'));
+    app.enter_hub_at(Hub::Base, order[2].clone(), Mode::OutpostStatus);
+    app.handle_key(GameKey::Char('x'));
+    assert!(app.hub_on_rail);
+    let kept: Vec<_> = tiles
+        .iter()
+        .copied()
+        .filter(|&t| outpost(t) != order[2])
+        .collect();
+    with(&mut app, &kept);
+    app.handle_key(GameKey::Char('x'));
+    assert_eq!(
+        held(&app),
+        Some(order[1].clone()),
+        "the previous in OUTPOSTS"
+    );
+    assert_eq!(app.mode, Mode::OutpostStatus);
+    assert!(app.hub_on_rail, "focus is unchanged");
+}

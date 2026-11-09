@@ -18,7 +18,7 @@ fn recipe_of(app: &App) -> Option<ItemId> {
 fn open_recipe(app: &mut App) {
     open_structure_page(app);
     assert_eq!(app.mode, Mode::Transfer, "the shelf is the first page");
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Tab);
 }
 
 #[test]
@@ -162,6 +162,6 @@ fn the_screen_closes_when_the_machine_is_demolished() {
 
     pick_row(&mut app, 0);
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("You")));
     assert!(app.machine_recipe.is_none());
 }

@@ -530,7 +530,7 @@ impl App {
             self.refuse(reason);
         }
         if open_hub {
-            self.open_structure_hub();
+            self.open_beside();
         }
         self.after_world_action(acted, is_move_key, ground_bite);
     }

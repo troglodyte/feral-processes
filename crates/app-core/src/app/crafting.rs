@@ -49,7 +49,7 @@ impl App {
     /// Whether the Compile list is the Workbench page's: the structure hub
     /// is the only way to stand at a bench.
     pub fn craft_at_bench(&self) -> bool {
-        self.structure_hub.is_some()
+        self.held_structure().is_some() && self.hub_at().is_some()
     }
 
     pub(crate) fn handle_craft_key(&mut self, key: GameKey) {

@@ -71,7 +71,7 @@ pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
             title: entry.name,
             glyph: Some(entry.glyph),
             section: (last != Some(entry.section)).then(|| section_title(entry.section)),
-            tabs,
+            tabs: tabs.to_vec(),
             marked: entry.attention,
             name_cut_at_end: true,
         });
@@ -82,7 +82,7 @@ pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
         title: CARAVANS_TITLE.to_string(),
         glyph: Some('~'),
         section: Some("TRAFFIC"),
-        tabs: CARAVAN_TABS,
+        tabs: CARAVAN_TABS.to_vec(),
         marked: game.route_reports().iter().any(|r| r.stalled),
         name_cut_at_end: false,
     });
@@ -91,7 +91,7 @@ pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
         title: SORTIES_TITLE.to_string(),
         glyph: None,
         section: None,
-        tabs: SORTIE_TABS,
+        tabs: SORTIE_TABS.to_vec(),
         marked: false,
         name_cut_at_end: false,
     });
@@ -160,7 +160,7 @@ impl App {
     pub fn held_site(&self) -> Option<RouteDestinationId> {
         match self.hub_page()? {
             HubPageKey::Site(site) => Some(*site),
-            HubPageKey::Named(_) | HubPageKey::Member(_) => None,
+            HubPageKey::Named(_) | HubPageKey::Member(_) | HubPageKey::Structure(_) => None,
         }
     }
 

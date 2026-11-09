@@ -21,7 +21,7 @@ fn c_with_nothing_beside_the_party_stays_on_the_map() {
     let mut app = app_in_base_with_programs(2402, 2);
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Playing);
-    assert!(app.structure_hub.is_none());
+    assert!(app.held_structure().is_none());
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn escaping_the_rebuild_picker_commits_nothing() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     assert!(app.pending_build.is_none());
-    assert!(app.structure_hub.is_none());
+    assert!(app.held_structure().is_none());
     assert_eq!(site_count(&mut app), 1);
 }
 
@@ -62,7 +62,7 @@ fn c_with_a_depot_and_a_site_opens_the_site_east_then_tab_reaches_the_depot() {
         "the site is east, first clockwise"
     );
 
-    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::Transfer, "the Depot is west");
 }
 
@@ -76,23 +76,23 @@ fn c_with_a_depot_and_a_machine_opens_the_machine_and_its_recipe_is_a_page() {
         "the Factory is east: its shelf first"
     );
 
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::MachineRecipe);
     assert!(app.machine_recipe.is_some());
 
-    app.handle_key(GameKey::Tab);
+    app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::Transfer, "the Depot is west");
 }
 
 #[test]
-fn c_beside_two_rebuild_sites_opens_one_and_tab_the_other() {
+fn c_beside_two_rebuild_sites_opens_one_and_bracket_the_other() {
     let mut app = app_beside_two_rebuild_sites(2409);
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::BuildProgram);
-    let first = app.structure_hub.as_ref().unwrap().current().entity;
-    app.handle_key(GameKey::Tab);
+    let first = app.held_structure().unwrap();
+    app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BuildProgram);
-    assert_ne!(app.structure_hub.as_ref().unwrap().current().entity, first);
+    assert_ne!(app.held_structure().unwrap(), first);
 }
 
 #[test]
@@ -104,10 +104,10 @@ fn the_cycle_goes_clockwise_whichever_structure_sorts_first_by_tile() {
         Mode::Transfer,
         "the Depot is east, first clockwise"
     );
-    assert_eq!(app.structure_hub.as_ref().unwrap().current().name, "Depot");
+    assert_eq!(held_beside(&app).name, "Depot");
 
-    app.handle_key(GameKey::Tab);
-    assert_eq!(app.structure_hub.as_ref().unwrap().current().dir, (-1, 0));
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(held_beside(&app).dir, (-1, 0));
 }
 
 #[test]
@@ -117,7 +117,7 @@ fn a_set_machine_holding_output_opens_on_its_shelf_with_the_recipe_a_page_on() {
     assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(app.basket_rows.len(), 1, "the three blocks on its shelf");
 
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::MachineRecipe);
 }
 

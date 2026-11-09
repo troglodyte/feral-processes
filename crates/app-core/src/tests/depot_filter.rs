@@ -15,7 +15,7 @@ fn filter_screen(seed: u32, depots: i32) -> App {
     let mut app = app_beside_depots(seed, depots, 6, &[(ITEM, 4)]);
     open_structure_page(&mut app);
     assert_eq!(app.mode, Mode::Transfer, "the Inventory page opens first");
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::DepotFilter);
     app
 }
@@ -103,9 +103,8 @@ fn a_denial_lands_on_one_depot_alone() {
     app.handle_key(GameKey::Char('-'));
     assert!(!allowed(&app, ITEM));
 
-    app.handle_key(GameKey::Tab);
     app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::DepotFilter);
+    assert_eq!(app.mode, Mode::DepotFilter, "the tab came along");
     assert!(
         allowed(&app, ITEM),
         "the second shelf never heard the instruction"
@@ -117,7 +116,7 @@ fn a_denial_lands_on_one_depot_alone() {
 #[test]
 fn turning_back_to_inventory_comes_up_zeroed() {
     let mut app = filter_screen(3307, 1);
-    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::ShiftTab);
 
     assert_eq!(app.mode, Mode::Transfer);
     assert!(app.depot_filter.is_none());
@@ -139,7 +138,7 @@ fn a_denial_closes_the_put_on_the_picker_behind_it() {
     let mut app = filter_screen(3308, 1);
     app.menu_selected = row_of(&app, ITEM);
     app.handle_key(GameKey::Char('-'));
-    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::ShiftTab);
 
     let row = app
         .basket_rows
@@ -175,6 +174,6 @@ fn an_empty_depot_and_an_empty_pack_still_open_the_picker() {
         "nothing to move, and that is fine"
     );
 
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::DepotFilter);
 }

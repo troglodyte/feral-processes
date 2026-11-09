@@ -308,7 +308,7 @@ fn draw_title(
     let base = title.y + title.h * 0.75;
     let name = pages[page].title.as_str();
     painter.ui_bold(name, title.x, base, m.title(), hud::palette::PANE_TITLE);
-    let tabs = pages[page].tabs;
+    let tabs = &pages[page].tabs;
     if tabs.len() < 2 {
         return;
     }
@@ -613,7 +613,7 @@ mod tests {
         }
     }
 
-    const TAB: &[(&str, &str)] = &[("Tab", "next structure")];
+    const TAB: &[(&str, &str)] = &[("W", "work it")];
 
     fn bar_text(extra_keys: &[(&str, &str)], on_rail: bool) -> String {
         let pages = [feral_processes_app_core::structure_page(
@@ -632,8 +632,8 @@ mod tests {
     #[test]
     fn a_hubs_own_keys_are_on_the_bar_from_both_halves() {
         for on_rail in [false, true] {
-            assert!(bar_text(TAB, on_rail).contains("next structure"));
-            assert!(!bar_text(&[], on_rail).contains("next structure"));
+            assert!(bar_text(TAB, on_rail).contains("work it"));
+            assert!(!bar_text(&[], on_rail).contains("work it"));
         }
     }
 
@@ -642,7 +642,7 @@ mod tests {
     #[test]
     fn a_structure_page_names_its_keys_and_the_way_back_like_any_hub_page() {
         let rows = bar_text(TAB, false);
-        for want in ["take/put", "←", "menu", "page", "next structure"] {
+        for want in ["take/put", "←", "menu", "page", "work it"] {
             assert!(rows.contains(want), "{want:?} missing: {rows}");
         }
     }
@@ -690,7 +690,7 @@ mod tests {
             title: title.to_string(),
             glyph: None,
             section,
-            tabs: &[feral_processes_app_core::HubTab {
+            tabs: vec![feral_processes_app_core::HubTab {
                 name: "Alerts",
                 mode: Mode::Alerts,
             }],

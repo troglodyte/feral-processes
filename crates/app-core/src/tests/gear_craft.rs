@@ -35,9 +35,9 @@ fn open_page(app: &mut App, target: Mode) {
         if app.mode == target {
             break;
         }
-        app.handle_key(GameKey::Down);
+        app.handle_key(GameKey::Tab);
     }
-    assert_eq!(app.mode, target, "the rail reaches {target:?}");
+    assert_eq!(app.mode, target, "the tabs reach {target:?}");
     app.handle_key(GameKey::Right);
     assert_eq!(app.mode, target);
 }
@@ -104,11 +104,10 @@ fn built_weapons(app: &App) -> u32 {
 fn a_workbench_hub_has_the_weapon_pages_only_once_weapon_bench_is_researched() {
     let mut app = app_at_a_workbench(81_001);
     app.handle_key(GameKey::Char('c'));
-    let hub = app.structure_hub.as_ref().unwrap();
-    assert!(!hub.current().pages.contains(&StructurePage::Weapon));
+    assert!(!held_beside(&app).pages.contains(&StructurePage::Weapon));
     let mut app = forge_app(81_002);
     app.handle_key(GameKey::Char('c'));
-    let pages = &app.structure_hub.as_ref().unwrap().current().pages;
+    let pages = &held_beside(&app).pages;
     for page in [StructurePage::Weapon, StructurePage::Salvage] {
         assert!(pages.contains(&page), "{page:?} in {pages:?}");
     }

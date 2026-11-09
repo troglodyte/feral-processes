@@ -690,11 +690,18 @@ impl App {
             self.mode = Mode::Playing;
             return;
         };
+        self.demolish_found(found);
+    }
+
+    /// Demolishes the structure `found`, which stands beside the party. Home
+    /// asks first, off the same `is_home` field for every way in.
+    pub(crate) fn demolish_found(&mut self, found: EntityView) {
         if found.is_home {
             self.pending_remove_structure = Some(found.entity);
             self.mode = Mode::RemoveConfirm;
             return;
         }
+        let Some(game) = &mut self.game else { return };
         let outcome = game.remove_structure(found.entity);
         self.report(outcome);
         self.mode = Mode::Playing;
@@ -726,6 +733,11 @@ impl App {
         let Some(dir) = direction_of(key) else {
             return;
         };
+        self.upgrade_toward(dir);
+    }
+
+    /// Files the upgrade for the structure on the tile `dir` away.
+    pub(crate) fn upgrade_toward(&mut self, dir: (i32, i32)) {
         let Some(game) = &mut self.game else { return };
         let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
             self.refuse("Nothing to upgrade that way.");

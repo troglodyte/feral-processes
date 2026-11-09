@@ -754,10 +754,13 @@ fn no_mode_is_in_two_hubs() {
     let mut seen = Vec::new();
     for hub in Hub::ALL {
         let mut in_hub = Vec::new();
+        // A structure's entries repeat their tabs by design (two depots), and
+        // are entered by their own door.
         for mode in hub
             .kind()
             .pages(&app)
             .iter()
+            .filter(|p| !matches!(p.key, HubPageKey::Structure(_)))
             .flat_map(|p| p.modes().collect::<Vec<_>>())
         {
             assert!(!seen.contains(&mode), "{mode:?} is in two hubs");

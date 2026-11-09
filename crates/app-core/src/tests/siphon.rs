@@ -112,9 +112,9 @@ fn a_siphon_screen_leaves_when_the_party_is_no_longer_beside_it() {
     // screen first would be the screen acting on a structure that is no
     // longer beside the party.
     stand_in_base_at(&mut app, 40, 40);
-    app.refresh_structure_hub();
+    app.refresh_beside();
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("You")));
     assert!(app.siphon.is_none());
     let game = app.game.as_mut().unwrap();
     assert_eq!(game.program_role(program), Some(ProgramRole::Staff));

@@ -26,6 +26,7 @@ pub const ROSTER_TABS: &[HubTab] = &[
 pub const MEMBER_TABS: &[HubTab] = &[HubTab::new("Overview", Mode::PartyMember)];
 
 pub const PARTY_SECTION: &str = "PARTY";
+pub const BESIDE_SECTION: &str = "BESIDE YOU";
 pub const YOU_SECTION: &str = "YOU";
 pub const PROGRAMS_SECTION: &str = "PROGRAMS";
 
@@ -74,7 +75,7 @@ impl HubKind for InventoryHub {
                 title: member.name,
                 glyph: None,
                 section: (i == 0).then_some(PARTY_SECTION),
-                tabs: MEMBER_TABS,
+                tabs: MEMBER_TABS.to_vec(),
                 marked: false,
                 name_cut_at_end: true,
             });
@@ -84,6 +85,7 @@ impl HubKind for InventoryHub {
             ..roster.page()
         });
         pages.push(downed.page());
+        pages.extend(super::structure_hub::beside_pages(app, BESIDE_SECTION));
         pages
     }
 
@@ -98,8 +100,15 @@ impl HubKind for InventoryHub {
 
     fn show_tab(&self, app: &mut App, page: &HubPage, tab: usize) {
         app.mode = page.tabs[tab].mode;
-        if let HubPageKey::Member(member) = page.key {
-            app.select_member(member);
+        match page.key {
+            HubPageKey::Member(member) => app.select_member(member),
+            HubPageKey::Structure(entity) => match app.beside_page(entity, tab) {
+                Some(structure_page) => app.enter_structure_page(entity, structure_page),
+                None => app.leave_beside(),
+            },
+            // Whatever a structure's page held goes when the hold leaves it,
+            // wherever the leaving came from (a turn, a tick, a demolition).
+            _ => app.drop_page_state(),
         }
     }
 
@@ -118,9 +127,20 @@ impl HubKind for InventoryHub {
         true
     }
 
+    /// A structure's page leaves what it held behind it: its basket, its
+    /// open recipe, its pending bay.
+    fn leave(&self, app: &mut App) {
+        if app.held_structure().is_some() {
+            app.drop_page_state();
+        }
+        app.close_screen();
+    }
+
     fn extra_keys(&self, app: &App) -> Vec<(&'static str, &'static str)> {
         if app.hub_on_rail && app.mode == Mode::ManifestIntro {
             vec![("Enter", "open")]
+        } else if !app.hub_on_rail && app.mode == Mode::StructureManifest {
+            vec![("W", "work it"), ("U", "upgrade"), ("X", "demolish")]
         } else {
             Vec::new()
         }

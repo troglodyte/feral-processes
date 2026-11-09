@@ -64,7 +64,7 @@ pub use app::sprite_editor::{
 pub use app::sprite_forge::{InstalledSprite, SpriteArt, SpriteOp, SpriteSubject, SpriteWrite};
 pub use app::stack_market::{MarketVisible, market_visible};
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
-pub use app::structure_hub::{StructureHub, structure_page};
+pub use app::structure_hub::structure_page;
 pub use app::tactical::prop_readout;
 pub use app::tactical::tactical_items_visible;
 pub use app::telemetry::append_records;
@@ -2982,7 +2982,6 @@ pub struct App {
     game_menu_in_run: bool,
     /// The structure hub while it is open: the structures beside the party
     /// and which one is showing. `None` whenever the player is not in it.
-    pub structure_hub: Option<StructureHub>,
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.

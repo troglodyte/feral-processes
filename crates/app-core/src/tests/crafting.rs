@@ -541,9 +541,9 @@ fn open_bench_compile(app: &mut App) {
         if app.mode == Mode::Craft {
             break;
         }
-        app.handle_key(GameKey::Down);
+        app.handle_key(GameKey::Tab);
     }
-    assert_eq!(app.mode, Mode::Craft, "the rail reaches the Compile page");
+    assert_eq!(app.mode, Mode::Craft, "the tabs reach the Compile page");
     app.handle_key(GameKey::Right);
 }
 
@@ -591,7 +591,7 @@ fn compile_off_the_bench_is_the_production_pages_tab() {
     let mut app = stocked_app(712);
     open_command(&mut app, "Compile an item");
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_none());
+    assert!(app.held_structure().is_none());
     assert!(!app.craft_at_bench(), "the field list, not the bench's");
     assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Production")));
 }
@@ -612,7 +612,7 @@ fn compiling_from_the_bench_page_returns_to_the_page_not_the_map() {
         app.handle_key(GameKey::Esc);
     }
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some(), "the hub stays open");
+    assert!(app.held_structure().is_some(), "the hub stays open");
 }
 
 #[test]
@@ -625,10 +625,10 @@ fn aborting_a_bench_compile_returns_to_the_page() {
     assert_eq!(app.mode, Mode::Compiling);
     app.handle_key(GameKey::Char('x'));
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some());
+    assert!(app.held_structure().is_some());
 }
 
-/// `refresh_structure_hub` runs inside `after_tick` while compiling; a bench
+/// `refresh_beside` runs inside `after_tick` while compiling; a bench
 /// that leaves the cycle must not strand the armed batch, whose in-flight
 /// unit's material would otherwise be lost to the next arm.
 #[test]
@@ -642,7 +642,7 @@ fn losing_the_bench_mid_compile_aborts_the_batch() {
     assert_eq!(app.mode, Mode::Compiling);
     assert!(app.game.as_ref().unwrap().hand_craft_in_progress());
 
-    let bench = app.structure_hub.as_ref().unwrap().current().entity;
+    let bench = app.held_structure().unwrap();
     app.game.as_mut().unwrap().remove_structure(bench).unwrap();
     app.advance_compile(1.0);
 
@@ -663,7 +663,7 @@ fn a_zero_or_refused_bench_compile_returns_to_the_page() {
     app.handle_key(GameKey::Char('0'));
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some());
+    assert!(app.held_structure().is_some());
 
     // No material: the engine refuses to arm the batch.
     let mut app = app_at_a_workbench(716);
@@ -672,7 +672,7 @@ fn a_zero_or_refused_bench_compile_returns_to_the_page() {
     pick_row(&mut app, row);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some());
+    assert!(app.held_structure().is_some());
 }
 
 /// Picks `packet_buffer` on the bench page and types `quantity`.

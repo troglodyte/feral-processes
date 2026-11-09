@@ -524,15 +524,6 @@ impl App {
         {
             self.hub_last[hub.slot()] = Some((place.key.clone(), self.mode));
         }
-        // The structure hub is only open while a mode of its own is up; any
-        // other mode (the map after an action) means it was left. A popup
-        // over one of its pages is still inside it.
-        if self.structure_hub.is_some()
-            && self.hub_at().is_none()
-            && base_popup_parent(self.mode).is_none()
-        {
-            self.structure_hub = None;
-        }
         // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
         // own reset rule — no other screen reads it, so there is no
         // `keeps_highlight` pair to preserve it across.

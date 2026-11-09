@@ -138,12 +138,24 @@ pub(crate) fn hub_of(mode: Mode) -> Option<(Hub, usize, usize)> {
     })
 }
 
+/// The structure the held BESIDE YOU entry names, as the engine reports it.
+pub(crate) fn held_beside(app: &App) -> AdjacentStructure {
+    let held = app.held_structure().expect("a structure entry is held");
+    app.game
+        .as_ref()
+        .unwrap()
+        .adjacent_structures()
+        .into_iter()
+        .find(|s| s.entity == held)
+        .expect("the held structure is beside the party")
+}
+
 /// `[c]` and into the first page: the hub opens on its rail, so a test
 /// about a page's own keys needs the `Right` a player would press.
 pub(crate) fn open_structure_page(app: &mut App) {
     app.handle_key(GameKey::Char('c'));
     // A refused `c` leaves the map up, where Right would walk the player.
-    if app.structure_hub.is_some() && app.hub_on_rail {
+    if app.held_structure().is_some() && app.hub_on_rail {
         app.handle_key(GameKey::Right);
     }
 }
@@ -168,7 +180,7 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     app.handle_key(GameKey::Char(match hub {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
-        Hub::Structure | Hub::GameMenu => {
+        Hub::GameMenu => {
             unreachable!("hub_of names the shared hubs only")
         }
     }));

@@ -260,37 +260,34 @@ fn the_structure_verbs_open_from_the_structures_page_of_b() {
 }
 
 /// Work, Upgrade and Demolish are keys on the structure's Info tab in `i`
-/// (decision 5: `W`, `U`, `X` if the key-hint census leaves them free), and
-/// Hold is a Holding Cell's Hold tab. Phase 3 may move a target screen; it
-/// may not drop a verb.
+/// (decision 5: `W`, `U`, `X`, free on that tab and in the key-hint
+/// census), each aimed at the entry's own structure through the door the old
+/// launcher row used, and Hold is a Holding Cell's Hold tab.
 #[test]
-#[ignore = "phase 3"]
 fn the_structure_launcher_verbs_are_keys_on_the_structure_in_i() {
-    for (key, target) in [
-        ('W', Mode::WorkStructure),
-        ('U', Mode::UpgradeDirection),
-        ('X', Mode::RemoveConfirm),
-    ] {
+    for key in ['W', 'U', 'X'] {
         let mut app = app_between_a_depot_and_a_machine(46014);
-        app.handle_key(GameKey::Char('i'));
-        let pages = Hub::Inventory.kind().pages(&app);
-        let beside = pages
-            .iter()
-            .position(|p| p.section == Some("BESIDE YOU"))
-            .expect("a BESIDE YOU entry");
-        while app.hub_at().map(|(_, p, _)| p) != Some(beside) {
-            app.handle_key(GameKey::Char(']'));
-        }
+        app.handle_key(GameKey::Char('c'));
+        let machine = app.held_structure().expect("a BESIDE YOU entry");
         while app.mode != Mode::StructureManifest {
             app.handle_key(GameKey::Tab);
         }
         app.handle_key(GameKey::Right);
+        let keys = Hub::Inventory.kind().extra_keys(&app);
+        assert!(keys.iter().any(|(k, _)| *k == key.to_string()), "{keys:?}");
         app.handle_key(GameKey::Char(key));
-        assert_eq!(app.mode, target, "{key} on Info");
+        assert_ne!(
+            app.mode,
+            Mode::StructureManifest,
+            "{key} on Info did nothing"
+        );
+        let beside = app.game.as_ref().unwrap().adjacent_structures();
+        let still_there = beside.iter().any(|s| s.entity == machine);
+        assert_eq!(still_there, key != 'X', "{key}: demolished only by X");
     }
 
     let mut app = app_beside_a_holding_cell(46015, Vec::new(), 0);
-    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char('c'));
     for _ in 0..64 {
         if app.mode == Mode::PinPrisoner {
             break;

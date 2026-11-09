@@ -25,6 +25,8 @@ pub enum HubPageKey {
     Site(RouteDestinationId),
     /// A party member on `i`'s rail.
     Member(Entity),
+    /// A structure beside the party on `i`'s rail.
+    Structure(Entity),
 }
 
 /// One tab of a page: the name the title row draws and the screen it shows.
@@ -48,7 +50,7 @@ pub struct HubPage {
     pub glyph: Option<char>,
     /// A header drawn above this page on the rail.
     pub section: Option<&'static str>,
-    pub tabs: &'static [HubTab],
+    pub tabs: Vec<HubTab>,
     /// The rail's `!`.
     pub marked: bool,
     /// A name the rail may cut: the tail gives way ("Outpost north-e…"),
@@ -71,6 +73,13 @@ impl HubPage {
     pub fn offers(&self, mode: Mode) -> bool {
         self.modes().any(|m| m == mode)
     }
+
+    /// Whether `settle_hub` may adopt this page by guess. A structure's page
+    /// is entered only by its door, since the screens it shows are also
+    /// opened from the map for whichever structure the player aimed at.
+    fn adoptable(&self) -> bool {
+        !matches!(self.key, HubPageKey::Structure(_))
+    }
 }
 
 impl FixedPage {
@@ -80,7 +89,7 @@ impl FixedPage {
             title: self.title.to_string(),
             glyph: None,
             section: None,
-            tabs: self.tabs,
+            tabs: self.tabs.to_vec(),
             marked: false,
             name_cut_at_end: false,
         }
@@ -144,18 +153,16 @@ pub trait HubKind: Sync {
 pub enum Hub {
     Base,
     Inventory,
-    Structure,
     GameMenu,
 }
 
 impl Hub {
-    pub const ALL: [Hub; 4] = [Hub::Base, Hub::Inventory, Hub::Structure, Hub::GameMenu];
+    pub const ALL: [Hub; 3] = [Hub::Base, Hub::Inventory, Hub::GameMenu];
 
     pub fn kind(self) -> &'static dyn HubKind {
         match self {
             Hub::Base => &super::base_report::BaseReport,
             Hub::Inventory => &super::inventory_hub::InventoryHub,
-            Hub::Structure => &super::structure_hub::StructureHubKind,
             Hub::GameMenu => &super::game_menu::GameMenu,
         }
     }
@@ -182,7 +189,7 @@ pub(crate) struct HubPlace {
 pub(crate) struct RailSeen {
     hub: Hub,
     held: HubPageKey,
-    tabs: &'static [HubTab],
+    tabs: Vec<HubTab>,
     /// `(key, section index)` in rail order.
     pages: Vec<(HubPageKey, usize)>,
 }
@@ -203,7 +210,7 @@ impl RailSeen {
         RailSeen {
             hub,
             held: pages[held].key.clone(),
-            tabs: pages[held].tabs,
+            tabs: pages[held].tabs.clone(),
             pages: keyed,
         }
     }
@@ -385,12 +392,13 @@ impl App {
                     hub,
                     key: to.key.clone(),
                 });
-                if !to.offers(self.mode) {
-                    self.mode = to.tabs[0].mode;
-                }
+                // Through the hub's own opener, so a successor structure's
+                // page opens for that structure.
+                let tab = to.tabs.iter().position(|t| t.mode == shown).unwrap_or(0);
+                hub.kind().show_tab(self, to, tab);
                 return;
             }
-            if let Some(page) = pages.iter().find(|p| p.offers(shown)) {
+            if let Some(page) = pages.iter().find(|p| p.adoptable() && p.offers(shown)) {
                 let key = page.key.clone();
                 if let Some(place) = &mut self.hub_place {
                     place.key = key;
@@ -401,7 +409,7 @@ impl App {
         let mut offered = Vec::new();
         for hub in Hub::ALL {
             for page in hub.kind().pages(self) {
-                if page.offers(shown) {
+                if page.adoptable() && page.offers(shown) {
                     offered.push(HubPlace { hub, key: page.key });
                 }
             }

@@ -76,7 +76,6 @@ impl App {
             site_return: None,
             quit_unsaved_pending: false,
             game_menu_in_run: false,
-            structure_hub: None,
             command_return_row: None,
             dev_console_row: 0,
             hub_on_rail: true,
@@ -512,7 +511,7 @@ impl App {
         // most wanted. `an_arena_fight_still_writes_telemetry` is what stops
         // this being folded back inside for tidiness.
         self.flush_battle_telemetry();
-        self.refresh_structure_hub();
+        self.refresh_beside();
         if self.in_arena() {
             return;
         }

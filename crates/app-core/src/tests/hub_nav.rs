@@ -209,16 +209,18 @@ fn a_level_row_keeps_left_and_right() {
     assert!(!app.hub_on_rail);
 }
 
-/// Phase 1 leaves `c`'s own Tab (the structure cycle) alone, and Shift+Tab is
-/// its inverse so the rule is not half-adopted there.
+/// The structures beside the party are rail entries, so `]` and `[` walk
+/// them and `Tab` stays on one structure's tabs.
 #[test]
-fn the_structure_hub_cycles_structures_with_tab_and_shift_tab() {
+fn the_beside_entries_turn_with_brackets_and_tab_stays_on_one_structure() {
     let mut app = app_between_a_depot_and_a_machine(43012);
     app.handle_key(GameKey::Char('c'));
-    let first = app.structure_hub.as_ref().unwrap().current().entity;
+    let first = app.held_structure().unwrap();
     app.handle_key(GameKey::Tab);
-    let second = app.structure_hub.as_ref().unwrap().current().entity;
+    assert_eq!(app.held_structure().unwrap(), first, "Tab is a tab");
+    app.handle_key(GameKey::Char(']'));
+    let second = app.held_structure().unwrap();
     assert_ne!(first, second);
-    app.handle_key(GameKey::ShiftTab);
-    assert_eq!(app.structure_hub.as_ref().unwrap().current().entity, first);
+    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.held_structure().unwrap(), first);
 }

@@ -128,16 +128,15 @@ fn every_fixed_rail_reads_as_it_does_today() {
     let app = app_inside_a_small_base_with_programs(41001, false, 2);
     assert_eq!(fixed(&app), expect(BASE_RAIL));
 
-    // Base with a bay: Breed before Alerts; with the structure hub open:
-    // none.
+    // Base with a bay: Breed before Alerts, beside the bay or not.
     let mut app = app_with_a_breeding_bay(41002, 1, false);
     let mut with_breed = expect(BASE_RAIL);
     let alerts = with_breed.iter().position(|(t, _)| t == "Alerts").unwrap();
     with_breed.insert(alerts, ("Breed".to_string(), vec![Mode::Breed]));
     assert_eq!(fixed(&app), with_breed);
     app.handle_key(GameKey::Char('c'));
-    assert!(app.structure_hub.is_some());
-    assert_eq!(fixed(&app), expect(BASE_RAIL));
+    assert!(app.held_structure().is_some());
+    assert_eq!(fixed(&app), with_breed);
 
     // Inventory.
     let app = test_app(41003);
@@ -153,17 +152,18 @@ fn every_fixed_rail_reads_as_it_does_today() {
         expect(&GAME_MENU_RAIL[..5])
     );
 
-    // Structure hub beside a Depot.
-    let mut app = app_beside_depots(41006, 1, 0, &[]);
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(
-        plain(rail(&app, Hub::Structure)),
-        expect(&[
-            ("Inventory", &[Mode::Transfer]),
-            ("Filter", &[Mode::DepotFilter]),
-            ("Info", &[Mode::StructureManifest]),
-        ])
-    );
+    // BESIDE YOU, beside a Depot: one entry, the structure's pages as tabs.
+    let app = app_beside_depots(41006, 1, 0, &[]);
+    let mut want = expect(INVENTORY_RAIL);
+    want.push((
+        "Depot".to_string(),
+        vec![Mode::Transfer, Mode::DepotFilter, Mode::StructureManifest],
+    ));
+    assert_eq!(plain(rail(&app, Hub::Inventory)), want);
+    let pages = Hub::Inventory.kind().pages(&app);
+    assert_eq!(pages[3].section, Some("BESIDE YOU"));
+    let names: Vec<_> = pages[3].tabs.iter().map(|t| t.name).collect();
+    assert_eq!(names, ["Inventory", "Filter", "Info"]);
 }
 
 #[test]
@@ -285,24 +285,30 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         at(Mode::ManualOptions, Hub::GameMenu, 4, 0, true)
     );
 
-    // The structure hub beside a Depot and a machine.
+    // BESIDE YOU, beside a Depot and a machine: `c` opens on the first
+    // entry, `]` walks to the next, Tab stays on one structure.
     let mut app = app_between_a_depot_and_a_machine(41024);
     walk(
         &mut app,
         &[
-            (Char('c'), at(Mode::Transfer, Hub::Structure, 0, 0, true)),
-            (Right, at(Mode::Transfer, Hub::Structure, 0, 0, false)),
+            (Char('c'), at(Mode::Transfer, Hub::Inventory, 3, 0, true)),
+            (Right, at(Mode::Transfer, Hub::Inventory, 3, 0, false)),
         ],
     );
-    let first = app.structure_hub.as_ref().unwrap().current().entity;
+    let first = app.held_structure().unwrap();
     app.handle_key(Tab);
-    assert_ne!(app.structure_hub.as_ref().unwrap().current().entity, first);
-    assert!(app.hub_at().is_some_and(|(h, ..)| h == Hub::Structure));
+    assert_eq!(app.held_structure().unwrap(), first);
+    app.handle_key(Char(']'));
+    assert_ne!(app.held_structure().unwrap(), first);
+    assert_eq!(
+        app.hub_at().map(|(h, p, _)| (h, p)),
+        Some((Hub::Inventory, 4))
+    );
     app.handle_key(Esc);
     assert!(app.hub_on_rail);
     app.handle_key(Esc);
     assert_eq!(place(&app).0, Mode::Playing);
-    assert!(app.structure_hub.is_none());
+    assert!(app.held_structure().is_none());
 }
 
 #[test]
@@ -333,17 +339,18 @@ fn a_hub_reopens_where_it_was_left() {
     app.handle_key(Esc);
     assert_eq!(app.mode, Mode::GameplayOptions);
 
-    // Nor does the structure hub.
+    // `c` always opens on the first structure beside, on its first tab.
     let mut app = app_between_a_depot_and_a_machine(41032);
     app.handle_key(Char('c'));
-    app.handle_key(Down);
+    app.handle_key(Tab);
     assert_eq!(app.mode, Mode::MachineRecipe);
     app.handle_key(Esc);
     assert_eq!(app.mode, Mode::Playing);
     app.handle_key(Char('c'));
+    assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(
         app.hub_at().map(|(h, p, _)| (h, p)),
-        Some((Hub::Structure, 0))
+        Some((Hub::Inventory, 3))
     );
 }
 
@@ -493,20 +500,24 @@ fn shared_screens_of(app: &App, hubs: &[Hub]) -> Vec<Mode> {
 
 #[test]
 fn shared_screens_are_pinned() {
-    let mut app = app_with_a_breeding_bay(41066, 1, false);
     let message = "a screen is now shared by several pages: enter it with App::enter_hub_at";
+    let app = app_inside_a_small_base_with_programs(41066, false, 2);
     assert_eq!(
         shared_screens_outside_sites(&app),
         SHARED_SCREENS,
         "{message}"
     );
-    app.handle_key(GameKey::Char('c'));
-    assert!(app.structure_hub.is_some());
-    assert_eq!(
-        shared_screens_outside_sites(&app),
-        SHARED_SCREENS,
-        "{message}"
-    );
+}
+
+/// A bay beside the party has two homes: `b`'s Breed page and the bay's own
+/// Breed tab in `i`. Each enters it by its own page.
+#[test]
+fn breed_beside_a_bay_is_pinned() {
+    let app = app_with_a_breeding_bay(41069, 1, false);
+    let mut shared = shared_screens_outside_sites(&app);
+    shared.sort_by_key(|m| format!("{m:?}"));
+    // Every structure beside has an Info tab, so that repeats too.
+    assert!(shared.contains(&Mode::Breed), "{shared:?}");
 }
 
 /// Compile has two homes once a routine bench stands beside the party: `b`'s
@@ -519,23 +530,33 @@ const SHARED_WITH_A_BENCH: &[Mode] = &[Mode::Craft];
 fn compile_beside_a_bench_is_pinned_and_each_hub_keeps_its_own() {
     let mut app = app_at_a_workbench(41068);
     app.handle_key(GameKey::Char('c'));
-    assert!(app.structure_hub.is_some(), "the bench is beside the party");
+    assert!(
+        app.held_structure().is_some(),
+        "the bench is beside the party"
+    );
     assert_eq!(shared_screens_outside_sites(&app), SHARED_WITH_A_BENCH);
 
     // The bench's Compile is the structure hub's page...
-    let pages = Hub::Structure.kind().pages(&app);
+    let pages = Hub::Inventory.kind().pages(&app);
     let compile = pages
         .iter()
-        .position(|p| p.offers(Mode::Craft))
-        .expect("a routine bench has a Compile page");
+        .position(|p| p.section.is_some() && p.key != HubPageKey::Named("Production"))
+        .and_then(|_| {
+            pages
+                .iter()
+                .position(|p| matches!(p.key, HubPageKey::Structure(_)))
+        })
+        .expect("a routine bench has an entry");
     for _ in 0..pages.len() {
         if app.hub_at().is_some_and(|(_, page, _)| page == compile) {
             break;
         }
         app.handle_key(GameKey::Char(']'));
     }
-    assert_eq!(app.mode, Mode::Craft);
-    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Structure));
+    while app.mode != Mode::Craft {
+        app.handle_key(GameKey::Tab);
+    }
+    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Inventory));
     app.handle_key(GameKey::Esc);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);

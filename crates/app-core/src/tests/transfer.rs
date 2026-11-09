@@ -385,7 +385,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     let shelf = row_of(&app, ITEM);
     let pack = row_of(&app, "power_cell");
     let before = app.game.as_ref().unwrap().current_tick();
-    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let at = TransferAt::Structure(app.held_structure().unwrap());
 
     app.menu_selected = shelf;
     app.handle_key(GameKey::Char('4'));
@@ -415,7 +415,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
 fn enter_on_an_empty_basket_moves_nothing() {
     let mut app = picker(987);
     let before = app.game.as_ref().unwrap().current_tick();
-    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let at = TransferAt::Structure(app.held_structure().unwrap());
     let offer = app.game.as_ref().unwrap().transfer_offer_at(at);
 
     app.handle_key(GameKey::Enter);
@@ -430,7 +430,7 @@ fn enter_on_an_empty_basket_moves_nothing() {
 fn esc_moves_nothing_and_spends_no_turn() {
     let mut app = picker(988);
     let before = app.game.as_ref().unwrap().current_tick();
-    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let at = TransferAt::Structure(app.held_structure().unwrap());
     let offer = app.game.as_ref().unwrap().transfer_offer_at(at);
 
     app.handle_key(GameKey::Char('9'));

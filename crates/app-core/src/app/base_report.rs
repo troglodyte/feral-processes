@@ -120,7 +120,7 @@ impl HubKind for BaseReport {
             .game
             .as_ref()
             .is_some_and(|g| g.base_breeding_bay().is_some());
-        if bay_stands && app.structure_hub.is_none() {
+        if bay_stands {
             let alerts = pages
                 .iter()
                 .position(|p| p.key == HubPageKey::Named("Alerts"))

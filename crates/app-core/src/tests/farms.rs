@@ -127,7 +127,7 @@ fn c_aims_at_a_plot_from_any_side_holding_one_of_its_tiles() {
     assert_eq!(cycle.len(), 2, "{cycle:?}");
 
     open_structure_page(&mut app);
-    if app.structure_hub.as_ref().unwrap().current().entity != plot {
+    if app.held_structure().unwrap() != plot {
         app.handle_key(GameKey::Tab);
     }
 

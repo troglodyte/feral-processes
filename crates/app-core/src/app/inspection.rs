@@ -143,11 +143,46 @@ impl App {
             return;
         }
         // The hub's Info page is left by the hub's own keys, not by any key.
-        if self.structure_hub.is_some() {
+        if self.hub_at().is_some() {
+            self.structure_verb(key);
             return;
         }
         self.pending_structure_manifest = None;
         self.close_screen();
+    }
+
+    /// The structure verbs on a BESIDE YOU entry's Info tab: work it, upgrade
+    /// it, demolish it. Each is the door the old Structures launcher called
+    /// (`Game::work_structure`, the upgrade and demolish flows), aimed at
+    /// this entry's structure, so a refusal is that door's own sentence.
+    fn structure_verb(&mut self, key: GameKey) {
+        let GameKey::Char(verb @ ('W' | 'U' | 'X')) = key else {
+            return;
+        };
+        let Some(entity) = self.held_structure() else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        let Some(side) = game
+            .adjacent_structures()
+            .into_iter()
+            .find(|s| s.entity == entity)
+            .map(|s| s.dir)
+        else {
+            return;
+        };
+        match verb {
+            'W' => {
+                let outcome = game.work_structure(entity);
+                self.report(outcome);
+                self.mode = Mode::Playing;
+            }
+            'U' => self.upgrade_toward(side),
+            _ => match game.adjacent_structure(side.0, side.1) {
+                Some(found) => self.demolish_found(found),
+                None => self.mode = Mode::Playing,
+            },
+        }
     }
 
     /// The cell description is read-only and reached only from the corridor

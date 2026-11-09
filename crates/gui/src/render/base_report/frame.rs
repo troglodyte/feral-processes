@@ -270,16 +270,19 @@ fn tab_label(name: &str, current: bool) -> String {
     }
 }
 
-/// Whether `title`, `gap` and every tab name (the current one bracketed)
-/// fit in `avail` wide. Measures only, so the fallback to dots can be
-/// tested without a painter; `advance` is the text's width at the size the
-/// strip draws it.
+/// Where the tab strip starts and how wide it may be, given the title's
+/// drawn width: one `gap` after the title, in what the title row leaves.
+pub(super) fn strip_span(title_x: f32, title_w: f32, gap: f32, avail: f32) -> (f32, f32) {
+    (title_x + title_w + gap, avail - title_w - gap)
+}
+
+/// Whether every tab name (the current one bracketed) fits in `budget`
+/// wide. Measures only, so the fallback to dots can be tested without a
+/// painter; `advance` is the text's width at the size the strip draws it.
 pub(super) fn tab_strip_fits(
     names: &[&str],
     current: usize,
-    title_w: f32,
-    gap: f32,
-    avail: f32,
+    budget: f32,
     advance: impl Fn(&str) -> f32,
 ) -> bool {
     let tabs: f32 = names
@@ -288,7 +291,7 @@ pub(super) fn tab_strip_fits(
         .map(|(i, name)| advance(&tab_label(name, i == current)))
         .sum();
     let seps = advance(TAB_SEPARATOR) * names.len().saturating_sub(1) as f32;
-    title_w + gap + tabs + seps <= avail
+    tabs + seps <= budget
 }
 
 /// The page's title, then its tab names with the current one marked
@@ -309,11 +312,11 @@ fn draw_title(
     if tabs.len() < 2 {
         return;
     }
-    let title_w = painter.measure_ui_advance(name, m.title());
-    let x = title.x + title_w + m.pad;
+    let title_w = painter.measure_ui_bold_advance(name, m.title());
+    let (x, budget) = strip_span(title.x, title_w, m.pad, title.w);
     let advance = |text: &str| painter.measure_ui_advance(text, m.font_size);
     let names: Vec<&str> = tabs.iter().map(|t| t.name).collect();
-    if !tab_strip_fits(&names, tab, title_w, m.pad, title.w, advance) {
+    if !tab_strip_fits(&names, tab, budget, advance) {
         let dots: Vec<&str> = (0..tabs.len())
             .map(|i| if i == tab { "●" } else { "○" })
             .collect();
@@ -735,6 +738,7 @@ mod tests {
         pages.push(("Caravans".to_string(), CARAVAN_TABS));
         let m = ui_metrics(720.0);
         let mut fell_back = Vec::new();
+        let mut multi_tab_pages = 0;
         with_painter(|p| {
             let char_w = p.measure_ui_advance("M", m.font_size);
             let title_row = hub_layout(frame_rect(1280.0, 720.0), &m, char_w).title;
@@ -742,27 +746,34 @@ mod tests {
                 if tabs.len() < 2 {
                     continue;
                 }
+                multi_tab_pages += 1;
                 let names: Vec<&str> = tabs.iter().map(|t| t.name).collect();
-                let title_w = p.measure_ui_advance(title, m.title());
+                let title_w = p.measure_ui_bold_advance(title, m.title());
+                let (_, budget) = strip_span(title_row.x, title_w, m.pad, title_row.w);
                 let advance = |t: &str| p.measure_ui_advance(t, m.font_size);
-                let fits = (0..tabs.len())
-                    .all(|i| tab_strip_fits(&names, i, title_w, m.pad, title_row.w, advance));
+                let fits = (0..tabs.len()).all(|i| tab_strip_fits(&names, i, budget, advance));
                 if !fits {
                     fell_back.push(title.as_str());
                 }
             }
             let expected: Vec<&str> = FALLBACK.to_vec();
             assert_eq!(fell_back, expected);
+            assert!(multi_tab_pages > 0, "the census measured no strip");
         });
     }
 
     #[test]
     fn a_strip_that_does_not_fit_is_measured_as_not_fitting() {
         let advance = |t: &str| t.chars().count() as f32;
-        // "Title" 5 + gap 1 + "One" 3 + "[Two]" 5 + one separator of 3.
+        // "One" 3 + "[Two]" 5 + one separator of 3.
         let names = ["One", "Two"];
-        assert!(tab_strip_fits(&names, 1, 5.0, 1.0, 17.0, advance));
-        assert!(!tab_strip_fits(&names, 1, 5.0, 1.0, 16.9, advance));
+        assert!(tab_strip_fits(&names, 1, 11.0, advance));
+        assert!(!tab_strip_fits(&names, 1, 10.9, advance));
+    }
+
+    #[test]
+    fn the_strip_starts_one_gap_after_the_title_and_gets_what_is_left() {
+        assert_eq!(strip_span(10.0, 50.0, 4.0, 200.0), (64.0, 146.0));
     }
 
     #[test]

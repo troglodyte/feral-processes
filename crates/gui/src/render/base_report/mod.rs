@@ -39,8 +39,6 @@ pub(super) struct AppScreens<'a> {
     pub(super) on_rail: bool,
     /// The current screen's rows when it is a command page.
     pub(super) commands: Option<&'a [GroupMenuRow]>,
-    /// `(page index, row count)` for each command page, for the Overview.
-    pub(super) command_counts: &'a [(usize, usize)],
     /// `App::perk_previews`, one per perk, for the Perks page.
     pub(super) perk_previews: &'a [Option<PerkPreview>],
     /// What was typed to filter the current screen's list, or `""`.
@@ -207,8 +205,8 @@ pub(super) fn screen_rows(
     flags: &feral_processes_engine::BaseReportFlags,
 ) -> Vec<Row> {
     match mode {
-        Mode::BaseOverview => overview::overview_rows(flags, app_screens.command_counts, selected),
-        Mode::BaseStructures | Mode::PartyPrograms | Mode::PartyRoutines => {
+        Mode::BaseOverview => overview::overview_rows(flags, selected),
+        Mode::PartyPrograms | Mode::PartyRoutines => {
             commands::command_rows(app_screens.commands.unwrap_or_default(), selected)
         }
         Mode::StaffWellbeing => staff::wellbeing_rows(&game.staff_wellbeing(), selected),
@@ -258,14 +256,6 @@ pub(super) fn screen_rows(
         | Mode::RoutesInFlight => sites::site_rows(game, mode, app_screens.site, selected),
         other => vec![text_row(format!("No report for {other:?}."))],
     }
-}
-
-/// Each page whose first screen is a command page, with its index.
-pub(super) fn command_pages() -> impl Iterator<Item = (usize, Mode)> {
-    BASE_REPORT_PAGES
-        .iter()
-        .enumerate()
-        .map(|(page, entry)| (page, entry.tabs[0].mode))
 }
 
 #[cfg(test)]

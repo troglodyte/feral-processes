@@ -1,6 +1,5 @@
-//! The command pages (the base's Structures stopgap, the party's Programs
-//! and Routines):
-//! one row per thing that can be done from where the party stands. The rows come from
+//! The command pages (the party's Programs and Routines): one row per thing
+//! that can be done from where the party stands. The rows come from
 //! `App::command_rows`, the table the handler dispatches, so a label here can
 //! never name a different action from the one under the highlight.
 
@@ -49,12 +48,15 @@ mod tests {
         assert!(!selected(&out[0]) && selected(&out[1]) && !selected(&out[2]));
     }
 
-    /// Every label in `group_menu.rs`'s STRUCTURE table; gui cannot build a
-    /// `Game` to read it. Update with the table.
+    /// Every label in `group_menu.rs`'s PROGRAM and ROUTINE tables; gui
+    /// cannot build a `Game` to read them. Update with the tables.
     const LABELS: &[&str] = &[
-        "Work a structure yourself",
-        "Upgrade a structure",
-        "Demolish a structure",
+        "Read a manifest",
+        "Fuse two programs",
+        "Refactor a program",
+        "Develop a program",
+        "Install a routine",
+        "Extract a routine",
     ];
 
     #[test]

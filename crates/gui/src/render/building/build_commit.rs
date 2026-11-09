@@ -145,10 +145,8 @@ pub(crate) struct BuildCommit {
     /// **Only an upgrade carries it, and that is not an oversight.** A
     /// deploy knows its structure a screen earlier, so `draw_build_direction`
     /// quotes the bill there while the player is still choosing where to put
-    /// it. An upgrade's target is not known until the direction key lands —
-    /// `Mode::UpgradeDirection` is aimed at a tile — so this is the first
-    /// screen that *can* price it, and the list it replaced was the only
-    /// place the figure used to appear.
+    /// it. An upgrade's target is not known until `U` lands on a structure's
+    /// Info tab, so this is the first screen that *can* price it.
     pub cost: Vec<String>,
     /// Whether this commits a program to a wrecked structure's rebuild site
     /// rather than filing a new order, which changes what the picker's
@@ -225,7 +223,7 @@ impl BuildCommit {
 /// off, so naming the structure from it means the screen cannot describe a
 /// different structure from the one `handle_upgrade_key` recorded. It has to
 /// run before `render::draw` takes `&mut app.game`, which is why the caller
-/// hoists it up beside `scanned`.
+/// hoists it up ahead of the draw.
 ///
 /// A name that will not resolve falls back to a plain noun instead of
 /// dropping the whole prompt: the *tier* is the part the player cannot

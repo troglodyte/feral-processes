@@ -6,7 +6,7 @@
 //! rows to count.
 
 use super::*;
-use crate::render::base_report::{AppScreens, command_pages, screen_rows};
+use crate::render::base_report::{AppScreens, screen_rows};
 use crate::render::building::{build_menu_page_rows, pin_subject_page_rows};
 use crate::render::progression::research_page_rows;
 use feral_processes_app_core::{GameKey, Hub};
@@ -35,9 +35,6 @@ fn tab_rows(app: &mut App) -> Option<Vec<Row>> {
     let work_orders = app.work_order_rows();
     let base_staff = (mode == Mode::BaseStaff).then(|| app.base_staff_table());
     let commands = app.command_rows(mode);
-    let command_counts: Vec<(usize, usize)> = command_pages()
-        .filter_map(|(page, mode)| Some((page, app.command_rows(mode)?.len())))
-        .collect();
     let (active, offers) = app.contract_sections();
     let reach = app.broker_reach();
     let site = app.held_site();
@@ -80,7 +77,6 @@ fn tab_rows(app: &mut App) -> Option<Vec<Row>> {
                 member: None,
                 list_filter: "",
                 commands: commands.as_deref(),
-                command_counts: &command_counts,
                 work_orders: &work_orders,
                 base_staff: base_staff.as_ref(),
                 work_column: 0,

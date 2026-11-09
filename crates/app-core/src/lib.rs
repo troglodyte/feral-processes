@@ -40,7 +40,10 @@ pub use app::group_menu::GroupMenuRow;
 pub use app::hub::HubTab;
 pub use app::hub::{FixedPage, Hub, HubKind, HubPage, HubPageKey};
 pub use app::inventory::{equip_swap_visible, inventory_visible};
-pub use app::inventory_hub::INVENTORY_PAGES;
+pub use app::inventory_hub::{
+    BESIDE_SECTION, INVENTORY_PAGES, MEMBER_TABS, PARTY_SECTION, PROGRAMS_SECTION, ROSTER_TABS,
+    YOU_SECTION, YOU_TABS,
+};
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::level_up::LevelUpOrigin;

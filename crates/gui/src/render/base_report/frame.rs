@@ -729,16 +729,33 @@ mod tests {
     #[test]
     fn every_tab_strip_fits_at_the_smallest_window_or_is_listed() {
         use feral_processes_app_core::{
-            BASE_REPORT_PAGES, CARAVAN_TABS, HubTab, INVENTORY_PAGES, OUTPOST_TABS, TOWN_TABS,
+            BASE_REPORT_PAGES, CARAVAN_TABS, HubTab, INVENTORY_PAGES, MEMBER_TABS, OUTPOST_TABS,
+            TOWN_TABS,
         };
-        /// Pages whose strip falls back to dots at 1280x720.
-        const FALLBACK: &[&str] = &[];
+        use feral_processes_engine::StructurePage;
+        /// Pages whose strip falls back to dots at 1280x720: a Workbench
+        /// with the weapon pages researched has seven tabs.
+        const FALLBACK: &[&str] = &["Workbench"];
         let long_name = "W".repeat(20);
         let mut pages: Vec<(String, &[HubTab])> = BASE_REPORT_PAGES
             .iter()
             .chain(INVENTORY_PAGES)
             .map(|p| (p.title.to_string(), p.tabs))
             .collect();
+        // The fullest structure: a Workbench with the weapon pages researched.
+        let bench: Vec<HubTab> = [
+            StructurePage::Inventory,
+            StructurePage::Build,
+            StructurePage::Built,
+            StructurePage::Weapon,
+            StructurePage::Salvage,
+            StructurePage::Compile,
+            StructurePage::Info,
+        ]
+        .map(|p| feral_processes_app_core::structure_page(p).tabs[0])
+        .to_vec();
+        pages.push(("Workbench".to_string(), &bench));
+        pages.push((long_name.clone(), MEMBER_TABS));
         pages.push((long_name.clone(), TOWN_TABS));
         pages.push((long_name, OUTPOST_TABS));
         pages.push(("Caravans".to_string(), CARAVAN_TABS));

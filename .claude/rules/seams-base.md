@@ -498,7 +498,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **Rooms are derived per call by `rooms::of_world`, never a Resource or a stored field, and a `door` is the only structure anchor `blocked_tiles` lets the crew through.**
 
-- **`[c]` opens the structure hub, and `Game::adjacent_structures` is the one answer to what is beside the party and which pages each has.**
+- **`[c]` opens `i` on its first BESIDE YOU entry, and `Game::adjacent_structures` is the one answer to what is beside the party and which pages each has.**
 - **Destruction records a ruin in `damage_structure` (never in a demolish), and `file_ruins` files it only when no siege runs.**
 - **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**
 

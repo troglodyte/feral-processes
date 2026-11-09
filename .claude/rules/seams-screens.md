@@ -56,8 +56,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   that isn't drawn.
 - **A group menu's rows are hidden dynamically**, so `command_rows`
   must be the *only* source of them, for the party's pages (and the
-  temporary BASE "Structures" stopgap, removed in phase 3).
-- **Every hub — `b`, `i`, `c` and Esc's game menu (`w` opens `b`, not a hub of its own) — walks one nav rule,
+  BASE "Structures" stopgap, still standing).
+- **Every hub — `b`, `i` and Esc's game menu (`c` opens `i` on a BESIDE YOU entry, `w` opens `b`, neither a hub of its own) — walks one nav rule,
   `App::handle_hub_nav` (ADR 0045: arrows move the cursor, `Tab`/`Shift+Tab`
   (`GameKey::ShiftTab`, folded to `Tab` for every other screen) switch the
   highlighted page's `HubTab`s from either half, `[ ]` step the rail, `{ }`
@@ -69,7 +69,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   against the `Mode` (`hub_at` is `None` off the held page's screens),
   `App::enter_hub_at` names the page and `settle_hub` is only the default
   for a jump that names none (it adopts a page only when exactly one offers
-  the screen), and the `shared_screens_are_pinned` census forces the
+  the screen, and never a BESIDE YOU structure page), and the `shared_screens_are_pinned` census forces the
   explicit door for any screen several pages share.**
 - **A Broker's board is derived, never stored** — seeded off `(world seed,
   zone, epoch)`.

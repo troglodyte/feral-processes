@@ -132,13 +132,13 @@
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
 - **A group menu's rows are hidden dynamically**, so `command_rows`
-  (the party pages, plus the temporary BASE "Structures" stopgap that phase 3
-  removes) must be the *only* source of them; the base launcher tables are
+  (the party pages, plus the BASE "Structures" stopgap, still standing though
+  W/U/X on a BESIDE YOU entry's Info tab now reach the same verbs) must be the *only* source of them; the base launcher tables are
   gone and their verbs are tabs of `b`'s pages. A row survives two
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
   `require_field`'s caller list.
-- **Every hub — `b`, `i`, `c` and the game menu (`w` is a shortcut that opens `b` on the site beside the party, else the first town, else Overview) — walks one nav rule,
+- **Every hub — `b`, `i` and the game menu (`c` opens `i` on the first structure beside; `w` is a shortcut that opens `b` on the site beside the party, else the first town, else Overview) — walks one nav rule,
   `App::handle_hub_nav`, and `App::screen_claims` is the one place a page
   takes an arrow, `Esc` or a brace back from it.** The rule (ADR 0045):
   arrows move the cursor, so `Right` in a page is the page's own and `Left`
@@ -154,11 +154,17 @@
   had it, so the canvas editor, help links and the map's manifest keep a
   Shift-held Tab. **A manifest shown as a hub tab** gives `Tab` to the hub and
   its faces to `→/←` (`step_manifest_face`); off every hub (the map's sheet)
-  it keeps `Tab`, because the hub rule is not running. The structure hub's
-  own `Tab` (next structure, `Shift+Tab` back) stays until it folds into `i`.
-  The structure hub had its own rule
-  (open in the page, Left/Right to the page, rail by `Esc` alone) and read as
-  a different screen from the base report's; a page that wants an arrow adds
+  it keeps `Tab`, because the hub rule is not running. The structure hub is
+  gone: its pages are the tabs of `i`'s BESIDE YOU entries
+  (`HubPageKey::Structure`, one per `Game::adjacent_structures`), so `Tab`
+  walks one structure's pages and `[ ]` walks the structures. `i`'s rail is
+  YOU, PARTY (`HubPageKey::Member`), PROGRAMS and BESIDE YOU, built live;
+  `HubKind::show_tab` opens a tab's per-structure or per-member state,
+  `entry_tab` carries the tab on show to an entry that has it, and
+  `settle_hub` never adopts a `Structure` page by guess (their screens are
+  also opened from the map for whatever was aimed at) and opens a vanished
+  entry's successor through `show_tab`. The old structure hub had its own rule
+  and read as a different screen from the base report's; a page that wants an arrow adds
   an arm to `screen_claims`, never a guard inside the nav match or a second
   nav function. **What a hub *is* is its `HubKind` (`app/hub.rs`), one impl
   in that hub's module**, and neither the nav nor gui names a hub: a fixed

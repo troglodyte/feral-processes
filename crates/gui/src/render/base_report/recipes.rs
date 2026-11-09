@@ -8,11 +8,11 @@ use feral_processes_engine::{RecipeChain, RecipeMaker, RecipeStep};
 /// The rows of the page: per entry a selectable product row, unselectable
 /// sub-rows, then a blank row.
 ///
-/// `Row::Item` rather than `Row::Text` for the sub-rows: the body ends at the
-/// *last* Item and pins whatever follows as a footer, so a step drawn as Text
-/// would stay on screen while the list scrolled past the product it belongs
-/// to. app-core scrolls this page by entry (`recipe_chains().len()`) without
-/// knowing how many lines an entry draws, which is what the sub-rows allow.
+/// `Row::Detail` rather than `Row::Text` for the sub-rows: the body ends at
+/// the last Item or Detail and pins whatever follows as a footer, so a step
+/// drawn as Text would stay on screen while the list scrolled past the
+/// product it belongs to. Not `Row::Item` either: app-core scrolls this page
+/// by entry (`recipe_chains().len()`), so only the product rows are items.
 pub(super) fn recipe_rows(chains: &[RecipeChain], selected: usize) -> Vec<Row> {
     if chains.is_empty() {
         return vec![text_row("Nothing to make yet. Research unlocks recipes.")];

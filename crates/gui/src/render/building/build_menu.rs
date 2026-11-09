@@ -160,8 +160,8 @@ pub(super) fn push_entry_rows(
     });
     // Through `description_rows` rather than one indented `format!`: the
     // shipped descriptions run to 300 characters against a body of about
-    // 114, and the wrapped lines have to stay `Row::Item` for the reason
-    // `build_menu_rows` gives.
+    // 114, and the wrapped lines are `Row::Detail` so they scroll with the
+    // entry and the cursor never counts them.
     rows.extend(description_rows(&entry.description));
     if let Some(makes) = &entry.makes {
         rows.extend(description_rows(&makes_line(makes)));

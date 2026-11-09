@@ -354,7 +354,7 @@ mod tests {
             .expect("the page is a list");
         let last = rows
             .iter()
-            .rposition(|r| matches!(r, Row::Item { .. }))
+            .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(..)))
             .expect("the page is a list");
         let chrome = first + (rows.len() - 1 - last);
 

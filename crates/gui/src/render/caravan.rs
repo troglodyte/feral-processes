@@ -495,7 +495,7 @@ mod tests {
             .expect("the page is a list");
         let last = rows
             .iter()
-            .rposition(|r| matches!(r, Row::Item { .. }))
+            .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(..)))
             .expect("the page is a list");
         // The ends only, and deliberately: unlike the gear page this one
         // *scrolls* — `draw_popup` pages its `Row::Item` span — so a

@@ -173,7 +173,7 @@ impl App {
                 return;
             }
             GameKey::Char('i') => {
-                self.open_hub(Hub::Inventory);
+                self.open_inventory();
                 return;
             }
             // The downed-program store: a body goes down in most fights and

@@ -185,18 +185,35 @@ pub(crate) fn beside_pages(app: &App, section: &'static str) -> Vec<HubPage> {
 }
 
 impl App {
-    /// `[c]`: `i`, opened on the first structure beside the party (clockwise
-    /// from north), cursor on the rail. With no structure beside, the pack's
-    /// downed programs alone open the transfer screen; the caller has
-    /// already refused when there is nothing at all.
+    /// `[i]`: opened on the first structure beside the party (clockwise from
+    /// north) if there is one, else where the player left it.
+    pub(crate) fn open_inventory(&mut self) {
+        if !self.open_on_first_beside() {
+            self.open_hub(Hub::Inventory);
+        }
+    }
+
+    /// `[c]`: `i`, opened on the first structure beside. With no structure
+    /// beside, the pack's downed programs alone open the transfer screen;
+    /// the caller has already refused when there is nothing at all.
     pub(crate) fn open_beside(&mut self) {
-        let Some(game) = &self.game else { return };
-        let Some(first) = game.adjacent_structures().first().map(|s| s.entity) else {
+        if !self.open_on_first_beside() {
             self.open_transfer_for(TransferAt::PackOnly);
-            return;
+        }
+    }
+
+    /// Opens `i` on the first BESIDE YOU entry, cursor on the rail. Answers
+    /// whether there was one.
+    fn open_on_first_beside(&mut self) -> bool {
+        let Some(game) = &self.game else {
+            return false;
+        };
+        let Some(first) = game.adjacent_structures().first().map(|s| s.entity) else {
+            return false;
         };
         self.turn_hub_to(Hub::Inventory, &HubPageKey::Structure(first));
         self.hub_on_rail = true;
+        true
     }
 
     /// The structure the held page names, `None` on any other page.

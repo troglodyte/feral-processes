@@ -249,3 +249,38 @@ fn a_basket_left_by_a_turn_is_discarded() {
     app.handle_key(GameKey::Char(']'));
     assert!(app.basket_amounts.iter().all(|n| *n == 0));
 }
+
+#[test]
+fn i_beside_a_structure_opens_on_it_and_elsewhere_on_its_last_page() {
+    let mut app = app_between_a_depot_and_a_machine(2616);
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(app.mode, Mode::Transfer);
+    assert!(app.hub_on_rail);
+    let first = app
+        .held_structure()
+        .expect("opened on the structure beside");
+    assert_eq!(held_beside(&app).dir, (1, 0), "the first clockwise, as c");
+    // Leave on another page: beside a structure `i` still opens on it.
+    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Char('i'));
+    assert_eq!(app.held_structure(), Some(first));
+
+    // With nothing beside, the page left on is the one reopened.
+    let mut away = test_app(2617);
+    away.handle_key(GameKey::Char('i'));
+    away.handle_key(GameKey::Down);
+    away.handle_key(GameKey::Esc);
+    away.handle_key(GameKey::Char('i'));
+    assert_eq!(away.hub_page(), Some(&HubPageKey::Named("Roster")));
+}
+
+#[test]
+fn c_with_nothing_beside_refuses_as_it_always_has() {
+    let mut app = test_app(2618);
+    let before = tick(&app);
+    app.handle_key(GameKey::Char('c'));
+    assert_eq!(app.mode, Mode::Playing);
+    assert!(app.held_structure().is_none());
+    assert_eq!(tick(&app), before);
+}

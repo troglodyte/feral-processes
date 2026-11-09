@@ -1042,3 +1042,55 @@ fn stopping_a_route_off_site_refuses_and_keeps_it_standing() {
         assert!(reports[0].standing, "{tab:?} cut the route");
     }
 }
+
+/// An outpost standing within a town's reach: `site_reach` names the town,
+/// but the outpost's own doors still know the party is at the outpost.
+#[test]
+fn an_outpost_inside_a_towns_reach_still_answers_its_doors() {
+    let mut app = app_at_a_relay(7167, &ItemId::from("cache_grain"), 40);
+    let town_tile = (500, 500);
+    let post_tile = (502, 501);
+    set_sites(
+        &mut app,
+        &[(TOWN_A, "Alder", town_tile)],
+        &[(post_tile, vec![(ItemId::from("cache_grain"), 4)])],
+    );
+    stand_in_base_at(&mut app, post_tile.0, post_tile.1 + 1);
+    let reach = app.game.as_ref().unwrap().site_reach();
+    assert_eq!(
+        reach.beside,
+        Some(RouteDestinationId::Settlement(TOWN_A)),
+        "precondition: the town is what site_reach names"
+    );
+    assert!(!reach.on_base, "precondition: off the base");
+    let post = HubPageKey::Site(RouteDestinationId::Outpost(post_tile));
+    app.handle_key(GameKey::Char('b'));
+
+    for (tab, key, opens) in [
+        (
+            Mode::OutpostCrew,
+            GameKey::Char('P'),
+            Some(Mode::OutpostPost),
+        ),
+        (Mode::OutpostStock, GameKey::Char('C'), Some(Mode::Transfer)),
+        (Mode::OutpostCrew, GameKey::Char('U'), None),
+        (Mode::OutpostStock, GameKey::Char('S'), None),
+    ] {
+        app.enter_hub_at(Hub::Base, post.clone(), tab);
+        app.hub_on_rail = false;
+        app.status_line = None;
+        app.handle_key(key);
+        let line = app.status_line.clone().unwrap_or_default();
+        assert!(
+            line != crate::app::sites_hub::RECALL_REACH_REFUSAL
+                && line != crate::app::sites_hub::SEVER_REACH_REFUSAL
+                && line != feral_processes_engine::outposts::POST_REACH_REFUSAL
+                && line != feral_processes_engine::outposts::TAKE_REACH_REFUSAL,
+            "{tab:?} {key:?} refused on reach at the outpost: {line}"
+        );
+        if let Some(opens) = opens {
+            assert_eq!(app.mode, opens, "{tab:?} {key:?}: {line}");
+            app.handle_key(GameKey::Esc);
+        }
+    }
+}

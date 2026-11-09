@@ -246,14 +246,17 @@ impl App {
 
     /// Whether the party stands beside the held site.
     fn beside_held_site(&self) -> bool {
-        let reach = self.game.as_ref().map(|g| g.site_reach());
-        reach.is_some_and(|r| r.beside.is_some() && r.beside == self.held_site())
+        let (Some(site), Some(game)) = (self.held_site(), self.game.as_ref()) else {
+            return false;
+        };
+        game.beside_site(site)
     }
 
     /// At base, or beside `site` itself.
     fn reaches_site(&self, site: RouteDestinationId) -> bool {
-        let reach = self.game.as_ref().map(|g| g.site_reach());
-        reach.is_some_and(|r| r.on_base || r.beside == Some(site))
+        self.game
+            .as_ref()
+            .is_some_and(|g| g.site_reach().on_base || g.beside_site(site))
     }
 
     pub(crate) fn handle_sites_key(&mut self, key: GameKey) {

@@ -35,6 +35,17 @@ fn tab_cycles_stats_social_talk_on_an_owned_program() {
     assert_eq!(app.manifest_tab, ManifestTab::Stats);
 }
 
+/// Off a hub there is one Tab: Shift+Tab is folded to it, not dropped.
+#[test]
+fn shift_tab_toggles_the_face_like_tab_off_a_hub() {
+    let (mut app, a, _) = owned_pair(7402);
+    open(&mut app, a);
+    app.handle_key(GameKey::ShiftTab);
+    assert_eq!(app.manifest_tab, ManifestTab::Social);
+    app.handle_key(GameKey::ShiftTab);
+    assert_eq!(app.manifest_tab, ManifestTab::Talk);
+}
+
 #[test]
 fn leaving_from_the_talk_tab_resets_it() {
     let (mut app, a, _) = owned_pair(7407);

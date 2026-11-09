@@ -344,12 +344,12 @@ impl App {
         match key {
             GameKey::Char(']') => self.turn_hub_to_index(hub, next),
             GameKey::Char('[') => self.turn_hub_to_index(hub, prev),
-            GameKey::Char('}') if !self.filter_applied() => {
+            GameKey::Char('}') if !self.screen_claims(key) => {
                 if let Some(to) = section_start(&pages, page, 1) {
                     self.turn_hub_to_index(hub, to);
                 }
             }
-            GameKey::Char('{') if !self.filter_applied() => {
+            GameKey::Char('{') if !self.screen_claims(key) => {
                 if let Some(to) = section_start(&pages, page, -1) {
                     self.turn_hub_to_index(hub, to);
                 }
@@ -399,7 +399,6 @@ impl App {
             // A manifest shown as a hub tab walks its faces with the arrows
             // (`step_manifest_face`); off its first face Left is still its
             // own, and from the first it goes to the rail.
-            GameKey::Right if self.mode == Mode::Manifest => true,
             GameKey::Left if self.mode == Mode::Manifest => self.manifest_tab != ManifestTab::Stats,
             // A page with a filter keeps the braces for it.
             GameKey::Char('{' | '}') => self.filter_applied(),

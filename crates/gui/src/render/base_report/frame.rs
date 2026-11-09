@@ -257,26 +257,84 @@ fn draw_rail(
     }
 }
 
-/// The page's title, then one dot per screen with the current one filled.
-/// A one-screen page draws no dots.
+/// Between two tabs of the strip.
+const TAB_SEPARATOR: &str = " · ";
+
+/// A tab as the strip draws it: the current one bracketed, so the mark does
+/// not lean on colour alone.
+fn tab_label(name: &str, current: bool) -> String {
+    if current {
+        format!("[{name}]")
+    } else {
+        name.to_string()
+    }
+}
+
+/// Whether `title`, `gap` and every tab name (the current one bracketed)
+/// fit in `avail` wide. Measures only, so the fallback to dots can be
+/// tested without a painter; `advance` is the text's width at the size the
+/// strip draws it.
+pub(super) fn tab_strip_fits(
+    names: &[&str],
+    current: usize,
+    title_w: f32,
+    gap: f32,
+    avail: f32,
+    advance: impl Fn(&str) -> f32,
+) -> bool {
+    let tabs: f32 = names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| advance(&tab_label(name, i == current)))
+        .sum();
+    let seps = advance(TAB_SEPARATOR) * names.len().saturating_sub(1) as f32;
+    title_w + gap + tabs + seps <= avail
+}
+
+/// The page's title, then its tab names with the current one marked
+/// (`Title   One · [Two] · Three`). A one-tab page draws nothing after the
+/// title, and a strip that does not fit falls back to one dot per tab.
 fn draw_title(
     title: &Rect,
     pages: &[HubPage],
     page: usize,
-    screen: usize,
+    tab: usize,
     painter: &Painter,
     m: &Metrics,
 ) {
     let base = title.y + title.h * 0.75;
     let name = pages[page].title.as_str();
     painter.ui_bold(name, title.x, base, m.title(), hud::palette::PANE_TITLE);
-    let screens = pages[page].tabs.len();
-    if screens > 1 {
-        let dots: Vec<&str> = (0..screens)
-            .map(|i| if i == screen { "●" } else { "○" })
+    let tabs = pages[page].tabs;
+    if tabs.len() < 2 {
+        return;
+    }
+    let title_w = painter.measure_ui_advance(name, m.title());
+    let x = title.x + title_w + m.pad;
+    let advance = |text: &str| painter.measure_ui_advance(text, m.font_size);
+    let names: Vec<&str> = tabs.iter().map(|t| t.name).collect();
+    if !tab_strip_fits(&names, tab, title_w, m.pad, title.w, advance) {
+        let dots: Vec<&str> = (0..tabs.len())
+            .map(|i| if i == tab { "●" } else { "○" })
             .collect();
-        let x = title.x + painter.measure_ui_advance(name, m.title()) + m.pad;
         painter.ui(dots.join(" "), x, base, m.font_size, hud::palette::FAINT);
+        return;
+    }
+    let mut x = x;
+    for (i, name) in names.iter().enumerate() {
+        if i > 0 {
+            painter.ui(TAB_SEPARATOR, x, base, m.font_size, hud::palette::FAINT);
+            x += advance(TAB_SEPARATOR);
+        }
+        let label = tab_label(name, i == tab);
+        let w = advance(&label);
+        if i == tab {
+            painter.rect(x, title.y, w, title.h, SELECT_BG);
+            painter.ui(&label, x, base, m.font_size, hud::palette::PANE_TITLE);
+        } else {
+            painter.ui(&label, x, base, m.font_size, hud::palette::FAINT);
+        }
+        x += w;
     }
 }
 
@@ -604,6 +662,90 @@ mod tests {
             );
         });
         crate::paint::painted_text(&shapes)
+    }
+
+    /// The tab strip's width census at 1280x720, the smallest window the
+    /// game supports (`popup_row_width`'s precedent: measure headlessly, pin
+    /// the exceptions as a literal). Every multi-tab page of every hub, with
+    /// each of its tabs current, since the bracketed tab is the widest.
+    /// Site pages carry the town's name as their title, so they are measured
+    /// under a worst-case 20-cell name.
+    #[test]
+    fn every_tab_strip_fits_at_the_smallest_window_or_is_listed() {
+        use feral_processes_app_core::{
+            BASE_REPORT_PAGES, CARAVAN_TABS, HubTab, INVENTORY_PAGES, OUTPOST_TABS, TOWN_TABS,
+        };
+        /// Pages whose strip falls back to dots at 1280x720.
+        const FALLBACK: &[&str] = &[];
+        let long_name = "W".repeat(20);
+        let mut pages: Vec<(String, &[HubTab])> = BASE_REPORT_PAGES
+            .iter()
+            .chain(INVENTORY_PAGES)
+            .map(|p| (p.title.to_string(), p.tabs))
+            .collect();
+        pages.push((long_name.clone(), TOWN_TABS));
+        pages.push((long_name, OUTPOST_TABS));
+        pages.push(("Caravans".to_string(), CARAVAN_TABS));
+        let m = ui_metrics(720.0);
+        let mut fell_back = Vec::new();
+        with_painter(|p| {
+            let char_w = p.measure_ui_advance("M", m.font_size);
+            let title_row = hub_layout(frame_rect(1280.0, 720.0), &m, char_w).title;
+            for (title, tabs) in &pages {
+                if tabs.len() < 2 {
+                    continue;
+                }
+                let names: Vec<&str> = tabs.iter().map(|t| t.name).collect();
+                let title_w = p.measure_ui_advance(title, m.title());
+                let advance = |t: &str| p.measure_ui_advance(t, m.font_size);
+                let fits = (0..tabs.len())
+                    .all(|i| tab_strip_fits(&names, i, title_w, m.pad, title_row.w, advance));
+                if !fits {
+                    fell_back.push(title.as_str());
+                }
+            }
+            let expected: Vec<&str> = FALLBACK.to_vec();
+            assert_eq!(fell_back, expected);
+        });
+    }
+
+    #[test]
+    fn a_strip_that_does_not_fit_is_measured_as_not_fitting() {
+        let advance = |t: &str| t.chars().count() as f32;
+        // "Title" 5 + gap 1 + "One" 3 + "[Two]" 5 + one separator of 3.
+        let names = ["One", "Two"];
+        assert!(tab_strip_fits(&names, 1, 5.0, 1.0, 17.0, advance));
+        assert!(!tab_strip_fits(&names, 1, 5.0, 1.0, 16.9, advance));
+    }
+
+    #[test]
+    fn the_strip_draws_names_with_the_current_one_bracketed() {
+        let m = ui_metrics(720.0);
+        let pages = [BASE_REPORT_PAGES[6].page()];
+        let (_, shapes) = with_painter(|p| {
+            paint_frame(
+                &FrameView {
+                    title: ("BASE REPORT", ""),
+                    pages: &pages,
+                    page: 0,
+                    screen: 1,
+                    extra_keys: &[],
+                },
+                None,
+                true,
+                None,
+                p,
+                &m,
+            );
+        });
+        let drawn = crate::paint::painted_text(&shapes);
+        for want in ["Wellbeing", "[Coverage]", "Discontent"] {
+            assert!(
+                drawn.iter().any(|t| t == want),
+                "{want:?} missing: {drawn:?}"
+            );
+        }
+        assert!(!drawn.iter().any(|t| t == "●"), "{drawn:?}");
     }
 
     #[test]

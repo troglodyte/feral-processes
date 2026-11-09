@@ -22,7 +22,7 @@ fn the_upgrade_prompt_opens_from_the_build_page_and_esc_backs_into_it() {
     assert_eq!(app.mode, Mode::UpgradeDirection);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing, "opened with no menu behind it");
+    assert_eq!(app.mode, Mode::BaseStructures, "Esc backs into the page");
 }
 
 /// A structure the current zone caps at Mk1 is still offered, not filtered
@@ -224,7 +224,7 @@ fn working_a_structure_yourself_opens_the_same_structure_list() {
     assert_eq!(app.mode, Mode::WorkStructure);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing, "opened with no menu behind it");
+    assert_eq!(app.mode, Mode::BaseStructures, "Esc backs into the page");
 }
 
 /// `d` + a direction demolishes what is on the neighbouring tile, without

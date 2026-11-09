@@ -1,7 +1,7 @@
-//! The hub command pages — the base's Trade page (`b`) and the party's two
-//! (`p`, then Programs / Routines) — and the rule that decides which of
-//! their rows are on screen right now. The base's other launchers became
-//! the tabs they opened (hub merge, ADR 0045).
+//! The hub command pages — the base's Structures stopgap (`b`) and the
+//! party's two (`p`, then Programs / Routines) — and the rule that decides
+//! which of their rows are on screen right now. The base's other launchers
+//! became the tabs they opened (hub merge, ADR 0045).
 //!
 //! These exist because the map screen bound 27 keys. A row here is the
 //! *only* way to reach the screen behind it: the old direct keys were
@@ -28,30 +28,36 @@ struct GroupEntry {
     available: fn(&mut App) -> bool,
 }
 
-const TRADE_ROWS: &[GroupEntry] = &[
+/// The BASE section's Structures page: a stopgap that keeps the three
+/// structure verbs reachable until hub-merge phase 3 makes them keys on the
+/// structure's Info tab in `i`. Delete it with the page.
+///
+/// Each is a field action (`Game::require_field`'s callers), so a row is
+/// also hidden in the Stack.
+const STRUCTURE_ROWS: &[GroupEntry] = &[
     GroupEntry {
-        // `caravan_reach` rather than `caravan_view`: this closure runs every
-        // frame the menu is open, and the view rolls a whole shelf — gear copies, affixes
-        // and all — before it can answer a question about where the player is
-        // standing.
-        label: "Caravan",
-        target: Mode::Caravan,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| g.caravan_reach() == CaravanReach::AtCaravan)
-        },
+        label: "Work a structure yourself",
+        target: Mode::WorkStructure,
+        available: |app| on_the_field(app) && !app.workable_structures().is_empty(),
     },
     GroupEntry {
-        label: "Dispatch",
-        target: Mode::Dispatch,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| g.dispatch_reach() != DispatchReach::NoRelay)
-        },
+        label: "Upgrade a structure",
+        target: Mode::UpgradeDirection,
+        // The *scan radius*, where the screen it opens reaches one tile:
+        // a row that appeared only while you stood beside a machine would
+        // hide the verb from a player who never has.
+        available: |app| on_the_field(app) && !app.upgradeable_structures().is_empty(),
+    },
+    GroupEntry {
+        label: "Demolish a structure",
+        target: Mode::Remove,
+        available: |app| on_the_field(app) && !app.nearby_structures().is_empty(),
     },
 ];
+
+fn on_the_field(app: &App) -> bool {
+    app.game.as_ref().is_some_and(|g| !g.is_underground())
+}
 
 const PROGRAM_ROWS: &[GroupEntry] = &[
     GroupEntry {
@@ -125,7 +131,7 @@ const ROUTINE_ROWS: &[GroupEntry] = &[
 /// The static table behind a command page, or `None` for any other mode.
 fn command_table(page: Mode) -> Option<&'static [GroupEntry]> {
     match page {
-        Mode::BaseTrade => Some(TRADE_ROWS),
+        Mode::BaseStructures => Some(STRUCTURE_ROWS),
         Mode::PartyPrograms => Some(PROGRAM_ROWS),
         Mode::PartyRoutines => Some(ROUTINE_ROWS),
         _ => None,

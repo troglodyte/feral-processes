@@ -137,10 +137,10 @@ use building::{
     draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon, draw_staffing_menu,
     draw_structure_menu, draw_work_order_pick, draw_work_order_quantity,
 };
-use caravan::{CaravanBasket, draw_caravan};
+use caravan::CaravanBasket;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity};
 use depot_filter::draw_depot_filter;
-use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
+use dispatch::{draw_route_cargo, draw_sortie_squad};
 use excavate_brush::draw_excavate_brush;
 use extraction::draw_extraction_options;
 use farm_recipe::draw_farm_recipe;
@@ -1325,6 +1325,31 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         )),
         Mode::PinSubject => Some((building::pin_subject_page_rows(game, selected), None)),
         Mode::ContractsHeld => Some((contracts::held_rows(&contract_active, selected), None)),
+        Mode::Caravan => Some((
+            match &caravan {
+                Some(basket) => caravan::caravan_page_rows(
+                    game,
+                    &basket.view,
+                    &basket.cells,
+                    basket.purse,
+                    selected,
+                ),
+                None => vec![text_row("No trader is at the base's counter.")],
+            },
+            None,
+        )),
+        Mode::Dispatch => Some((
+            match dispatch_sections.as_deref() {
+                Some(sites) => dispatch::dispatch_hub_rows(
+                    sites,
+                    &dispatch_trips.0,
+                    &dispatch_trips.1,
+                    selected,
+                ),
+                None => vec![text_row("No Relay stands yet.")],
+            },
+            None,
+        )),
         Mode::Contracts => Some((
             contracts::board_rows(
                 &contract_offers,
@@ -1736,16 +1761,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::StackMarket => draw_stack_market(game, &list_filter, selected, refusal, painter, m),
-        Mode::Caravan => draw_caravan(game, caravan, selected, refusal, painter, m),
-        Mode::Dispatch => draw_dispatch(
-            dispatch_sections.as_deref(),
-            &dispatch_trips.0,
-            &dispatch_trips.1,
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
         Mode::SortieSquad => draw_sortie_squad(
             sortie_squad_site.as_ref(),
             &sortie_squad_candidates,

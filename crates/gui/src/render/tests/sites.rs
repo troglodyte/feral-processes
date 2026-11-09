@@ -1,4 +1,4 @@
-//! The Sites hub's pages: row counts against app-core, widths at the smallest
+//! `b`'s site pages: row counts against app-core, widths at the smallest
 //! window, and no tick figure on any tab.
 
 use super::*;

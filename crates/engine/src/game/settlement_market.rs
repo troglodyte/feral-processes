@@ -215,7 +215,7 @@ impl Game {
 
     /// The shelf as the market screen lists it: `settlement_shelf` for this
     /// epoch, grouped for the eye. The one place that grouping is done, so
-    /// the Sites hub's live shelf and the counter cannot list differently.
+    /// the site pages' live shelf and the counter cannot list differently.
     ///
     /// Grouped here and never in `settlement_shelf`, the caravan screen's own
     /// rule: the shelf's round-robin lead would stop rotating if sorted in

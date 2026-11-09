@@ -150,9 +150,9 @@ impl App {
             return;
         }
         let Some(view) = self.game.as_mut().and_then(|g| g.caravan_view()) else {
-            // The wagon was bought out, or the trader has rolled away.
+            // No wagon at the counter: the Trader tab says so and has no
+            // rows to act on.
             self.caravan_amounts.clear();
-            self.mode = Mode::Playing;
             return;
         };
         let total = view.offers.len() + view.sells.len();
@@ -262,8 +262,8 @@ impl App {
     }
 
     /// A trade costs a tick, and a tick can be the one the trader leaves on
-    /// — or the one that starves the player. `handle_stack_market_key`'s
-    /// `close_if_bought_out`, and for both of its reasons.
+    /// — or the one that starves the player. A wagon that left takes its
+    /// basket with it and the tab says it is gone.
     fn close_if_gone(&mut self) {
         self.check_game_over();
         if self.mode == Mode::GameOver {
@@ -275,7 +275,6 @@ impl App {
             .is_some_and(|g| g.caravan_view().is_none())
         {
             self.caravan_amounts.clear();
-            self.mode = Mode::Playing;
         }
     }
 }

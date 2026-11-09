@@ -426,7 +426,7 @@ impl App {
             | Mode::RoutesInFlight => self.handle_sites_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
-            Mode::BaseTrade | Mode::PartyPrograms | Mode::PartyRoutines => {
+            Mode::BaseStructures | Mode::PartyPrograms | Mode::PartyRoutines => {
                 self.handle_command_page_key(key)
             }
             Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {

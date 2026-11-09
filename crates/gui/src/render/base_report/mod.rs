@@ -206,7 +206,7 @@ fn screen_rows(
 ) -> Vec<Row> {
     match mode {
         Mode::BaseOverview => overview::overview_rows(flags, app_screens.command_counts, selected),
-        Mode::BaseTrade | Mode::PartyPrograms | Mode::PartyRoutines => {
+        Mode::BaseStructures | Mode::PartyPrograms | Mode::PartyRoutines => {
             commands::command_rows(app_screens.commands.unwrap_or_default(), selected)
         }
         Mode::StaffWellbeing => staff::wellbeing_rows(&game.staff_wellbeing(), selected),

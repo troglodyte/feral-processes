@@ -130,14 +130,15 @@ fn esc_from_a_group_menu_returns_to_the_map() {
 /// would have meant the flat surface never actually shrank, and the help
 /// screen would have had two systems to document.
 ///
-/// `B` has left this list, reissued as the base report. `d` has too: it was
+/// `B` has left this list, reissued as the base report, and `w`, reissued as
+/// `b`'s shortcut onto the site pages. `d` has too: it was
 /// the manifest picker's key, and is now the direct demolish (`the_demolish_key_*` in
 /// `tests/building.rs`). A retired key is free to be *reissued* — what this
 /// census forbids is an old binding surviving as a silent alias, which is a
 /// different thing from the key being used again deliberately.
 #[test]
 fn the_retired_map_keys_do_nothing() {
-    for key in ['c', 'w', 'W', 'G', 'R', 'U', 'T', 'f', 'M', 'v'] {
+    for key in ['c', 'W', 'G', 'R', 'U', 'T', 'f', 'M', 'v'] {
         let mut app = test_app(4012);
         app.handle_key(GameKey::Char(key));
         assert_eq!(

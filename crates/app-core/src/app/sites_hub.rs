@@ -1,8 +1,9 @@
-//! The Sites hub (`w`): one rail entry per known town, city and outpost, then
-//! Caravans. A site's tabs are shared by every site, so the page is held by
-//! key (ADR 0043) and every entry here names it through `turn_hub_to` or
-//! `enter_hub_at`. The pages are read-only views; their actions call the
-//! doors the rules already allow and refuse in those doors' own words.
+//! The site pages of `b`: TOWNS and OUTPOSTS, one entry per known town,
+//! city and outpost, then TRAFFIC's Caravans and Sorties. A site's tabs are
+//! shared by every site of its kind, so the page is held by key (ADR 0043)
+//! and every entry here names it through `turn_hub_to` or `enter_hub_at`.
+//! The pages read anywhere; their actions call the doors the rules already
+//! allow and refuse in those doors' own words.
 
 use crate::*;
 use feral_processes_engine::sites::{SiteSection, TownGoods};
@@ -20,67 +21,74 @@ pub const OUTPOST_TABS: &[HubTab] = &[
     HubTab::new("Stock", Mode::OutpostStock),
     HubTab::new("Log", Mode::SiteLog),
 ];
+/// Trader is the wagon at the base's counter, which the old Trade page's
+/// Caravan row opened.
 pub const CARAVAN_TABS: &[HubTab] = &[
     HubTab::new("Schedule", Mode::CaravanSchedule),
     HubTab::new("In flight", Mode::RoutesInFlight),
+    HubTab::new("Trader", Mode::Caravan),
 ];
+/// The Relay's sortie board, which the old Trade page's Dispatch row opened.
+pub const SORTIE_TABS: &[HubTab] = &[HubTab::new("Sorties", Mode::Dispatch)];
 
 const CARAVANS_TITLE: &str = "Caravans";
+const SORTIES_TITLE: &str = "Sorties";
 
-/// What `w` says when the party is neither at base nor beside a site.
-pub const SITES_OPEN_REFUSAL: &str = "The sites list opens at base, or beside a town or outpost.";
-/// The visit page's refusals, shared with the hub's Goods and Jobs tabs.
+/// The visit page's refusals, shared with the Goods and Jobs tabs.
 pub(crate) const WALK_TO_TRADE: &str = "You'd have to walk over there to trade.";
 pub(crate) const WALK_TO_BOARD: &str = "You'd have to walk over there to read their board.";
 pub(crate) const NO_STANDING_ROUTE: &str = "There's no standing route there to cut.";
 
-pub(crate) struct SitesHub;
-
 fn section_title(section: SiteSection) -> &'static str {
     match section {
-        SiteSection::Settlements => "Towns and cities",
-        SiteSection::Outposts => "Outposts",
+        SiteSection::Settlements => "TOWNS",
+        SiteSection::Outposts => "OUTPOSTS",
     }
 }
 
-impl HubKind for SitesHub {
-    fn title(&self) -> &'static str {
-        "SITES"
-    }
-
-    fn pages(&self, app: &App) -> Vec<HubPage> {
-        let Some(game) = app.game.as_ref() else {
-            return Vec::new();
+/// `b`'s rail after JOBS: every known site under its section, then
+/// TRAFFIC, which is there in every run.
+pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
+    let Some(game) = app.game.as_ref() else {
+        return Vec::new();
+    };
+    let mut pages = Vec::new();
+    let mut last = None;
+    for entry in game.site_rail() {
+        let tabs = match entry.site {
+            RouteDestinationId::Settlement(_) => TOWN_TABS,
+            RouteDestinationId::Outpost(_) => OUTPOST_TABS,
         };
-        let mut pages = Vec::new();
-        let mut last = None;
-        for entry in game.site_rail() {
-            let tabs = match entry.site {
-                RouteDestinationId::Settlement(_) => TOWN_TABS,
-                RouteDestinationId::Outpost(_) => OUTPOST_TABS,
-            };
-            pages.push(HubPage {
-                key: HubPageKey::Site(entry.site),
-                title: entry.name,
-                glyph: Some(entry.glyph),
-                section: (last != Some(entry.section)).then(|| section_title(entry.section)),
-                tabs,
-                marked: entry.attention,
-                name_cut_at_end: true,
-            });
-            last = Some(entry.section);
-        }
         pages.push(HubPage {
-            key: HubPageKey::Named(CARAVANS_TITLE),
-            title: CARAVANS_TITLE.to_string(),
-            glyph: Some('~'),
-            section: Some("Traffic"),
-            tabs: CARAVAN_TABS,
-            marked: game.route_reports().iter().any(|r| r.stalled),
-            name_cut_at_end: false,
+            key: HubPageKey::Site(entry.site),
+            title: entry.name,
+            glyph: Some(entry.glyph),
+            section: (last != Some(entry.section)).then(|| section_title(entry.section)),
+            tabs,
+            marked: entry.attention,
+            name_cut_at_end: true,
         });
-        pages
+        last = Some(entry.section);
     }
+    pages.push(HubPage {
+        key: HubPageKey::Named(CARAVANS_TITLE),
+        title: CARAVANS_TITLE.to_string(),
+        glyph: Some('~'),
+        section: Some("TRAFFIC"),
+        tabs: CARAVAN_TABS,
+        marked: game.route_reports().iter().any(|r| r.stalled),
+        name_cut_at_end: false,
+    });
+    pages.push(HubPage {
+        key: HubPageKey::Named(SORTIES_TITLE),
+        title: SORTIES_TITLE.to_string(),
+        glyph: None,
+        section: None,
+        tabs: SORTIE_TABS,
+        marked: false,
+        name_cut_at_end: false,
+    });
+    pages
 }
 
 /// The keys a Sites tab binds, as `(key, verb)` for the keybar, in the
@@ -114,23 +122,26 @@ fn walk_over(name: &str, to: &str) -> String {
 }
 
 impl App {
-    /// `w`: opens the hub at base or beside a site, on that site when beside
-    /// one. Anywhere else it says why and changes nothing.
+    /// `w`: opens `b` on the site beside the party, else on the first
+    /// TOWNS entry, else where `b` opens by itself.
     pub(crate) fn open_sites_hub(&mut self) {
-        let Some(reach) = self.game.as_ref().map(|g| g.site_reach()) else {
+        let Some(game) = self.game.as_ref() else {
             return;
         };
-        if !reach.opens() {
-            self.refuse(SITES_OPEN_REFUSAL);
-            return;
-        }
-        self.open_hub(Hub::Sites);
-        if let Some(site) = reach.beside {
-            self.turn_hub_to(Hub::Sites, &HubPageKey::Site(site));
+        let beside = game.site_reach().beside;
+        let first_town = game
+            .site_rail()
+            .into_iter()
+            .find(|e| e.section == SiteSection::Settlements)
+            .map(|e| e.site);
+        self.open_hub(Hub::Base);
+        if let Some(site) = beside.or(first_town) {
+            self.turn_hub_to(Hub::Base, &HubPageKey::Site(site));
         }
     }
 
-    /// The site the held page names, `None` on Caravans or outside the hub.
+    /// The site the held page names, `None` on any other page or outside
+    /// the hub.
     pub fn held_site(&self) -> Option<RouteDestinationId> {
         match self.hub_page()? {
             HubPageKey::Site(site) => Some(*site),
@@ -153,7 +164,7 @@ impl App {
         )
     }
 
-    /// Selectable rows on the current Sites tab.
+    /// Selectable rows on the current site or traffic tab.
     pub fn sites_row_count(&mut self) -> usize {
         let site = self.held_site();
         match (self.mode, site) {
@@ -192,7 +203,8 @@ impl App {
         }
     }
 
-    /// Opens a screen the hub launches, remembering the tab to come back to.
+    /// Opens a screen a site tab launches, remembering the tab to come back
+    /// to.
     pub(crate) fn launch_from_site(&mut self, to: Mode) {
         self.remember_site_tab();
         self.status_line = None;
@@ -205,11 +217,11 @@ impl App {
         }
     }
 
-    /// Leaves a screen the Sites hub can launch: back to the tab it was
+    /// Leaves a screen a site tab can launch: back to the tab it was
     /// launched from, else `fallback` (the screen's own exit before this).
     pub(crate) fn leave_site_screen(&mut self, fallback: Mode) {
         let back = self.site_return.take().filter(|(key, mode)| {
-            Hub::Sites
+            Hub::Base
                 .kind()
                 .pages(self)
                 .iter()
@@ -219,7 +231,7 @@ impl App {
             Some((key, mode)) => {
                 self.pending_settlement = None;
                 self.pending_outpost = None;
-                self.enter_hub_at(Hub::Sites, key, mode);
+                self.enter_hub_at(Hub::Base, key, mode);
                 self.hub_on_rail = false;
             }
             None => self.mode = fallback,

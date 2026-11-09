@@ -98,7 +98,7 @@ impl App {
     }
 
     /// Opens the name field holding the outpost's current name. From the
-    /// Sites hub the tab is remembered so Enter and Esc come back to it.
+    /// site page the tab is remembered so Enter and Esc come back to it.
     pub(crate) fn open_outpost_name(&mut self, tile: (i32, i32), from_hub: bool) {
         let Some(game) = &self.game else { return };
         let name = game.outpost_destination_name(tile);

@@ -61,9 +61,9 @@ pub(crate) fn pick_row(app: &mut App, row: usize) {
     app.handle_key(GameKey::Enter);
 }
 
-/// The base's command pages: Trade alone since the hub merge made the other
-/// launchers' rows into tabs.
-pub(crate) const COMMAND_PAGES: [Mode; 1] = [Mode::BaseTrade];
+/// The base's command pages: the Structures stopgap alone since the hub
+/// merge made the other launchers' rows into tabs.
+pub(crate) const COMMAND_PAGES: [Mode; 1] = [Mode::BaseStructures];
 
 /// Every base command row on offer right now.
 pub(crate) fn command_labels_all(app: &mut App) -> Vec<&'static str> {
@@ -76,9 +76,9 @@ pub(crate) fn command_labels_all(app: &mut App) -> Vec<&'static str> {
 
 /// Opens the screen a base launcher row `label` opened, the way a player
 /// reaches it now: a retired row through its tab (`open_hub_screen`), a
-/// Trade row through its page, highlighted and picked. Trade rows are
-/// filtered by what is currently possible, so they are found by label
-/// rather than by position.
+/// structure verb through the Structures page, highlighted and picked.
+/// Those rows are filtered by what is currently possible, so they are found
+/// by label rather than by position.
 pub(crate) fn open_command(app: &mut App, label: &str) {
     let tab = match label {
         "Deploy a structure" => Some(Mode::Build),
@@ -88,18 +88,17 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
         "Weapon research" => Some(Mode::WeaponResearch),
         "Study a program" => Some(Mode::PinSubject),
         "Compile an item" => Some(Mode::Craft),
+        "Contracts" => Some(Mode::Contracts),
+        "Caravan" => Some(Mode::Caravan),
+        "Dispatch" => Some(Mode::Dispatch),
         _ => None,
     };
     if let Some(tab) = tab {
         return open_hub_screen(app, tab);
     }
-    // The structure verbs lost their launcher with the Build page and get
-    // their door in `i` in phase 3 of the hub merge; until then their
-    // screens' own tests open them directly.
+    // Hold lost its launcher with the Build page and is the Holding Cell's
+    // Hold tab; its screen's own tests open it directly.
     let unhoused = match label {
-        "Work a structure yourself" => Some(Mode::WorkStructure),
-        "Upgrade a structure" => Some(Mode::UpgradeDirection),
-        "Demolish a structure" => Some(Mode::Remove),
         "Hold a program" => Some(Mode::PinPrisoner),
         _ => None,
     };
@@ -160,7 +159,7 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
     app.handle_key(GameKey::Char(match hub {
         Hub::Base => 'b',
         Hub::Inventory => 'i',
-        Hub::Structure | Hub::GameMenu | Hub::Sites => {
+        Hub::Structure | Hub::GameMenu => {
             unreachable!("hub_of names the shared hubs only")
         }
     }));

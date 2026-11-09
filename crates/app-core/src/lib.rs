@@ -53,7 +53,7 @@ pub use app::routine_craft::{
     BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft,
 };
 pub use app::shortcuts::{ShortcutArea, ShortcutGroup, ShortcutSheet, shortcut_sheet_for};
-pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, TOWN_TABS, sites_screen_keys};
+pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, SORTIE_TABS, TOWN_TABS, sites_screen_keys};
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
     DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,
@@ -155,15 +155,14 @@ use feral_processes_engine::WorkSection;
 use feral_processes_engine::duties::Duty;
 use feral_processes_engine::views::{WorkColumnKey, WorldMapMark, WorldMapView};
 use feral_processes_engine::{
-    AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
-    ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
-    DispatchReach, DuelComparison, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
-    FieldRoutineTargetView, Game, HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MachineRecipeView, MessageSource, OutpostReport, PerkPreview, PerkReport,
-    ProgramSaleOption, RigToolView, RouteDestinationId, RouteRefusal, RouteReport, SlotShift,
-    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
-    TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport,
-    WorkTable, condense,
+    AchievementRow, AutoResolve, BattleView, BrokerReach, CharacterChoice, ContractRefusal,
+    ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode, DispatchReach, DuelComparison,
+    Entity, EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
+    HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine, MESSAGE_LOG_CAP,
+    MachineRecipeView, MessageSource, OutpostReport, PerkPreview, PerkReport, ProgramSaleOption,
+    RigToolView, RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
+    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
+    TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport, WorkTable, condense,
 };
 
 /// Chunks from the centre to the edge of the world map's grid. The grid and
@@ -2126,7 +2125,7 @@ pub enum Mode {
     /// is no buyback: what is sold here is gone.
     StackMarket,
     /// The counter a visiting caravan sets out — see `Game::caravan_view`.
-    /// Reached from the Trade page, and only while one is actually docked.
+    /// The Caravans page's Trader tab; empty unless one is actually docked.
     ///
     /// One list with two sections, the wagon's stock then cargo it will
     /// take, resolved by `caravan_row`. There is no buyback section, because
@@ -2136,12 +2135,12 @@ pub enum Mode {
     /// together by Enter — one basket, one commit, one turn. There is no
     /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
-    /// The Relay hub, opened with the Trade page's "Dispatch" row — sortie
+    /// The Relay hub, the Sorties page of `b` — sortie
     /// sites (`Game::sortie_board`) in one list, and every trip in flight
     /// (`Game::sortie_reports` / `Game::route_reports`) drawn below as
     /// read-only status. Uppercase actions only, since lowercase is a row
     /// selector: `[S]` opens `Mode::SortieSquad` for the highlighted site.
-    /// Cargo routes are sent from the Sites hub.
+    /// Cargo routes are sent from `b`'s site pages.
     Dispatch,
     /// Multi-select over `Game::base_staff`, opened with `[S]` from
     /// `Mode::Dispatch`. `App::dispatch_squad` is the toggled set — `[X]`
@@ -2278,10 +2277,10 @@ pub enum Mode {
     /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
     /// the highlighted page's first screen.
     BaseOverview,
-    /// The base's Trade command page: the trade errands that are currently
-    /// possible, dispatching to the screen behind the highlighted one — see
-    /// `App::command_rows`.
-    BaseTrade,
+    /// The base's Structures command page, a stopgap until hub-merge phase
+    /// 3: the structure verbs currently possible, dispatching to the screen
+    /// behind the highlighted one — see `App::command_rows`.
+    BaseStructures,
     /// The party's command pages on the inventory rail: the program errands and the
     /// routine errands, drawn from `App::command_rows` like the base's.
     PartyPrograms,
@@ -2308,29 +2307,29 @@ pub enum Mode {
     /// The Stock page: what the base holds against the work-order targets,
     /// short rows first - see `Game::stock_report`. Scrolls by cursor.
     BaseStock,
-    /// Sites hub, a town or city's first tab: kind, specialty, standing and
+    /// Site page, a town or city's first tab: kind, specialty, standing and
     /// what it means - see `Game::town_status`. `T`, `G` and `H` act.
     SiteStatus,
-    /// Sites hub, a town or city's goods: the last-seen shelf, or the live
+    /// Site page, a town or city's goods: the last-seen shelf, or the live
     /// one after the Price Feeds research - see `Game::town_goods`.
     SiteGoods,
-    /// Sites hub, routes in flight to a town or city - see
+    /// Site page, routes in flight to a town or city - see
     /// `Game::site_routes`. `S` stops repeating; the last row dispatches.
     SiteRoutes,
-    /// Sites hub, the contracts a town issued - see `Game::town_contracts`.
+    /// Site page, the contracts a town issued - see `Game::town_contracts`.
     SiteJobs,
-    /// Sites hub, a site's recent events, newest first - see
+    /// Site page, a site's recent events, newest first - see
     /// `Game::site_log`. Shared by towns, cities and outposts.
     SiteLog,
-    /// Sites hub, an outpost's first tab - see `Game::outpost_report`.
+    /// Site page, an outpost's first tab - see `Game::outpost_report`.
     OutpostStatus,
-    /// Sites hub, an outpost's crew; `U` recalls, the last row posts.
+    /// Site page, an outpost's crew; `U` recalls, the last row posts.
     OutpostCrew,
-    /// Sites hub, an outpost's stock and routes; `C` takes.
+    /// Site page, an outpost's stock and routes; `C` takes.
     OutpostStock,
-    /// Sites hub, the visiting trader - see `Game::caravan_schedule`.
+    /// Site page, the visiting trader - see `Game::caravan_schedule`.
     CaravanSchedule,
-    /// Sites hub, every route in flight - see `Game::routes_in_flight`.
+    /// Site page, every route in flight - see `Game::routes_in_flight`.
     RoutesInFlight,
     /// Build orders page, first screen: every structure on order - see
     /// `Game::build_order_report`. Scrolls by cursor.
@@ -2659,7 +2658,7 @@ impl Mode {
             | Mode::StackMarket
             | Mode::Caravan
             // Opened only by a key press from `Mode::Dispatch` itself,
-            // reached from the Trade page — `Mode::SettlementMarket`'s
+            // reached from the Sorties tab — `Mode::SettlementMarket`'s
             // reason exactly.
             | Mode::Dispatch
             | Mode::SortieSquad
@@ -2687,7 +2686,7 @@ impl Mode {
             // Opened from the map with `b`, `BaseOutput`'s reason — never
             // layers over a fight.
             | Mode::BaseOverview
-            | Mode::BaseTrade
+            | Mode::BaseStructures
             // Opened from the map with `p`, the base command pages' reason.
             | Mode::PartyPrograms
             | Mode::PartyRoutines

@@ -106,20 +106,31 @@ fn site_tabs_cycle_with_tab_and_shift_tab() {
 #[test]
 fn braces_jump_to_the_first_page_of_the_next_and_previous_section() {
     let mut app = app_with_far_sites(43007);
-    app.handle_key(GameKey::Char('w'));
-    let pages = Hub::Sites.kind().pages(&app);
+    app.handle_key(GameKey::Char('b'));
+    let pages = Hub::Base.kind().pages(&app);
     let starts: Vec<usize> = (0..pages.len())
         .filter(|&i| pages[i].section.is_some())
         .collect();
-    assert!(starts.len() >= 3, "towns, outposts and traffic: {starts:?}");
+    assert!(
+        starts.len() >= 4,
+        "base, towns, outposts and traffic: {starts:?}"
+    );
     let at = |app: &App| app.hub_at().map(|(_, p, _)| p).unwrap();
     assert_eq!(at(&app), starts[0]);
     app.handle_key(GameKey::Char('}'));
     assert_eq!(at(&app), starts[1]);
+    app.handle_key(GameKey::Char('}'));
+    let towns = starts[2];
+    assert_eq!(pages[towns].section, Some("TOWNS"));
+    assert_eq!(at(&app), towns);
+    // From inside a section too: Alder, then Birch, then the next section.
     app.handle_key(GameKey::Down);
+    assert_eq!(at(&app), towns + 1);
     app.handle_key(GameKey::Char('}'));
-    assert_eq!(at(&app), starts[2]);
-    app.handle_key(GameKey::Char('}'));
+    assert_eq!(at(&app), starts[3]);
+    for _ in 3..starts.len() {
+        app.handle_key(GameKey::Char('}'));
+    }
     assert_eq!(at(&app), starts[0], "wraps past the last section");
     app.handle_key(GameKey::Char('{'));
     assert_eq!(at(&app), *starts.last().unwrap(), "wraps before the first");

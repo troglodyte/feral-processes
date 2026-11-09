@@ -21,7 +21,7 @@ use feral_processes_engine::RouteDestinationId;
 pub enum HubPageKey {
     /// A fixed page: its title.
     Named(&'static str),
-    /// A site on the Sites hub's rail.
+    /// A site on `b`'s rail.
     Site(RouteDestinationId),
 }
 
@@ -136,17 +136,10 @@ pub enum Hub {
     Inventory,
     Structure,
     GameMenu,
-    Sites,
 }
 
 impl Hub {
-    pub const ALL: [Hub; 5] = [
-        Hub::Base,
-        Hub::Inventory,
-        Hub::Structure,
-        Hub::GameMenu,
-        Hub::Sites,
-    ];
+    pub const ALL: [Hub; 4] = [Hub::Base, Hub::Inventory, Hub::Structure, Hub::GameMenu];
 
     pub fn kind(self) -> &'static dyn HubKind {
         match self {
@@ -154,7 +147,6 @@ impl Hub {
             Hub::Inventory => &super::inventory_hub::InventoryHub,
             Hub::Structure => &super::structure_hub::StructureHubKind,
             Hub::GameMenu => &super::game_menu::GameMenu,
-            Hub::Sites => &super::sites_hub::SitesHub,
         }
     }
 
@@ -411,6 +403,9 @@ impl App {
             // The research tree view walks its nodes with every arrow.
             GameKey::Left if self.research_graph_view && is_research_tree(self.mode) => true,
             GameKey::Left if self.on_level_row() => true,
+            // The Trader tab's arrows are the basket's: Left lowers the
+            // highlighted row, so the rail is Esc away.
+            GameKey::Left if self.mode == Mode::Caravan => true,
             // The duty table spends Left on its column cursor, so it only
             // leaves off its first column.
             GameKey::Left => self.mode == Mode::BaseStaff && self.work_column > 0,

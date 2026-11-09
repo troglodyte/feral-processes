@@ -88,7 +88,7 @@ const BASE_RAIL: &[(&str, &[Mode])] = &[
         ],
     ),
     ("Alerts", &[Mode::Alerts]),
-    ("Trade", &[Mode::BaseTrade]),
+    ("Structures", &[Mode::BaseStructures]),
 ];
 
 const INVENTORY_RAIL: &[(&str, &[Mode])] = &[
@@ -458,6 +458,15 @@ pub(super) fn shared_screens(app: &App) -> Vec<Mode> {
     shared_screens_of(app, &Hub::ALL)
 }
 
+/// `shared_screens` less the site tabs, which every run that has met two
+/// towns shares; `shared_screens_with_sites_are_pinned` pins those.
+fn shared_screens_outside_sites(app: &App) -> Vec<Mode> {
+    shared_screens(app)
+        .into_iter()
+        .filter(|m| !SHARED_WITH_SITES.contains(m))
+        .collect()
+}
+
 fn shared_screens_of(app: &App, hubs: &[Hub]) -> Vec<Mode> {
     let mut counts: Vec<(Mode, usize)> = Vec::new();
     for hub in hubs {
@@ -516,12 +525,4 @@ fn shared_screens_with_sites_are_pinned() {
     let mut pinned = SHARED_WITH_SITES.to_vec();
     pinned.sort_by_key(|m| format!("{m:?}"));
     assert_eq!(shared, pinned);
-}
-
-/// The fixed hubs. The Sites rail lists every known town, so the Sites tab
-/// modes are shared in any run that has met two of them; `sites_hub.rs` pins
-/// that hub's Esc and reopen paths.
-fn shared_screens_outside_sites(app: &App) -> Vec<Mode> {
-    let hubs: Vec<Hub> = Hub::ALL.into_iter().filter(|h| *h != Hub::Sites).collect();
-    shared_screens_of(app, &hubs)
 }

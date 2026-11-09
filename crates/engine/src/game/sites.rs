@@ -71,7 +71,7 @@ impl Game {
     }
 }
 
-/// The views the Sites hub reads. Each is a call into the door that already
+/// The views `b`'s site pages reads. Each is a call into the door that already
 /// answers the question, so the hub and the visit pages cannot disagree.
 impl Game {
     /// Where the party stands relative to the sites. `beside` is a settlement

@@ -77,7 +77,7 @@ fn app_at_a_caravan(seed: u32) -> Option<App> {
         if app
             .game
             .as_mut()
-            .is_some_and(|g| g.caravan_reach() == CaravanReach::AtCaravan)
+            .is_some_and(|g| g.caravan_reach() == feral_processes_engine::CaravanReach::AtCaravan)
         {
             return Some(app);
         }
@@ -92,63 +92,37 @@ fn a_caravan() -> App {
         .expect("a trader should reach the counter inside two visit windows")
 }
 
-/// The row asks `caravan_reach`, never `caravan_view`: this closure runs
-/// every frame the menu is open, and the view rolls a whole shelf — gear
-/// copies, affixes and all — before it could answer.
+/// The Trader tab is always on the Caravans page: with no wagon at the
+/// counter its keys do nothing and it stays put, rather than closing the
+/// hub under the player.
 #[test]
-fn the_trade_page_offers_the_caravan_row_only_while_one_is_docked() {
+fn the_trader_tab_with_no_wagon_stays_open_and_does_nothing() {
     let mut app = test_app(7);
     found_the_base(&mut app);
     stand_in_base(&mut app);
-    assert!(
-        !command_labels_all(&mut app).contains(&"Caravan"),
-        "nothing is visiting and the row is offered anyway"
-    );
-
-    let mut docked = a_caravan();
-    assert!(
-        command_labels_all(&mut docked).contains(&"Caravan"),
-        "a trader is standing at the counter and the row is missing"
-    );
-
-    // Out on the field there is nothing to take, and the row goes with it.
-    stand_in_base_at(&mut docked, TEST_POCKET_HALF_WIDTH + 1, 0);
-    assert!(
-        !command_labels_all(&mut docked).contains(&"Caravan"),
-        "the row survived the party walking out of the base"
-    );
+    open_hub_screen(&mut app, Mode::Caravan);
+    let before = app.game.as_ref().unwrap().current_tick();
+    for key in [
+        GameKey::Down,
+        GameKey::Right,
+        GameKey::Enter,
+        GameKey::Char('A'),
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::Caravan, "{key:?}");
+    }
+    assert_eq!(app.game.as_ref().unwrap().current_tick(), before);
 }
 
-/// The parked row is an index into a list that can shrink while the child
-/// screen is open; Esc must land on a row that still exists.
+/// The basket's arrows are the tab's: Right raises a sell row and Left
+/// lowers it again rather than leaving for the rail, and Esc is the way
+/// back to the rail.
 #[test]
-fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
+fn the_trader_tab_keeps_its_arrows_and_esc_goes_to_the_rail() {
     let mut app = a_caravan();
-    open_command(&mut app, "Caravan");
-    assert_eq!(app.mode, Mode::Caravan);
-    stand_in_base_at(&mut app, TEST_POCKET_HALF_WIDTH + 1, 0);
-    let rows = app.command_rows(Mode::BaseTrade).unwrap().len();
+    open_hub_screen(&mut app, Mode::Caravan);
 
-    app.handle_key(GameKey::Esc);
-
-    assert_eq!(app.mode, Mode::BaseTrade);
-    assert!(
-        app.menu_selected < rows.max(1),
-        "highlight {} is past the {rows} rows the page now has",
-        app.menu_selected
-    );
-}
-
-/// The wagon is one screen now, not two — the quantity page it used to open
-/// on a cargo row is gone, so Esc has one step to take rather than two.
-#[test]
-fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
-    let mut app = a_caravan();
-    open_command(&mut app, "Caravan");
-    assert_eq!(app.mode, Mode::Caravan);
-
-    // Editing a row must not take the player anywhere. Walked to with the
-    // arrows: the sell rows sit below the whole shelf.
+    // Walked to with the arrows: the sell rows sit below the whole shelf.
     let offers = app
         .game
         .as_mut()
@@ -162,13 +136,13 @@ fn esc_backs_out_of_the_caravan_screen_to_where_it_came_from() {
     }
     app.handle_key(GameKey::Right);
     assert_eq!(app.mode, Mode::Caravan);
+    app.handle_key(GameKey::Left);
+    assert_eq!(app.mode, Mode::Caravan);
+    assert!(!app.hub_on_rail, "Left lowered the row, it did not leave");
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(
-        app.mode,
-        Mode::BaseTrade,
-        "the screen was opened from the Trade page, so Esc goes back to it"
-    );
+    assert!(app.hub_on_rail, "Esc on the tab goes to the rail");
+    assert_eq!(app.mode, Mode::Caravan);
 }
 
 /// A cursor past the end of the drawn list must resolve to a row rather
@@ -208,17 +182,15 @@ fn a_cursor_past_the_end_still_resolves_to_a_row() {
     );
 }
 
-/// Buying the wagon out entirely closes the screen — a screen left open on
-/// a counter with nothing on it is one the player has to press Esc to escape
-/// for no reason. `handle_stack_market_key` closes on the same rule.
+/// A wagon that rolls away leaves the Trader tab saying so, rather than
+/// closing the hub under the player, and takes its basket with it.
 #[test]
-fn a_trader_that_rolls_away_closes_the_screen() {
+fn a_trader_that_rolls_away_leaves_the_tab_empty() {
     let mut app = a_caravan();
-    open_command(&mut app, "Caravan");
-    assert_eq!(app.mode, Mode::Caravan);
+    open_hub_screen(&mut app, Mode::Caravan);
 
     // Wait out the whole stay. The trader packs up and there is nothing to
-    // draw, so the next keypress on the screen drops back to the map.
+    // draw.
     for _ in 0..(feral_processes_engine::tuning::CARAVAN_STAY_TICKS + 50) {
         app.game.as_mut().unwrap().wait();
     }
@@ -227,11 +199,8 @@ fn a_trader_that_rolls_away_closes_the_screen() {
     // raid tutorial over whatever the screen had settled on.
     dismiss_notifications(&mut app);
 
-    assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "the wagon has gone and the screen is still open on it"
-    );
+    assert!(app.game.as_mut().unwrap().caravan_view().is_none());
+    assert!(app.caravan_amounts.is_empty(), "the basket went with it");
 }
 
 /// Sets the cursor on the first sell row and returns its index.

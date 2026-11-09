@@ -692,7 +692,7 @@ impl Game {
     ///
     /// Sampled at `CONTRACT_HABITAT_SAMPLES` evenly-spaced points rather than
     /// walked whole, because `contract_board` sits on a per-frame path — both
-    /// the contracts screen and the Trade page's row test call it.
+    /// the contracts screen and the Contracts page's rail test call it.
     pub(crate) fn template_pools(&mut self) -> crate::contracts::TemplatePools {
         let zone = self.world.resource::<ZoneLevel>().0;
         let mut pools = crate::contracts::TemplatePools {
@@ -981,7 +981,7 @@ impl Game {
     ///
     /// Three states out of one call rather than two predicates, for
     /// `NoPost::BoxedIn`'s reason for sitting beside `NoPost::NoRoute`: five
-    /// things ask this (the board, accepting, delivering, the Trade page's row
+    /// things ask this (the board, accepting, delivering, the Contracts page's rail entry
     /// and the screen's own header) and two independent booleans would let
     /// them disagree about whether a board that is drawn can be taken from.
     ///

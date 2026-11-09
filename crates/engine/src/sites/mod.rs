@@ -1,5 +1,5 @@
 //! Sites: the towns, cities and outposts the party knows about, and what
-//! the Sites hub shows of each.
+//! `b`'s site pages shows of each.
 //!
 //! The two stores here, a per-site event log and the last-seen shelf of each
 //! town, are plain Rust owned by `Game`, never ECS resources: a new
@@ -20,7 +20,7 @@ pub use seen::*;
 pub use time::*;
 pub use view::*;
 
-/// Everything the Sites hub remembers that the world does not.
+/// Everything `b`'s site pages remembers that the world does not.
 #[derive(Clone, Debug, Default)]
 pub struct SiteRecords {
     pub log: SiteLog,

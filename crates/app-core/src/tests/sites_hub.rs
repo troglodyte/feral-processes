@@ -1,10 +1,10 @@
-//! The Sites hub: where it opens, what its rail lists, how its tabs walk, and
-//! the actions each tab gathers. Fixtures write sites straight into a save,
+//! The site pages of `b`: where `w` opens them, what the TOWNS, OUTPOSTS
+//! and TRAFFIC sections list, how their tabs walk, and the actions each tab
+//! gathers. Fixtures write sites straight into a save,
 //! as `dispatch.rs`'s do, because the hub reads the engine's own records.
 
 use super::dispatch::app_at_a_relay;
 use super::support::*;
-use crate::app::sites_hub::SITES_OPEN_REFUSAL;
 use crate::*;
 use feral_processes_engine::items::ItemId;
 
@@ -102,31 +102,50 @@ pub(super) fn tick(app: &App) -> u64 {
     app.game.as_ref().unwrap().current_tick()
 }
 
+/// `b`'s rail from the first site or traffic page on, as `(title,
+/// section, marked)`.
 pub(super) fn rail(app: &App) -> Vec<(String, Option<&'static str>, bool)> {
-    Hub::Sites
-        .kind()
-        .pages(app)
-        .into_iter()
-        .map(|p| (p.title, p.section, p.marked))
+    let pages = Hub::Base.kind().pages(app);
+    let first = pages
+        .iter()
+        .position(|p| matches!(p.section, Some("TOWNS" | "OUTPOSTS" | "TRAFFIC")))
+        .expect("TRAFFIC is always on the rail");
+    pages[first..]
+        .iter()
+        .map(|p| (p.title.clone(), p.section, p.marked))
         .collect()
 }
 
+/// Where `key` sits on `b`'s rail.
+fn page_of(app: &App, key: &HubPageKey) -> usize {
+    Hub::Base
+        .kind()
+        .pages(app)
+        .iter()
+        .position(|p| &p.key == key)
+        .expect("the page is on the rail")
+}
+
+/// `b` opens anywhere now, and so does `w`, its shortcut onto the sites:
+/// with none known it is `b` as it opens by itself.
 #[test]
-fn w_refuses_out_in_the_field_with_one_line() {
+fn w_out_in_the_field_with_no_site_known_opens_b() {
     let mut app = test_app(7100);
+    set_sites(&mut app, &[], &[]);
     let before = tick(&app);
     app.handle_key(GameKey::Char('w'));
-    assert_eq!(app.mode, Mode::Playing);
-    assert_eq!(app.status_line.as_deref(), Some(SITES_OPEN_REFUSAL));
+    assert_eq!(app.mode, Mode::BaseOverview);
+    assert_eq!(app.status_line, None);
     assert_eq!(tick(&app), before);
-    assert_eq!(app.hub_at(), None);
+    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Base));
 }
 
 #[test]
-fn w_at_base_opens_on_the_rail() {
+fn w_away_from_every_site_opens_on_the_first_town() {
     let mut app = app_with_far_sites(7101);
+    walk_far_from_the_base(&mut app);
     app.handle_key(GameKey::Char('w'));
-    assert_eq!(app.hub_at(), Some((Hub::Sites, 0, 0)));
+    assert_eq!(app.hub_page(), Some(&site(TOWN_B)), "Alder leads TOWNS");
     assert!(app.hub_on_rail);
     assert_eq!(app.mode, Mode::SiteStatus);
 }
@@ -148,7 +167,6 @@ fn w_beside_a_town_opens_on_that_town() {
         app.hub_page(),
         Some(&HubPageKey::Site(RouteDestinationId::Settlement(TOWN_A)))
     );
-    assert_eq!(app.hub_at().map(|(_, page, _)| page), Some(1));
 }
 
 #[test]
@@ -172,16 +190,17 @@ fn the_rail_is_towns_then_outposts_then_caravans() {
     assert_eq!(titles[1], "Birch");
     assert!(titles[2].starts_with("Outpost"), "{titles:?}");
     assert!(titles[3].starts_with("Outpost"), "{titles:?}");
-    assert_eq!(titles[4], "Caravans");
+    assert_eq!(titles[4..], ["Caravans", "Sorties"]);
     let sections: Vec<_> = rail.iter().map(|(_, s, _)| *s).collect();
     assert_eq!(
         sections,
         [
-            Some("Towns and cities"),
+            Some("TOWNS"),
             None,
-            Some("Outposts"),
+            Some("OUTPOSTS"),
             None,
-            Some("Traffic")
+            Some("TRAFFIC"),
+            None
         ]
     );
 }
@@ -247,7 +266,7 @@ fn no_sites_page_advances_the_game() {
 }
 
 #[test]
-fn caravans_has_its_own_two_tabs() {
+fn caravans_has_its_own_three_tabs_and_sorties_follows() {
     let mut app = app_with_far_sites(7108);
     app.handle_key(GameKey::Char('w'));
     for _ in 0..4 {
@@ -257,6 +276,11 @@ fn caravans_has_its_own_two_tabs() {
     assert_eq!(app.mode, Mode::CaravanSchedule);
     app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::RoutesInFlight);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::Caravan);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Sorties")));
+    assert_eq!(app.mode, Mode::Dispatch);
 }
 
 #[test]
@@ -273,8 +297,12 @@ fn a_site_that_left_the_rail_reopens_on_the_first_page() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     set_sites(&mut app, &[(TOWN_B, "Alder", FAR_TILE)], &[]);
-    app.handle_key(GameKey::Char('w'));
-    assert_eq!(app.hub_at(), Some((Hub::Sites, 0, 0)));
+    app.handle_key(GameKey::Char('b'));
+    assert_eq!(
+        app.hub_at(),
+        Some((Hub::Base, 0, 0)),
+        "b forgot the outpost"
+    );
 }
 
 #[test]
@@ -308,18 +336,18 @@ fn row_counts_follow_each_tab() {
     app.handle_key(GameKey::Char('w'));
     app.handle_key(GameKey::Right);
     let town = RouteDestinationId::Settlement(TOWN_A);
-    app.enter_hub_at(Hub::Sites, HubPageKey::Site(town), Mode::SiteRoutes);
+    app.enter_hub_at(Hub::Base, HubPageKey::Site(town), Mode::SiteRoutes);
     assert_eq!(app.sites_row_count(), 1, "no routes: just New route");
-    app.enter_hub_at(Hub::Sites, HubPageKey::Site(town), Mode::SiteGoods);
+    app.enter_hub_at(Hub::Base, HubPageKey::Site(town), Mode::SiteGoods);
     assert_eq!(app.sites_row_count(), 0, "never seen");
-    app.enter_hub_at(Hub::Sites, HubPageKey::Site(town), Mode::SiteJobs);
+    app.enter_hub_at(Hub::Base, HubPageKey::Site(town), Mode::SiteJobs);
     assert_eq!(app.sites_row_count(), 0);
-    app.enter_hub_at(Hub::Sites, HubPageKey::Site(town), Mode::SiteLog);
+    app.enter_hub_at(Hub::Base, HubPageKey::Site(town), Mode::SiteLog);
     assert_eq!(app.sites_row_count(), 0);
     let post = RouteDestinationId::Outpost((520, 500));
-    app.enter_hub_at(Hub::Sites, HubPageKey::Site(post), Mode::OutpostCrew);
+    app.enter_hub_at(Hub::Base, HubPageKey::Site(post), Mode::OutpostCrew);
     assert_eq!(app.sites_row_count(), 1, "no crew: just Post a program");
-    app.enter_hub_at(Hub::Sites, HubPageKey::Site(post), Mode::OutpostStock);
+    app.enter_hub_at(Hub::Base, HubPageKey::Site(post), Mode::OutpostStock);
     assert_eq!(app.outpost_stock_split(), (2, 0));
     assert_eq!(app.sites_row_count(), 3);
     let routes = app
@@ -355,14 +383,14 @@ pub(super) fn app_beside_birch(seed: u32) -> App {
 /// Shows `tab` of town `key`'s page with the cursor in it, from wherever
 /// the app is.
 pub(super) fn open_town_tab(app: &mut App, key: SettlementKey, tab: Mode) {
-    app.enter_hub_at(Hub::Sites, site(key), tab);
+    app.enter_hub_at(Hub::Base, site(key), tab);
     app.hub_on_rail = false;
 }
 
 fn open_beside(app: &mut App, tab: Mode) {
     app.handle_key(GameKey::Char('w'));
     let page = app.hub_page().cloned().expect("the hub opened");
-    app.enter_hub_at(Hub::Sites, page, tab);
+    app.enter_hub_at(Hub::Base, page, tab);
     app.hub_on_rail = false;
 }
 
@@ -416,7 +444,7 @@ fn the_board_returns_to_the_jobs_tab() {
 fn route_cargo_returns_to_its_routes_tab() {
     let mut app = app_beside_birch(7124);
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.enter_hub_at(Hub::Base, site(TOWN_A), Mode::SiteRoutes);
     app.hub_on_rail = false;
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::RouteCargo, "{:?}", app.status_line);
@@ -444,7 +472,7 @@ fn the_post_picker_and_the_take_return_to_their_tabs() {
     app.handle_key(GameKey::Esc);
     assert_eq!((app.mode, app.hub_page()), (Mode::OutpostCrew, Some(&post)));
 
-    app.enter_hub_at(Hub::Sites, post.clone(), Mode::OutpostStock);
+    app.enter_hub_at(Hub::Base, post.clone(), Mode::OutpostStock);
     app.handle_key(GameKey::Char('C'));
     assert_eq!(app.mode, Mode::Transfer, "{:?}", app.status_line);
     app.handle_key(GameKey::Esc);
@@ -458,7 +486,7 @@ fn the_post_picker_and_the_take_return_to_their_tabs() {
 fn an_at_site_action_is_refused_on_another_sites_entry() {
     let mut app = app_beside_birch(7126);
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteGoods);
+    app.enter_hub_at(Hub::Base, site(TOWN_A), Mode::SiteGoods);
     app.hub_on_rail = false;
     let before = tick(&app);
     app.handle_key(GameKey::Enter);
@@ -479,7 +507,7 @@ fn base_actions_work_beside_a_site_next_to_the_floor() {
         Some(RouteDestinationId::Settlement(TOWN_B))
     );
     // Another site's route still dispatches from the base floor.
-    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.enter_hub_at(Hub::Base, site(TOWN_A), Mode::SiteRoutes);
     app.hub_on_rail = false;
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::RouteCargo);
@@ -495,7 +523,7 @@ fn stop_repeating_clears_standing_and_keeps_the_trip() {
     );
     assert!(sent.is_ok(), "{sent:?}");
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.enter_hub_at(Hub::Base, site(TOWN_A), Mode::SiteRoutes);
     app.hub_on_rail = false;
     app.handle_key(GameKey::Char('S'));
     assert_eq!(app.status_line, None);
@@ -528,7 +556,7 @@ fn abandon_from_the_hub_drops_the_contract() {
 fn travel_from_the_hub_leaves_it_and_drains_the_visit() {
     let mut app = app_beside_birch(7130);
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteStatus);
+    app.enter_hub_at(Hub::Base, site(TOWN_A), Mode::SiteStatus);
     app.hub_on_rail = false;
     let before = tick(&app);
     app.handle_key(GameKey::Char('T'));
@@ -554,7 +582,7 @@ fn every_refusal_lands_on_the_status_line_and_spends_nothing() {
     ];
     for (page, tab, key) in cases {
         app.handle_key(GameKey::Char('w'));
-        app.enter_hub_at(Hub::Sites, page, tab);
+        app.enter_hub_at(Hub::Base, page, tab);
         app.hub_on_rail = false;
         app.status_line = None;
         let before = tick(&app);
@@ -570,7 +598,7 @@ fn a_new_route_off_base_is_refused() {
     let mut app = test_app(7132);
     set_sites(&mut app, &[(TOWN_A, "Alder", FAR_TILE)], &[]);
     app.mode = Mode::SiteRoutes;
-    app.enter_hub_at(Hub::Sites, site(TOWN_A), Mode::SiteRoutes);
+    app.enter_hub_at(Hub::Base, site(TOWN_A), Mode::SiteRoutes);
     app.hub_on_rail = false;
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::SiteRoutes);
@@ -581,7 +609,7 @@ fn a_new_route_off_base_is_refused() {
 
 fn open_routes_tab(app: &mut App, page: HubPageKey, tab: Mode) {
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, page, tab);
+    app.enter_hub_at(Hub::Base, page, tab);
     app.hub_on_rail = false;
 }
 
@@ -737,10 +765,11 @@ fn app_at_base_with_an_unvisited_ally(seed: u32) -> (App, SettlementKey) {
 fn an_unvisited_allied_town_is_on_the_rail_by_name() {
     let (app, key) = app_at_base_with_an_unvisited_ally(7150);
     let titles: Vec<String> = rail(&app).into_iter().map(|(t, _, _)| t).collect();
-    assert_eq!(titles, ["Test Settlement", "Caravans"]);
+    assert_eq!(titles, ["Test Settlement", "Caravans", "Sorties"]);
+    let site = HubPageKey::Site(RouteDestinationId::Settlement(key));
     assert_eq!(
-        Hub::Sites.kind().pages(&app)[0].key,
-        HubPageKey::Site(RouteDestinationId::Settlement(key))
+        Hub::Base.kind().pages(&app)[page_of(&app, &site)].title,
+        "Test Settlement"
     );
 }
 
@@ -816,7 +845,7 @@ fn n_opens_the_field_holding_the_current_name() {
         .unwrap();
     let page = HubPageKey::Site(RouteDestinationId::Outpost(tile));
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, page, Mode::OutpostStatus);
+    app.enter_hub_at(Hub::Base, page, Mode::OutpostStatus);
     app.hub_on_rail = false;
 
     app.handle_key(GameKey::Char('N'));
@@ -837,7 +866,7 @@ fn renaming_from_sites_returns_to_that_outposts_status_tab() {
     let (first, second) = ((520, 500), (530, 500));
     let page = HubPageKey::Site(RouteDestinationId::Outpost(second));
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, page.clone(), Mode::OutpostStatus);
+    app.enter_hub_at(Hub::Base, page.clone(), Mode::OutpostStatus);
     app.hub_on_rail = false;
     let before = tick(&app);
 
@@ -864,7 +893,7 @@ fn esc_in_the_sites_name_field_keeps_the_name_and_returns() {
     let tile = (520, 500);
     let page = HubPageKey::Site(RouteDestinationId::Outpost(tile));
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Sites, page.clone(), Mode::OutpostStatus);
+    app.enter_hub_at(Hub::Base, page.clone(), Mode::OutpostStatus);
     app.hub_on_rail = false;
     let name = app.game.as_ref().unwrap().outpost_destination_name(tile);
 
@@ -898,4 +927,72 @@ fn the_rail_shows_the_new_name() {
 #[test]
 fn the_status_tab_lists_rename_in_its_keybar() {
     assert!(sites_screen_keys(Mode::OutpostStatus).contains(&("N", "rename")));
+}
+
+// ----- off-site, every beside-only door refuses in its own words -----
+
+/// Out in the field with `app_with_far_sites`' four sites known, `b` open on
+/// `page`'s `tab`, `key` pressed: the door's sentence reaches both surfaces
+/// and nothing is spent or left.
+fn refused_off_site(seed: u32, page: HubPageKey, tab: Mode, key: GameKey) -> String {
+    let mut app = app_with_far_sites(seed);
+    walk_far_from_the_base(&mut app);
+    app.handle_key(GameKey::Char('b'));
+    app.enter_hub_at(Hub::Base, page.clone(), tab);
+    app.hub_on_rail = false;
+    let name = Hub::Base.kind().pages(&app)[page_of(&app, &page)]
+        .title
+        .clone();
+    let before = tick(&app);
+    app.handle_key(key);
+    assert_eq!(app.mode, tab, "{tab:?} {key:?} left the tab");
+    assert_eq!(tick(&app), before, "{tab:?} {key:?} spent a tick");
+    let line = app.status_line.clone().expect("the door says why");
+    assert!(
+        app.game
+            .as_ref()
+            .unwrap()
+            .message_history(50)
+            .iter()
+            .any(|entry| entry.text.contains(&line)),
+        "App::refuse writes the log too: {line:?}"
+    );
+    line.replace(&name, "<site>")
+}
+
+fn far_outpost() -> HubPageKey {
+    HubPageKey::Site(RouteDestinationId::Outpost((520, 500)))
+}
+
+#[test]
+fn goods_off_site_refuses_in_the_markets_words() {
+    let line = refused_off_site(7160, site(TOWN_B), Mode::SiteGoods, GameKey::Enter);
+    assert_eq!(line, "Walk over to <site> to trade.");
+}
+
+#[test]
+fn jobs_off_site_refuses_in_the_boards_words() {
+    let line = refused_off_site(7161, site(TOWN_B), Mode::SiteJobs, GameKey::Enter);
+    assert_eq!(line, "Walk over to <site> to read their board.");
+}
+
+#[test]
+fn a_new_route_off_site_refuses_in_the_relays_words() {
+    let line = refused_off_site(7162, site(TOWN_B), Mode::SiteRoutes, GameKey::Enter);
+    assert_eq!(
+        line,
+        "You need to be standing in your base, at the Relay, to dispatch a caravan."
+    );
+}
+
+#[test]
+fn posting_off_site_refuses_in_the_posts_words() {
+    let line = refused_off_site(7163, far_outpost(), Mode::OutpostCrew, GameKey::Char('P'));
+    assert_eq!(line, "Walk over to <site> to post a program.");
+}
+
+#[test]
+fn taking_stock_off_site_refuses_in_the_takes_words() {
+    let line = refused_off_site(7164, far_outpost(), Mode::OutpostStock, GameKey::Char('C'));
+    assert_eq!(line, "Walk over to <site> to take stock.");
 }

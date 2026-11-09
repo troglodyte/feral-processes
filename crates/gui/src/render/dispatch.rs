@@ -10,32 +10,8 @@ use feral_processes_engine::{RouteReport, SortieReport, SortieRow};
 use super::popup::*;
 use super::*;
 
-/// The hub itself: the sortie sites, which are its only selectable rows.
+/// The Sorties tab: the sortie sites, which are its only selectable rows.
 /// Every trip in flight is drawn below as read-only status.
-pub(super) fn draw_dispatch(
-    sites: Option<&[SortieRow]>,
-    sortie_reports: &[SortieReport],
-    route_reports: &[RouteReport],
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let Some(sites) = sites else {
-        draw_popup(
-            "Relay",
-            PopupSize::Small,
-            &[text_row("No Relay stands yet.")],
-            refusal,
-            painter,
-            m,
-        );
-        return;
-    };
-    let rows = dispatch_hub_rows(sites, sortie_reports, route_reports, selected);
-    draw_popup("Relay", PopupSize::Large, &rows, refusal, painter, m);
-}
-
 pub(super) fn dispatch_hub_rows(
     sites: &[SortieRow],
     sortie_reports: &[SortieReport],
@@ -280,7 +256,7 @@ mod tests {
     /// The hub's worst case: the widest shipped sortie site and the widest
     /// shipped settlement name, each drawn on its own row.
     #[test]
-    fn no_dispatch_hub_row_overflows_its_popup() {
+    fn no_sorties_tab_row_overflows_the_page() {
         let (sorties, warnings) =
             SortieDb::load_dir(&assets().join("sorties")).expect("the catalogue loads");
         assert!(warnings.is_empty(), "{warnings:?}");
@@ -331,7 +307,7 @@ mod tests {
         }];
 
         let rows = dispatch_hub_rows(&sites, &sortie_reports, &route_reports, 0);
-        assert_rows_fit(&rows);
+        crate::render::base_report::assert_rows_fit(&rows, "Sorties tab");
     }
 
     /// The squad picker's worst case: a program name as long as

@@ -145,7 +145,7 @@ const ALL_MODES: [Mode; 181] = [
     Mode::StructureAssign,
     Mode::BaseOutput,
     Mode::BaseOverview,
-    Mode::BaseTrade,
+    Mode::BaseStructures,
     Mode::PartyPrograms,
     Mode::ManifestIntro,
     Mode::PartyRoutines,
@@ -195,7 +195,7 @@ pub(super) const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
 /// Each draws nothing at all here, so the census can say where a refusal
 /// must *not* appear on them but not where it must. Their `draw_popup`
 /// calls are threaded the same way every other one is.
-const NEEDS_PENDING_STATE: [Mode; 42] = [
+const NEEDS_PENDING_STATE: [Mode; 41] = [
     // The Sites tabs are shared by every site, so `settle_hub` cannot adopt
     // one without a held key; `sites::every_sites_tab_draws_a_refusal_once`
     // drives them held instead.
@@ -247,21 +247,14 @@ const NEEDS_PENDING_STATE: [Mode; 42] = [
     Mode::TradeAction,
     Mode::TradeQuantity,
     Mode::StackMarket,
-    // The caravan screen needs a trader actually standing at the
-    // counter, which a fresh run has not got — `StackMarket`'s case.
-    // `a_caravan_page_says_a_refusal_exactly_once` below is what says
-    // its `draw_popup` call is threaded, since this census can only say
-    // where a refusal must *not* appear on it.
-    Mode::Caravan,
     Mode::TradeProgramConfirm,
     Mode::StructureAssign,
     // The market needs a settlement actually adjacent, which the
-    // census app never places — `Mode::Caravan`'s case just above,
-    // one vendor over.
+    // census app never places — `StackMarket`'s case, one vendor over.
     Mode::SettlementMarket,
 ];
 
-/// The Sites hub's site pages: they draw only when the rail holds a site,
+/// `b`'s site pages: they draw only when the rail holds a site,
 /// which is the map's doing and not the census's.
 pub(super) const SITE_PAGES: [Mode; 5] = [
     Mode::SiteStatus,

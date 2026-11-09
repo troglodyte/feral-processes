@@ -1,4 +1,4 @@
-//! Views of the Sites hub. Every sentence and figure the Sites pages show is
+//! Views of `b`'s site pages. Every sentence and figure the Sites pages show is
 //! built here or in `Game`'s Sites methods; gui only lays them out.
 
 use super::SeenOffer;
@@ -37,19 +37,13 @@ pub struct SiteRailEntry {
     pub attention: bool,
 }
 
-/// Where the party stands relative to the sites, which decides whether the
-/// hub opens and which at-site doors are live.
+/// Where the party stands relative to the sites, which decides which
+/// at-site doors are live.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SiteReach {
     pub on_base: bool,
     /// The site the party is beside, if any.
     pub beside: Option<RouteDestinationId>,
-}
-
-impl SiteReach {
-    pub fn opens(self) -> bool {
-        self.on_base || self.beside.is_some()
-    }
 }
 
 /// A town's Status tab.

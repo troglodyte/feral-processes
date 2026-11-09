@@ -64,14 +64,14 @@ mod tests {
     #[test]
     fn a_command_page_reads_its_count_or_none_here() {
         let flags = BaseReportFlags::default();
-        let trade = BASE_REPORT_PAGES
+        let page = BASE_REPORT_PAGES
             .iter()
-            .position(|p| p.title == "Trade")
+            .position(|p| p.title == "Structures")
             .unwrap();
-        let rows = overview_rows(&flags, &[(trade, 4)], 0);
-        assert!(status_of(&rows, "Trade").ends_with("4 available"));
-        let rows = overview_rows(&flags, &[(trade, 0)], 0);
-        assert!(status_of(&rows, "Trade").ends_with("none here"));
+        let rows = overview_rows(&flags, &[(page, 3)], 0);
+        assert!(status_of(&rows, "Structures").ends_with("3 available"));
+        let rows = overview_rows(&flags, &[(page, 0)], 0);
+        assert!(status_of(&rows, "Structures").ends_with("none here"));
     }
 
     #[test]

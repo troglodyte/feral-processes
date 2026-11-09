@@ -586,14 +586,14 @@ fn reach_is_base_beside_a_site_or_neither() {
     assert!(reach.on_base);
     assert_eq!(reach.beside, Some(town_site(key)));
 
-    // Far from everything: the hub does not open.
+    // Far from everything: beside nothing, and off the base.
     let mut pos = game
         .world
         .get_mut::<Position>(game.player_entity())
         .unwrap();
     pos.x += 400;
     let reach = game.site_reach();
-    assert!(!reach.on_base && reach.beside.is_none() && !reach.opens());
+    assert!(!reach.on_base && reach.beside.is_none());
 }
 
 #[test]

@@ -108,9 +108,9 @@ fn the_base_section_reads_as_the_spec() {
 }
 
 #[test]
-#[ignore = "phase 2.3/2.4"]
 fn the_b_rail_has_its_five_sections_in_order() {
-    let app = app_at_a_contract_broker(46003, false);
+    let mut app = app_at_a_contract_broker(46003, false);
+    crate::tests::sites_hub::set_sites(&mut app, &[], &[]);
     let sections: Vec<_> = b_rail(&app).into_iter().filter_map(|e| e.0).collect();
     assert_eq!(sections, ["BASE", "JOBS", "TRAFFIC"], "no site is known");
 
@@ -222,12 +222,41 @@ fn the_contracts_launcher_verb_is_a_tab_of_b() {
 }
 
 #[test]
-#[ignore = "phase 2.4"]
 fn the_caravan_and_dispatch_launcher_verbs_are_in_traffic() {
     let mut app = test_app(46012);
     assert_eq!(reach_in_b(&mut app, "Caravans", "Trader"), Mode::Caravan);
     let mut app = test_app(46013);
     assert_eq!(reach_in_b(&mut app, "Sorties", "Sorties"), Mode::Dispatch);
+}
+
+/// Until phase 3 gives them keys in `i`, the three structure verbs are rows
+/// on BASE's Structures page, so none of them is out of reach in a release.
+/// Delete with the page.
+#[test]
+fn the_structure_verbs_open_from_the_structures_page_of_b() {
+    for (label, target) in [
+        ("Work a structure yourself", Mode::WorkStructure),
+        ("Upgrade a structure", Mode::UpgradeDirection),
+        ("Demolish a structure", Mode::Remove),
+    ] {
+        let mut app = app_owning_a_program_and_an_extractor(46016, &[]);
+        stand_in_base(&mut app);
+        assert_eq!(
+            reach_in_b(&mut app, "Structures", "Structures"),
+            Mode::BaseStructures
+        );
+        app.handle_key(GameKey::Right);
+        let rows = app
+            .command_rows(Mode::BaseStructures)
+            .expect("a command page");
+        let row = rows
+            .iter()
+            .position(|r| r.label == label)
+            .unwrap_or_else(|| panic!("{label} is offered beside a machine"));
+        highlight_row(&mut app, row);
+        app.handle_key(GameKey::Enter);
+        assert_eq!(app.mode, target, "{label}");
+    }
 }
 
 /// Work, Upgrade and Demolish are keys on the structure's Info tab in `i`

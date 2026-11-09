@@ -283,8 +283,8 @@ impl App {
                 self.open_hub(Hub::Base);
                 return;
             }
-            // The Sites hub. Opens at base or beside a site, and says so when
-            // it does not.
+            // `b` opened on the site pages: the site beside the party, else
+            // the first town.
             GameKey::Char('w') => {
                 self.open_sites_hub();
                 return;

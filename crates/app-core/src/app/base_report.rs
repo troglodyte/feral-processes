@@ -1,4 +1,5 @@
-//! The base report (`b`): its rail, and the handlers of the screens on it.
+//! The base report (`b`): its rail — BASE, JOBS, then the site and traffic
+//! pages `app::sites_hub` builds — and the handlers of the screens on it.
 //! The nav is the shared hub rule (`app/hub.rs`).
 
 use crate::*;
@@ -63,9 +64,11 @@ pub const BASE_REPORT_PAGES: &[FixedPage] = &[
         title: "Alerts",
         tabs: &[HubTab::new("Alerts", Mode::Alerts)],
     },
+    // A stopgap until hub-merge phase 3 gives these verbs keys on the
+    // structure's Info tab in `i`; delete it then.
     FixedPage {
-        title: "Trade",
-        tabs: &[HubTab::new("Trade", Mode::BaseTrade)],
+        title: "Structures",
+        tabs: &[HubTab::new("Structures", Mode::BaseStructures)],
     },
 ];
 
@@ -82,7 +85,7 @@ const BREED_PAGE: FixedPage = FixedPage {
 
 /// The JOBS section's one entry: every contract held, then the Broker's
 /// board. On the rail once a Broker stands or a contract is held, the
-/// question the Trade page's row used to ask.
+/// question the Contracts page's rail entry used to ask.
 pub const CONTRACTS_TITLE: &str = "Contracts";
 pub const CONTRACTS_TABS: &[HubTab] = &[
     HubTab::new("Held", Mode::ContractsHeld),
@@ -140,6 +143,7 @@ impl HubKind for BaseReport {
                 .page()
             });
         }
+        pages.extend(super::sites_hub::site_pages(app));
         pages
     }
 }

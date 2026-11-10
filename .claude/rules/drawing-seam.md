@@ -8,7 +8,7 @@ paths:
 
 **The drawing seam:** `crates/gui/src/paint.rs` is the only file that names a
 graphics library. The ~3,000 lines in `crates/gui/src/render/` draw through
-`Painter` — fifteen operations, plus local `Color`/`Rect`/`TextDims`/`TextRun`
+`Painter` — sixteen operations, plus local `Color`/`Rect`/`TextDims`/`TextRun`
 — and know nothing about the backend. That is what made the macroquad→Bevy swap
 touch five files and no drawing code. Don't reintroduce direct backend calls
 in `render/`. **The panes take their origin from the caller** — a `Rect`,
@@ -48,6 +48,25 @@ no `biome_tint`, no damage dimming — so putting the hue back reads as a
 bug fix and is not one. **The avatar is a sprite drawn at the sprite's size on the sprite
 palette, animated like one**, and the save string is `v3`, with `v1` and `v2`
 folded forward.
+
+**The sixteenth is `target`, and it is the pointer's half of the seam**
+(ADR 0046). A screen registers each place the mouse can act as a local `Rect`
+plus an app-core `PointerHit` **while it draws**, because the draw that
+places a thing is the only code that knows its rect: never recompute a
+layout to hit-test it, and never stash one for the next frame. The list a
+painter records into is lent by the reader (`recording_into`; a clone of the
+handle rides through `clipped`), so there is no global or static state, and
+`target` names no graphics type. `crates/gui/src/pointer.rs` is the one
+reader: it resolves hover and presses against the **previous** frame's list
+(the last target drawn wins, so a row over a region's background is the row),
+owns "armed" and the wheel remainder, and hands `App::handle_pointer_event`
+one `PointerEvent`. **`pointer.rs` is the one exception to "only `paint.rs`
+names a graphics library"**: it names `egui` to read pointer input and
+nothing else — it draws nothing and `render/` still never names egui. It
+has no `match app.mode` and names no hub; what a hit means is app-core's, and
+it is always a key the keyboard already presses. Hover is drawn from
+`App::hovered` (`palette::HOVER_BG`, the cursor's fill at 40% alpha), and a
+frame drawn behind a popup child registers no targets.
 
 **The battle portrait** (`render/battle.rs::draw_battle_portrait`) is the
 one sprite drawn as a picture pane rather than in a glyph's place; its glyph

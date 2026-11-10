@@ -71,6 +71,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   for a jump that names none (it adopts a page only when exactly one offers
   the screen, and never a BESIDE YOU structure page), and the `shared_screens_are_pinned` census forces the
   explicit door for any screen several pages share.**
+- **A pointer target is registered by the draw that places it (`Painter::target`), `gui/src/pointer.rs` is the only reader of egui pointer input, and every `PointerHit` ends in a key the keyboard already presses (`App::handle_pointer_event`), so a click can do nothing a key cannot.**
 - **A Broker's board is derived, never stored** — seeded off `(world seed,
   zone, epoch)`.
 - **Reading a Broker's board and signing it are two questions, and

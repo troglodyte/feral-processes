@@ -173,6 +173,30 @@
   `Hub::kind`, and the impl — a `match hub` anywhere else is the trap
   coming back, and gui choosing a draw path by hub rather than by mode is
   the same trap (`render/mod.rs`'s `page_rows` is by mode).
+- **A pointer target is registered by the draw that places it
+  (`Painter::target`), `gui/src/pointer.rs` is the only reader of egui pointer
+  input, and every `PointerHit` ends in a key the keyboard already presses
+  (`App::handle_pointer_event`).** The traps: (1) **recomputing or stashing a
+  layout** to hit-test it (the sprite editor's `sprite_hits`, the map's
+  `MapClickLayout`) is the pattern this retired — the rect is known only
+  where it is drawn, and a stash is a frame old by construction; (2) a hit
+  that does *new* work instead of a key (a bespoke setter for "select row")
+  drifts from the keyboard — `Row(i)` is the arrows walked to `i` and a
+  second click or a double-click is `Enter`, once (`second || double`, never
+  both), and `Page`/`Tab` call the same `turn_hub_to`/`show_hub_tab` the
+  keys do; (3) **`Row::Item` ordinal must equal the handler's selection
+  index**, so a description or wrapped line is never an `Item`
+  (`item_ordinals.rs` draws every `b` and `i` tab and compares the
+  registered ordinals to the cursor's wrap length); (4) the frame drawn
+  behind a popup child (`keybar_mode == None`) registers nothing, or a click
+  would land under the popup, and `hub_at` is `None` there so app-core
+  ignores a stale hub hit anyway; (5) `pointer.rs` reading **before** the
+  draw swaps last frame's list in, so hover runs one frame behind and a
+  button already held when a screen opens is unarmed until a frame with none
+  held; (6) `App::handle_pointer(hit, button, phase)` is still the sprite
+  editor's until phase 5 — the hub's door is `handle_pointer_event`; (7)
+  keycap labels *are* the keys (`keys_of`): `↑/↓` is two targets, `1–9` is
+  none, so a hint spelled differently from its handler is also unclickable.
 - **A Broker's board is derived, never stored** — seeded off
   `(world seed, zone, epoch)`. No save field, no `GameRng` draw, no
   save-scumming, and it rotates on its own. Readable from **anywhere**,

@@ -5,7 +5,7 @@
 
 use crate::*;
 
-/// The structure hub's page table: a rail title and the one screen each
+/// The BESIDE YOU page table: a rail title and the one screen each
 /// `StructurePage` is. Which pages a structure shows, and in what order, is
 /// the engine's answer (`AdjacentStructure::pages`).
 pub fn structure_page(page: StructurePage) -> &'static FixedPage {

@@ -1,7 +1,7 @@
 //! The Power Siphon's screen: load a staff program into the machine beside
 //! the party, or let the one in it go.
 //!
-//! A page of the structure hub (`app/structure_hub.rs`) on a siphon. The rows
+//! A tab of a BESIDE YOU entry in `i` (`app/structure_hub.rs`) on a siphon. The rows
 //! inside use lowercase selectors like every other list.
 
 use crate::*;

@@ -141,7 +141,7 @@ fn c_beside_an_empty_machine_opens_an_empty_window() {
 
 /// **`-` takes out and `+` puts in**, the keyboard's left-to-right matching
 /// Shift/Ctrl+Left (take) and Right (put): the bare arrows belong to the
-/// structure hub's navigation. This test is the pin.
+/// hub's navigation. This test is the pin.
 #[test]
 fn minus_takes_out_and_plus_puts_in() {
     let mut app = depot_picker(973, SHELF, &[(ITEM, 5)]);

@@ -1,5 +1,5 @@
-//! `[c]` as the interact key: it opens the structure hub for what is beside
-//! the party, refuses when there is nothing, and the removed map keys stay
+//! `[c]` as the interact key: it opens `i` on the first BESIDE YOU entry
+//! for what is beside the party, refuses when there is nothing, and the removed map keys stay
 //! removed.
 
 use super::support::*;

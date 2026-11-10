@@ -188,7 +188,7 @@
 
 - **A Depot's filter is the *denied* set and `Game::depot_accepts` is the one
   door** — `components::DepotFilter`, edited from `Mode::DepotFilter` (the
-  Filter page of the structure hub). Denied and not allowed so the empty case is
+  Filter tab of a BESIDE YOU entry in `i`). Denied and not allowed so the empty case is
   the default the whole feature is inert under: every Depot in every existing
   save takes anything, and `denied_items` is additive behind
   `#[serde(default)]` with **no `SAVE_FORMAT_VERSION` bump**. The component
@@ -218,7 +218,7 @@
   `a_refund_ignores_the_filter` pins it, because it reads like an oversight.
 
 - **Taking and putting are one screen, one basket and one commit, scoped to
-  one structure** — `Mode::Transfer`, the Inventory page of the structure hub
+  one structure** — `Mode::Transfer`, the Inventory tab of a BESIDE YOU entry in `i`
   opened with `c`. `game/base/transfer.rs` holds the scoped offer
   (`transfer_offer_at`), the room (`transfer_room_at`), the two refusals
   (`refuse_transfer`) and the one commit door (`transfer_items_at`), each
@@ -272,7 +272,7 @@
   third.
 
 - **On the picker screen `+` takes and `-` puts — the amount's own sign —
-  because the bare arrows belong to the structure hub's nav.** `+` (and `=`,
+  because the bare arrows belong to `i`'s hub nav.** `+` (and `=`,
   the unshifted key) raises the row's amount, a take, **positive**; `-`
   lowers it, a put, **negative**. Putting the amount back on Left/Right would
   fall through the hub's rule only on a multi-screen page and strand the
@@ -552,10 +552,10 @@
   field, and a field *removed* is the one case field-named RON does not
   excuse from a `SAVE_FORMAT_VERSION` bump.
 
-- **The rig's tool screen is the Tool page of the structure hub, and the
+- **The rig's tool screen is a Tool tab on a BESIDE YOU entry of `i`, and the
   obvious map keys were wrong.** `c` once forked on whether the output buffer
-  was empty, which is why it had its own key; the hub carries Inventory (when
-  the rig holds stock) and Tool as pages instead. `T` was never an option, which
+  was empty, which is why it had its own key; `i` carries Inventory (when
+  the rig holds stock) and Tool as tabs instead. `T` was never an option, which
   `crates/engine/EASTER_EGGS.md` reserves for the battle taunt and throw:
   a documented feature cannot own a key no help page may name, and
   `no_shipped_help_page_names_a_hidden_key` is what fails the build.

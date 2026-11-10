@@ -942,7 +942,7 @@ impl Game {
     }
 
     /// Whether this structure strips downed programs — the per-entity test
-    /// `adjacent_teardown_rigs` and the structure hub's Tool page share.
+    /// `adjacent_teardown_rigs` and a BESIDE YOU entry's Tool tab share.
     pub(crate) fn is_teardown_rig(&self, structure: Entity) -> bool {
         self.structure_def_of(structure)
             .is_some_and(|d| d.strips.is_some())

@@ -1,8 +1,8 @@
 //! The one nav rule (ADR 0045): arrows move the cursor, `Tab`/`Shift+Tab`
 //! switch the highlighted page's tabs from the rail or the page, `{ }` jump
 //! rail sections, and `Left` from the page's leftmost position returns to the
-//! rail. The structure hub keeps its own `Tab` (the structure cycle) until
-//! phase 3 folds it into `i`.
+//! rail. `i`'s BESIDE YOU entries follow the same rule: `Tab` walks one
+//! structure's tabs and `[ ]` steps between structures.
 
 use super::sites_hub::app_with_far_sites;
 use super::support::*;

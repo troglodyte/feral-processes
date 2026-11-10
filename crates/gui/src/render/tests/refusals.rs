@@ -206,7 +206,7 @@ const NEEDS_PENDING_STATE: [Mode; 42] = [
     Mode::OutpostStatus,
     Mode::OutpostCrew,
     Mode::OutpostStock,
-    // The Workbench pages are drawn only inside the structure hub frame,
+    // The Workbench pages are drawn only inside a BESIDE YOU entry's frame,
     // which the census app never opens.
     Mode::RoutineBuild,
     Mode::BuiltRoutines,

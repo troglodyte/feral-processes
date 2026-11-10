@@ -1,5 +1,5 @@
-//! What `[c]` can do with the structures beside the party: one entry per
-//! structure, each with the pages the hub shows for it.
+//! What `i`'s BESIDE YOU section shows for the structures beside the party:
+//! one entry per structure, each with its pages (tabs).
 
 use crate::components::{BuildSite, FarmPlot, FarmTile, Incubator};
 use crate::tactical::footprint_cells_at;
@@ -9,7 +9,7 @@ use crate::*;
 /// `collect::ORTHOGONAL`, which is `(x, y)`-scan order.
 const CLOCKWISE: [(i32, i32); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
 
-/// One page of the structure hub. Declaration order is the rail order.
+/// One page of a BESIDE YOU entry. Declaration order is the tab order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StructurePage {
     Inventory,
@@ -31,7 +31,7 @@ pub enum StructurePage {
     /// with the bench-only recipes in it.
     Compile,
     /// A Breeding Bay's first-parent picker. Without it a bay's only page
-    /// was Info, which `adjacent_structures` leaves out of the cycle, so
+    /// was Info, which `adjacent_structures` once left out of the cycle, so
     /// `[c]` beside a bay fell through to the pack's downed programs.
     Breed,
     /// A Holding Cell's record picker. Info-only before it, so the hub
@@ -40,7 +40,7 @@ pub enum StructurePage {
     Info,
 }
 
-/// A structure beside the party, in the hub's cycle.
+/// A structure beside the party, one BESIDE YOU entry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AdjacentStructure {
     pub entity: Entity,

@@ -11,7 +11,7 @@ use feral_processes_engine::CraftRecipe;
 const CRAFT_QUANTITY_MAX: u32 = 9999;
 
 /// The recipes the Compile list offers: everything `Game::craft_recipes`
-/// holds at a bench (the structure hub's Compile page), and only the
+/// holds at a bench (a BESIDE YOU entry's Compile tab), and only the
 /// field recipes — those naming no bench — anywhere else. **Every reader of
 /// the list goes through this**, so the row a key picks is the row the
 /// screen draws and the count the filter reports.
@@ -46,8 +46,8 @@ impl App {
         }
     }
 
-    /// Whether the Compile list is the Workbench page's: the structure hub
-    /// is the only way to stand at a bench.
+    /// Whether the Compile list is a Workbench entry's: a BESIDE YOU entry
+    /// in `i` is the only way to stand at a bench.
     pub fn craft_at_bench(&self) -> bool {
         self.held_structure().is_some() && self.hub_at().is_some()
     }

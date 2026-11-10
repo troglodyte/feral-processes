@@ -1,6 +1,6 @@
 //! The Depot filter screen: which items one shelf will take in.
 //!
-//! A page of the structure hub (`app/structure_hub.rs`) on a Depot. Every edit
+//! A tab of a BESIDE YOU entry in `i` (`app/structure_hub.rs`) on a Depot. Every edit
 //! writes straight through to the engine — there is no basket here,
 //! because nothing on this screen is spent and a filter has no direction
 //! to accumulate in.

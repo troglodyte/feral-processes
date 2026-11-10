@@ -4,7 +4,7 @@
 //! Every figure is a view off the engine (`Game::design_slot_rows`,
 //! `design_part_options`, `design_preview`, `salvage_rows`) and every refusal is worded by
 //! app-core, so this file only lays them out. Rows are returned rather than
-//! drawn so the structure hub frames them like any other page.
+//! drawn so the BESIDE YOU frame draws them like any other page.
 
 use super::list_filter::{filter_line, no_match_row};
 use super::popup::*;

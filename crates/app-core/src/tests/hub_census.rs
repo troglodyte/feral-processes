@@ -574,7 +574,7 @@ fn compile_beside_a_bench_is_pinned_and_each_hub_keeps_its_own() {
     );
     assert_eq!(shared_screens_outside_sites(&app), SHARED_WITH_A_BENCH);
 
-    // The bench's Compile is the structure hub's page...
+    // The bench's Compile is a BESIDE YOU entry's tab...
     let pages = Hub::Inventory.kind().pages(&app);
     let compile = pages
         .iter()

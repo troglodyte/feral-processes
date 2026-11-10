@@ -337,7 +337,7 @@ mod tests {
         let row = cols.row(widest, u32::MAX, u32::MAX, u32::MAX as i64);
         let header = cols.header();
 
-        // The structure hub draws the same rows in a narrower rect than the
+        // A BESIDE YOU tab draws the same rows in a narrower rect than the
         // popup, so the table must fit that one too.
         crate::render::base_report::assert_rows_fit(
             &[item_row(row.clone(), false), text_row(header.clone())],

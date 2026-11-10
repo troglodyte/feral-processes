@@ -148,7 +148,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   the *other* rows from `basket_room` so the highlighted row can still be
   lowered and raised; `App::take_available` is that row's shelf alone.
 - **On the picker screen `+` takes and `-` puts, the amount's own sign,
-  because the bare arrows belong to the structure hub's nav** — Shift/Ctrl
+  because the bare arrows belong to `i`'s hub nav** — Shift/Ctrl
   on an arrow still reach the basket, Left toward `you`.
 - **The picker's two figures are where the basket would leave the units**,
   `carried + amount` and `on_shelves - amount`, and they are the screen's only
@@ -307,7 +307,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
   strip resolves against `ToolDb`, and a rig with nothing fitted runs on
   the starter tool, derived by `Game::rig_tool` and never stored.
-- **The rig's tool screen is the Tool page of the structure hub, never a map
+- **The rig's tool screen is a Tool tab on a BESIDE YOU entry of `i`, never a map
   key**, and `T` is one of `EASTER_EGGS.md`'s hidden keys.
 - **A carrier in transit is carried, so the never-free rule and both
   destruction paths name `CarryingProgram` beside `Carrying`.**

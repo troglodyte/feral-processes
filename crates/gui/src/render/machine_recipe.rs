@@ -23,7 +23,7 @@ pub(super) fn draw_machine_recipe(
     draw_popup("Recipe", PopupSize::Large, &body, refusal, painter, m);
 }
 
-/// The screen's rows, shared by the popup and the structure hub's page.
+/// The screen's rows, shared by the popup and the BESIDE YOU tab.
 pub(super) fn page_rows(screen: Option<&MachineRecipeScreen>, selected: usize) -> Vec<Row> {
     match screen {
         Some(screen) => body_rows(screen, selected),

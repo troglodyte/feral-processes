@@ -229,7 +229,7 @@ impl Game {
     }
 
     /// Whether this structure is a Splice Rig — the per-entity test the
-    /// structure hub's Splice page asks.
+    /// BESIDE YOU Splice tab asks.
     pub(crate) fn is_splice_rig(&self, structure: Entity) -> bool {
         self.world
             .get::<Structure>(structure)

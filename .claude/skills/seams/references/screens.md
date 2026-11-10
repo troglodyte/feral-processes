@@ -163,15 +163,13 @@
   `entry_tab` carries the tab on show to an entry that has it, and
   `settle_hub` never adopts a `Structure` page by guess (their screens are
   also opened from the map for whatever was aimed at) and opens a vanished
-  entry's successor through `show_tab`. The old structure hub had its own rule
-  and read as a different screen from the base report's; a page that wants an arrow adds
+  entry's successor through `show_tab`. A page that wants an arrow adds
   an arm to `screen_claims`, never a guard inside the nav match or a second
   nav function. **What a hub *is* is its `HubKind` (`app/hub.rs`), one impl
   in that hub's module**, and neither the nav nor gui names a hub: a fixed
-  hub writes `title` and `table` and takes the defaults, and the structure
-  hub overrides `pages`, `turn` (a page is re-opened for its structure),
-  `leave`, `key` (`Tab`, keeping the cursor on whichever half it was),
-  `extra_keys` and `heading`. A new hub is a `Hub` variant, its arm in
+  hub writes `title` and `table` and takes the defaults, and `i`'s hub
+  overrides `pages`, `show_tab` (a tab is re-opened for its structure or
+  member), `leave`, `key`, `extra_keys` and `heading`. A new hub is a `Hub` variant, its arm in
   `Hub::kind`, and the impl — a `match hub` anywhere else is the trap
   coming back, and gui choosing a draw path by hub rather than by mode is
   the same trap (`render/mod.rs`'s `page_rows` is by mode).

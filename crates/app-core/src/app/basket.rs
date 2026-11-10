@@ -155,7 +155,7 @@ impl App {
     /// the keyboard matching the arrows' — `+` against the sign of the
     /// amount, where a take is positive, because the player reads the key
     /// as "add to storage". The bare arrows are not here because the
-    /// structure hub spends them on its own navigation, the base report's
+    /// hub spends them on its own navigation, ADR 0045's
     /// rule; `=` is `+` without Shift. Shift and Ctrl on the arrows are still
     /// this screen's — the hub never reads them — and keep their direction:
     /// Shift/Ctrl+Left toward `you`, the take end, and Shift/Ctrl+Right
@@ -280,8 +280,8 @@ impl App {
         self.leave_site_screen(fallback);
     }
 
-    /// The basket's teardown without the exit: the structure hub turns a
-    /// page or steps structure and discards what was staged.
+    /// The basket's teardown without the exit: `i` turns a
+    /// tab or steps to another entry and discards what was staged.
     pub(crate) fn clear_basket(&mut self) {
         self.basket_rows.clear();
         self.basket_amounts.clear();

@@ -105,7 +105,7 @@ pub(crate) fn draw_pin_prisoner(
     );
 }
 
-/// Shared by the popup and the structure hub's Hold page.
+/// Shared by the popup and a BESIDE YOU entry's Hold tab.
 pub(crate) fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
     let records = game.downed_program_rows();
     if records.is_empty() {
@@ -173,7 +173,7 @@ pub(crate) fn draw_siphon(
     draw_popup("Power Siphon", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// The siphon screen's rows, shared by the popup and the structure hub.
+/// The siphon screen's rows, shared by the popup and the BESIDE YOU tab.
 pub(crate) fn siphon_page_rows(
     game: &mut Game,
     siphon: Option<Entity>,

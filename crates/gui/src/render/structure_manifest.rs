@@ -41,7 +41,7 @@ pub(super) fn draw_structure_manifest(
 }
 
 /// The sheet's rows, `None` when the structure is gone. Shared by the popup
-/// and the structure hub's Info page.
+/// and a BESIDE YOU entry's Info tab.
 pub(super) fn structure_rows(game: &mut Game, entity: Option<Entity>) -> Option<Vec<Row>> {
     let report = entity.and_then(|e| game.structure_manifest(e))?;
 

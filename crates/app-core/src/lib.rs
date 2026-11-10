@@ -1632,8 +1632,8 @@ pub enum Mode {
     /// for a reveal to swallow.
     TacticalResult,
     Transfer,
-    /// One Depot's allow/deny list, a page of the structure hub, opened from
-    /// a Depot's rail — see `App::depot_filter`.
+    /// One Depot's allow/deny list, a tab of a Depot's BESIDE YOU entry in `i`,
+    /// opened from it — see `App::depot_filter`.
     ///
     /// A screen of its own rather than a section of the picker: the picker
     /// is a basket of quantities committed in one action, and this is a
@@ -2523,7 +2523,7 @@ impl Mode {
             // A Research tab, `BuildProgram`'s own reason — never reachable
             // mid-battle at all.
             | Mode::PinSubject
-            // Opened from the structure hub, `PinSubject`'s own reason.
+            // Opened from a Holding Cell's BESIDE YOU entry, `PinSubject`'s own reason.
             | Mode::PinPrisoner
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
@@ -2955,8 +2955,6 @@ pub struct App {
     /// Whether the open game menu was reached from a run (Esc on the map)
     /// rather than the main menu. See `App::open_game_menu`.
     game_menu_in_run: bool,
-    /// The structure hub while it is open: the structures beside the party
-    /// and which one is showing. `None` whenever the player is not in it.
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.

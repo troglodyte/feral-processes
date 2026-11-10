@@ -26,7 +26,7 @@ pub(super) fn draw_splice_rig(
     draw_popup("Splice Rig", PopupSize::Large, &body, refusal, painter, m);
 }
 
-/// The screen's rows, shared by the popup and the structure hub's page.
+/// The screen's rows, shared by the popup and the BESIDE YOU tab.
 pub(super) fn page_rows(screen: Option<&SpliceRigScreen>, selected: usize) -> Vec<Row> {
     match screen {
         Some(screen) => body_rows(screen, selected),

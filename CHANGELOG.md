@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.57
+
+**The base report (`b`) now holds everything about your base, your jobs and the places you trade with, grouped under BASE, JOBS, TOWNS, OUTPOSTS and TRAFFIC.** Pages that used to be separate menus are now tabs of one page. Build holds Deploy, Build orders, Dig and Floor. Research holds Projects, Routines, Affixes, Weapons and Study. Production, Stock and Staff gain the pages they used to launch. A new Contracts page shows the contracts you hold beside the Board, and a town job you hold is the same contract on that town's Jobs tab. Abandon it from either place and it is gone from both. The sites list is gone: towns, outposts, caravans and sorties are pages of `b`, which opens anywhere, and `w` opens it on the site beside you. If the page you are on disappears, for example a contract delivered or an outpost lost, you land on the next page in its section.
+
+**The inventory (`i`) is now grouped under YOU, PARTY, PROGRAMS and BESIDE YOU, and the structure screen is part of it.** Each party member has their own page. Each structure next to you gets an entry whose tabs are that structure's pages, and its Info tab has `W` to work it, `U` to upgrade it and `X` to demolish it. `i` opens on the structure beside you if there is one, and `c` opens it on that structure.
+
+**You can use the mouse on every report.** Click a page in the list to turn to it, a tab name to switch tabs, or a row to select it. Clicking the selected row again, or double-clicking, is `Enter`. A key in the keybar does what pressing it does, the "more" markers scroll, and the wheel moves the selection. Whatever is under the pointer is tinted. The sprite editor and the map now read the mouse the same way: a click on the map still walks or aims at the tile where you release it, and a stroke in the sprite editor must start on the canvas.
+
 ## 0.21.55
 
 **Report pages now name their tabs, and every report steps through them the same way.** A page with more than one tab shows their names beside its title, with the current one highlighted and in brackets; dots appear only if the names would not fit. `Tab` and `Shift+Tab` move between a page's tabs, `[` and `]` move between pages, and `{` and `}` jump to the next or previous section. `←` and `→` no longer change tabs: inside a page they belong to the row, and `←` from the left edge goes back to the page list. A text filter keeps the braces while it is typed or applied. The keybar teaches the new keys. On the structure screen `Tab` still moves to the next structure, and `Shift+Tab` now goes to the previous one. Off a report, `Shift+Tab` does what `Tab` does.

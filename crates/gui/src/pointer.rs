@@ -1,0 +1,404 @@
+//! The one reader of egui's pointer input (ADR 0046).
+//!
+//! A screen registers each pointer target while it draws
+//! (`Painter::target`); this reader turns the frame's raw pointer into one
+//! `PointerEvent` against the targets the *previous* frame drew, and hands
+//! it to `App::handle_pointer_event`. It owns the frame-to-frame state — the
+//! last frame's targets, whether the pointer is armed, the wheel's
+//! remainder — and decides nothing about what a hit means: there is no
+//! `match app.mode` here and no hub is named. That is app-core's, and it is
+//! always a key the keyboard already presses.
+//!
+//! Hover runs a frame behind the draw, because the targets are the ones the
+//! frame just drawn.
+
+use bevy_egui::egui;
+use feral_processes_app_core::{App, PointerButton, PointerEvent, PointerHit};
+
+use crate::paint::{Rect, Targets};
+
+/// Buttons in the order a frame pressing several is read.
+const BUTTONS: [(egui::PointerButton, PointerButton); 3] = [
+    (egui::PointerButton::Primary, PointerButton::Primary),
+    (egui::PointerButton::Secondary, PointerButton::Secondary),
+    (egui::PointerButton::Middle, PointerButton::Middle),
+];
+
+/// What one frame's egui input says about the pointer, before any target
+/// is looked up.
+struct Raw {
+    pos: Option<egui::Pos2>,
+    pressed: Option<PointerButton>,
+    released: bool,
+    double: bool,
+    down: bool,
+    moved: bool,
+    scroll_y: f32,
+}
+
+impl Raw {
+    fn read(ctx: &egui::Context) -> Self {
+        ctx.input(|i| Raw {
+            pos: i.pointer.hover_pos(),
+            pressed: BUTTONS
+                .into_iter()
+                .find(|(b, _)| i.pointer.button_pressed(*b))
+                .map(|(_, mine)| mine),
+            released: BUTTONS
+                .into_iter()
+                .any(|(b, _)| i.pointer.button_released(b)),
+            double: i
+                .pointer
+                .button_double_clicked(egui::PointerButton::Primary),
+            down: i.pointer.any_down(),
+            moved: i.pointer.delta() != egui::Vec2::ZERO,
+            scroll_y: i.smooth_scroll_delta().y,
+        })
+    }
+}
+
+pub struct Reader {
+    /// The targets the last frame drew, in draw order.
+    prev: Vec<(Rect, PointerHit)>,
+    /// Where this frame's draw records; swapped into `prev` next frame.
+    sink: Targets,
+    /// Whether a frame with no button held has been seen since a screen
+    /// with targets opened. A button still held when a screen opens must
+    /// not press whatever it happens to be over.
+    armed: bool,
+    /// Wheel travel not yet spent on a whole notch.
+    wheel_acc: f32,
+}
+
+impl Default for Reader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Reader {
+    pub fn new() -> Self {
+        Self {
+            prev: Vec::new(),
+            sink: Targets::default(),
+            armed: false,
+            wheel_acc: 0.0,
+        }
+    }
+
+    /// Where the frame's `Painter` records its targets
+    /// (`Painter::recording_into`).
+    pub fn sink(&self) -> &Targets {
+        &self.sink
+    }
+
+    /// Reads this frame's pointer, resolves it against the targets the last
+    /// frame drew, and gives `app` the event.
+    pub fn frame(&mut self, ctx: &egui::Context, app: &mut App) {
+        self.prev = std::mem::take(
+            &mut *self
+                .sink
+                .lock()
+                .expect("the target list is never held across a panic"),
+        );
+        let raw = Raw::read(ctx);
+        let over_egui = ctx.egui_wants_pointer_input();
+        if self.prev.is_empty() {
+            self.armed = false;
+        } else if !raw.down {
+            self.armed = true;
+        }
+        let hover = raw
+            .pos
+            .filter(|_| !over_egui)
+            .and_then(|pos| topmost(&self.prev, pos));
+        let wheel = if hover.is_some() {
+            crate::wheel_steps(&mut self.wheel_acc, raw.scroll_y)
+        } else {
+            self.wheel_acc = 0.0;
+            0
+        };
+        let press = self.armed && hover.is_some() && raw.pressed.is_some();
+        app.handle_pointer_event(PointerEvent {
+            hover,
+            press,
+            drag: raw.down && raw.moved,
+            up: raw.released,
+            double: press && raw.double,
+            button: raw.pressed.unwrap_or_default(),
+            wheel,
+        });
+    }
+}
+
+/// The target on top at `pos`: the last drawn that contains it, so a row
+/// drawn over a region's background wins.
+fn topmost(targets: &[(Rect, PointerHit)], pos: egui::Pos2) -> Option<PointerHit> {
+    targets
+        .iter()
+        .rev()
+        .find(|(r, _)| pos.x >= r.x && pos.x < r.x + r.w && pos.y >= r.y && pos.y < r.y + r.h)
+        .map(|(_, hit)| *hit)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paint::Painter;
+    use feral_processes_app_core::{GameKey, Mode, Region};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    /// An app on the base report's first page with the cursor in it: a hub
+    /// whose Enter does something visible.
+    fn app_in_a_hub(seed: u32) -> App {
+        let tmp = std::env::temp_dir().join(format!("feral_processes_gui_pointer_{seed}"));
+        let assets = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let mut app = App::new(
+            assets.clone(),
+            tmp.join("saves"),
+            tmp.join("history.log"),
+            tmp.join("profile.ron"),
+            tmp.join("arenas"),
+            tmp.join("telemetry.jsonl"),
+        );
+        app.game = feral_processes_engine::Game::new(
+            seed,
+            feral_processes_engine::DifficultyMode::Forgiving,
+            &assets,
+        )
+        .ok();
+        app.mode = Mode::Playing;
+        app.handle_key(GameKey::Char('b'));
+        app.handle_key(GameKey::Right);
+        app
+    }
+
+    const ROW0: Rect = Rect::new(100.0, 100.0, 200.0, 20.0);
+    const ROW1: Rect = Rect::new(100.0, 120.0, 200.0, 20.0);
+    const PAGE: Rect = Rect::new(0.0, 0.0, 800.0, 600.0);
+    const KEYCAP: Rect = Rect::new(10.0, 570.0, 60.0, 20.0);
+
+    /// What a draw would register: a page background with two rows and a
+    /// keycap over it.
+    fn register(reader: &Reader) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run_ui(egui::RawInput::default(), |_| {
+            let painter =
+                Painter::for_frame(&ctx, 0.0, Arc::default()).recording_into(reader.sink());
+            painter.target(PAGE, PointerHit::Region(Region::Page));
+            painter.target(ROW0, PointerHit::Row(0));
+            painter.target(ROW1, PointerHit::Row(1));
+            painter.target(KEYCAP, PointerHit::Key(GameKey::Down));
+        });
+    }
+
+    struct Frame {
+        pos: egui::Pos2,
+        press: bool,
+        release: bool,
+        scroll: f32,
+        time: f64,
+    }
+
+    impl Frame {
+        fn at(x: f32, y: f32, time: f64) -> Self {
+            Frame {
+                pos: egui::pos2(x, y),
+                press: false,
+                release: false,
+                scroll: 0.0,
+                time,
+            }
+        }
+        fn press(mut self) -> Self {
+            self.press = true;
+            self
+        }
+        fn release(mut self) -> Self {
+            self.release = true;
+            self
+        }
+        fn scroll(mut self, y: f32) -> Self {
+            self.scroll = y;
+            self
+        }
+    }
+
+    /// One real `run_ui` pass of `f` into `reader`, then the targets a draw
+    /// would register. `run_ui` and not a bare pass for the reason the
+    /// map's tests give: `egui_wants_pointer_input` needs a root `Ui`.
+    fn run(reader: &mut Reader, ctx: &egui::Context, app: &mut App, f: Frame) {
+        let button = |pressed| egui::Event::PointerButton {
+            pos: f.pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::default(),
+        };
+        let mut events = vec![egui::Event::PointerMoved(f.pos)];
+        if f.press {
+            events.push(button(true));
+        }
+        if f.release {
+            events.push(button(false));
+        }
+        if f.scroll != 0.0 {
+            events.push(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, f.scroll),
+                phase: egui::TouchPhase::Move,
+                modifiers: egui::Modifiers::default(),
+            });
+        }
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(800.0, 600.0),
+            )),
+            time: Some(f.time),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run_ui(input, |_| reader.frame(ctx, app));
+        register(reader);
+    }
+
+    /// Frames with the pointer off every target, so the reader is armed and
+    /// holds a previous frame's targets.
+    fn settled(reader: &mut Reader, ctx: &egui::Context, app: &mut App) {
+        run(reader, ctx, app, Frame::at(900.0, 900.0, 0.0));
+        run(reader, ctx, app, Frame::at(900.0, 900.0, 0.1));
+    }
+
+    fn place(app: &App) -> (Mode, usize) {
+        (app.mode, app.menu_selected)
+    }
+
+    #[test]
+    fn hover_follows_the_previous_frames_targets() {
+        let mut app = app_in_a_hub(41300);
+        let mut reader = Reader::new();
+        let ctx = egui::Context::default();
+        // The first frame has drawn nothing before it, so nothing is hit.
+        run(&mut reader, &ctx, &mut app, Frame::at(150.0, 110.0, 0.0));
+        assert_eq!(app.pointer_hover, None);
+        // The next frame resolves against what that one registered.
+        run(&mut reader, &ctx, &mut app, Frame::at(150.0, 110.0, 0.1));
+        assert!(app.hovered(&PointerHit::Row(0)));
+        run(&mut reader, &ctx, &mut app, Frame::at(150.0, 130.0, 0.2));
+        assert!(app.hovered(&PointerHit::Row(1)));
+        run(&mut reader, &ctx, &mut app, Frame::at(500.0, 500.0, 0.3));
+        assert!(app.hovered(&PointerHit::Region(Region::Page)));
+        run(&mut reader, &ctx, &mut app, Frame::at(20.0, 580.0, 0.4));
+        assert!(
+            app.hovered(&PointerHit::Key(GameKey::Down)),
+            "the last drawn is on top"
+        );
+        run(&mut reader, &ctx, &mut app, Frame::at(900.0, 900.0, 0.5));
+        assert_eq!(app.pointer_hover, None);
+    }
+
+    #[test]
+    fn an_unarmed_press_does_nothing() {
+        let mut app = app_in_a_hub(41301);
+        let mut reader = Reader::new();
+        let ctx = egui::Context::default();
+        // The button goes down over a row on the first frames, before any
+        // frame without one: it was already held when the screen opened.
+        run(&mut reader, &ctx, &mut app, Frame::at(150.0, 130.0, 0.0));
+        run(
+            &mut reader,
+            &ctx,
+            &mut app,
+            Frame::at(150.0, 130.0, 0.1).press(),
+        );
+        assert_eq!(app.menu_selected, 0);
+        // Still held on the next frame, and still nothing.
+        run(&mut reader, &ctx, &mut app, Frame::at(150.0, 130.0, 0.2));
+        assert_eq!(app.menu_selected, 0);
+    }
+
+    #[test]
+    fn a_press_on_an_armed_reader_is_the_row_click() {
+        let mut app = app_in_a_hub(41302);
+        let mut twin = app_in_a_hub(41302);
+        twin.handle_key(GameKey::Down);
+        let mut reader = Reader::new();
+        let ctx = egui::Context::default();
+        settled(&mut reader, &ctx, &mut app);
+        run(
+            &mut reader,
+            &ctx,
+            &mut app,
+            Frame::at(150.0, 130.0, 0.2).press(),
+        );
+        assert_eq!(place(&app), place(&twin));
+        assert_eq!(app.menu_selected, 1);
+    }
+
+    #[test]
+    fn a_double_click_is_enter_once() {
+        let mut app = app_in_a_hub(41303);
+        let mut twin = app_in_a_hub(41303);
+        twin.handle_key(GameKey::Down);
+        twin.handle_key(GameKey::Enter);
+        let before = place(&app);
+        let mut reader = Reader::new();
+        let ctx = egui::Context::default();
+        settled(&mut reader, &ctx, &mut app);
+        let at = |t| Frame::at(150.0, 130.0, t);
+        run(&mut reader, &ctx, &mut app, at(0.2).press());
+        run(&mut reader, &ctx, &mut app, at(0.25).release());
+        run(&mut reader, &ctx, &mut app, at(0.3).press());
+        assert_ne!(place(&app), before);
+        assert_eq!(place(&app), place(&twin), "select, then one Enter");
+    }
+
+    #[test]
+    fn a_keycap_click_equals_its_key() {
+        let mut app = app_in_a_hub(41305);
+        let mut twin = app_in_a_hub(41305);
+        twin.handle_key(GameKey::Down);
+        let mut reader = Reader::new();
+        let ctx = egui::Context::default();
+        settled(&mut reader, &ctx, &mut app);
+        run(
+            &mut reader,
+            &ctx,
+            &mut app,
+            Frame::at(20.0, 580.0, 0.2).press(),
+        );
+        assert_eq!(place(&app), place(&twin));
+        assert_eq!(app.menu_selected, 1);
+    }
+
+    #[test]
+    fn the_wheel_equals_up_and_down() {
+        let mut app = app_in_a_hub(41307);
+        let mut twin = app_in_a_hub(41307);
+        twin.handle_key(GameKey::Down);
+        let mut reader = Reader::new();
+        let ctx = egui::Context::default();
+        settled(&mut reader, &ctx, &mut app);
+        let down = Frame::at(150.0, 110.0, 0.2).scroll(-crate::WHEEL_STEP_POINTS);
+        run(&mut reader, &ctx, &mut app, down);
+        assert_eq!(place(&app), place(&twin));
+        assert_eq!(app.menu_selected, 1);
+        let up = Frame::at(150.0, 110.0, 0.3).scroll(crate::WHEEL_STEP_POINTS);
+        run(&mut reader, &ctx, &mut app, up);
+        twin.handle_key(GameKey::Up);
+        assert_eq!(place(&app), place(&twin));
+    }
+
+    #[test]
+    fn a_wheel_off_every_target_is_dropped_not_banked() {
+        let mut app = app_in_a_hub(41309);
+        let mut reader = Reader::new();
+        let ctx = egui::Context::default();
+        settled(&mut reader, &ctx, &mut app);
+        let off = Frame::at(900.0, 900.0, 0.2).scroll(-crate::WHEEL_STEP_POINTS);
+        run(&mut reader, &ctx, &mut app, off);
+        run(&mut reader, &ctx, &mut app, Frame::at(150.0, 110.0, 0.3));
+        assert_eq!(app.menu_selected, 0);
+    }
+}

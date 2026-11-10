@@ -22,6 +22,7 @@ mod fx;
 mod keys;
 mod paint;
 mod perf;
+mod pointer;
 mod render;
 mod sounds;
 mod sprite_layers;
@@ -214,6 +215,7 @@ struct Frontend {
     perf: perf::PerfMeter,
     sprite_pointer: SpritePointer,
     map_pointer: MapPointer,
+    pointer: pointer::Reader,
     /// `smooth_scroll_delta` not yet spent on a zoom step — see `wheel_steps`.
     wheel_acc: f32,
     ambience: Ambience,
@@ -684,6 +686,7 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             perf: perf::PerfMeter::new(),
             sprite_pointer: SpritePointer::default(),
             map_pointer: MapPointer::default(),
+            pointer: pointer::Reader::new(),
             wheel_acc: 0.0,
             ambience: Ambience::new(ambience_seed(), AMBIENT_BLIPS),
         })
@@ -852,13 +855,14 @@ fn frame(
     mut exit: MessageWriter<AppExit>,
 ) -> Result {
     let now = input.time.elapsed_secs_f64();
+    let fe = &mut *frontend;
     let mut painter = Painter::for_frame(
         contexts.ctx_mut()?,
         input.time.delta_secs(),
         sprites.table(),
-    );
+    )
+    .recording_into(fe.pointer.sink());
 
-    let fe = &mut *frontend;
     fe.app.update_realtime(input.time.delta_secs());
     fe.app.advance_reveal(input.time.delta_secs());
     fe.app.advance_tactical(input.time.delta_secs());
@@ -928,6 +932,8 @@ fn frame(
     {
         let ctx = contexts.ctx_mut()?;
         handle_sprite_pointer(&mut fe.app, ctx, &painter, &mut fe.sprite_pointer);
+        // Before the draw, which refills the target list this swaps out.
+        fe.pointer.frame(ctx, &mut fe.app);
     }
     // The settings live in the profile, which the game menu writes; the
     // frame only reads them.

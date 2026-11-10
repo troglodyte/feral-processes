@@ -762,7 +762,7 @@ pub const SETTLEMENT_GIFT_SPECIALTY_MULT: f32 = 1.25;
 /// is the one constant in this feature with an argument instead of a shrug.
 pub const SETTLEMENT_TRAVEL_TICKS_PER_TILE: u64 = 1;
 
-/// The research node that turns the Sites hub's Goods tab from the
+/// The research node that turns the site pages' Goods tab from the
 /// last-seen shelf into the live one for every known town. A Rust id, not a
 /// schema field, on the `WEAPON_TREE_OPENER` precedent: the node unlocks
 /// nothing in data, `Game::live_shelf_known` is what reads it.

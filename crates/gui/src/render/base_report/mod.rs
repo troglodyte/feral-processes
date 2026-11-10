@@ -8,7 +8,7 @@
 //! popup: the frame owns the chrome, the screen owns its rows.
 
 mod commands;
-mod frame;
+pub(in crate::render) mod frame;
 #[cfg(test)]
 pub(in crate::render) use fit::{assert_column_rows_fit, assert_rows_fit, content_rows_at_720};
 pub(in crate::render) use frame::RAIL_CELLS;
@@ -39,14 +39,14 @@ pub(super) struct AppScreens<'a> {
     pub(super) on_rail: bool,
     /// The current screen's rows when it is a command page.
     pub(super) commands: Option<&'a [GroupMenuRow]>,
-    /// `(page index, row count)` for each command page, for the Overview.
-    pub(super) command_counts: &'a [(usize, usize)],
     /// `App::perk_previews`, one per perk, for the Perks page.
     pub(super) perk_previews: &'a [Option<PerkPreview>],
     /// What was typed to filter the current screen's list, or `""`.
     pub(super) list_filter: &'a str,
     /// `App::held_site`: the site the Sites tabs are about.
     pub(super) site: Option<RouteDestinationId>,
+    /// `App::held_member`: the party member a member page is about.
+    pub(super) member: Option<Entity>,
 }
 
 /// Where a mode sits in its hub and what the frame says about it, taken off
@@ -62,6 +62,8 @@ pub(super) struct HubFrame {
     screen: usize,
     /// The hub's own keys, as `(key, verb)`.
     extra_keys: Vec<(&'static str, &'static str)>,
+    /// What the pointer is over, for the frame and its rows to tint.
+    hover: Option<PointerHit>,
 }
 
 impl HubFrame {
@@ -76,7 +78,13 @@ impl HubFrame {
             page,
             screen,
             extra_keys: kind.extra_keys(app),
+            hover: app.pointer_hover,
         })
+    }
+
+    /// The rows of the page this frame is drawn for are pointer targets.
+    fn row_targets(&self) -> Option<RowTargets> {
+        Some(RowTargets { hover: self.hover })
     }
 
     fn paint(
@@ -94,6 +102,7 @@ impl HubFrame {
                 page: self.page,
                 screen: self.screen,
                 extra_keys: &self.extra_keys,
+                hover: self.hover,
             },
             keybar_mode,
             on_rail,
@@ -117,7 +126,7 @@ pub(super) fn draw_hub_page(
     m: &Metrics,
 ) {
     let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
-    draw_rows_in(content, rows, !on_rail, painter, m);
+    draw_rows_in(content, rows, !on_rail, frame.row_targets(), painter, m);
 }
 
 /// `draw_hub_page` in two columns: the rows the cursor walks on the left,
@@ -136,13 +145,13 @@ pub(super) fn draw_hub_split_page(
 ) {
     let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
     let (left, right) = split_columns(content, m);
-    draw_rows_in(left, rows, !on_rail, painter, m);
+    draw_rows_in(left, rows, !on_rail, frame.row_targets(), painter, m);
     let h = side_box_height(side.len(), right.h, m);
     // The frame's own border colour at half its weight, so the box reads
     // as part of the page rather than a popup over it.
     painter.rect_lines(right.x, right.y, right.w, h, 1.0, hud::palette::PANE_BORDER);
     let inner = Rect::new(right.x, right.y + m.pad / 2.0, right.w, h - m.pad);
-    draw_rows_in(inner, side, false, painter, m);
+    draw_rows_in(inner, side, false, None, painter, m);
 }
 
 /// The outline around the side column hugs its rows, a half pad above and
@@ -181,7 +190,14 @@ pub(super) fn draw_base_report(
     };
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
     let content = frame.paint(Some(mode), app_screens.on_rail, refusal, painter, m);
-    draw_rows_in(content, &rows, !app_screens.on_rail, painter, m);
+    draw_rows_in(
+        content,
+        &rows,
+        !app_screens.on_rail,
+        frame.row_targets(),
+        painter,
+        m,
+    );
 }
 
 /// A popup child's parent page, drawn as the frame behind it: rail and title,
@@ -197,7 +213,7 @@ pub(super) fn draw_popup_parent(parent: Option<&HubFrame>, painter: &Painter, m:
 
 /// The rows of one hub screen. Every figure comes from the engine; this only
 /// formats.
-fn screen_rows(
+pub(super) fn screen_rows(
     game: &mut Game,
     mode: Mode,
     selected: usize,
@@ -205,13 +221,8 @@ fn screen_rows(
     flags: &feral_processes_engine::BaseReportFlags,
 ) -> Vec<Row> {
     match mode {
-        Mode::BaseOverview => overview::overview_rows(flags, app_screens.command_counts, selected),
-        Mode::BaseBuild
-        | Mode::BaseResearch
-        | Mode::BaseTrade
-        | Mode::BaseCompile
-        | Mode::PartyPrograms
-        | Mode::PartyRoutines => {
+        Mode::BaseOverview => overview::overview_rows(flags, selected),
+        Mode::PartyPrograms | Mode::PartyRoutines => {
             commands::command_rows(app_screens.commands.unwrap_or_default(), selected)
         }
         Mode::StaffWellbeing => staff::wellbeing_rows(&game.staff_wellbeing(), selected),
@@ -246,6 +257,7 @@ fn screen_rows(
         Mode::DownedPrograms => extraction::downed_program_list_rows(game, selected),
         Mode::Tools => tools::tools_rows(game, selected),
         Mode::Companion => party::roster_rows(game, selected),
+        Mode::PartyMember => party::member_rows(game, app_screens.member),
         Mode::ManifestIntro => party::manifest_intro_rows(),
         Mode::Perks => progression::perks_rows(game, app_screens.perk_previews, selected),
         Mode::SiteStatus
@@ -260,14 +272,6 @@ fn screen_rows(
         | Mode::RoutesInFlight => sites::site_rows(game, mode, app_screens.site, selected),
         other => vec![text_row(format!("No report for {other:?}."))],
     }
-}
-
-/// Each page whose first screen is a command page, with its index.
-pub(super) fn command_pages() -> impl Iterator<Item = (usize, Mode)> {
-    BASE_REPORT_PAGES
-        .iter()
-        .enumerate()
-        .map(|(page, entry)| (page, entry.tabs[0].mode))
 }
 
 #[cfg(test)]
@@ -303,7 +307,10 @@ pub(in crate::render) mod fit {
 
     pub(super) fn text_of(row: &Row) -> &str {
         match row {
-            Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+            Row::Text(t)
+            | Row::TextColored(t, _)
+            | Row::Detail(t, _)
+            | Row::TextEntry { text: t, .. } => t,
             Row::Item { text, .. } => text,
         }
     }

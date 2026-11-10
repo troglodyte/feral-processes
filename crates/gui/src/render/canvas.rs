@@ -36,9 +36,8 @@ const CHECKER_LIGHT: Color = Color::new(0.30, 0.31, 0.34, 1.0);
 
 /// A swatch's gap to its neighbour, as a fraction of the swatch's own
 /// side — the icon editor's shipped `SWATCH_GAP_LINES / SWATCH_LINES`
-/// (0.3 / 0.9). `pub(crate)` so the sprite editor's pointer resolver
-/// (`sprite_forge::swatch_at`) can test a hit against the same spacing this
-/// draws, rather than a second hand-copied `/3.0` literal.
+/// (0.3 / 0.9). `pub(crate)` so tests can step from one swatch to the next
+/// by the spacing the grid draws, rather than a hand-copied `/3.0` literal.
 pub(crate) const SWATCH_GAP_RATIO: f32 = 1.0 / 3.0;
 
 /// Draws the cell grid, the grid lines and the brush-sized cursor, and
@@ -133,28 +132,45 @@ pub(crate) fn draw_swatch_grid(
     selected: u8,
     palette: &[(u8, u8, u8)],
 ) {
-    let count = swatch_count(palette.len());
-    let cols = cols.max(1);
-    let swatch = swatch_side(rect.h, swatch_rows(count, cols));
-    let gap = swatch * SWATCH_GAP_RATIO;
-    for i in 0..count {
-        let x = rect.x + (i % cols) as f32 * (swatch + gap);
-        let y = rect.y + (i / cols) as f32 * (swatch + gap);
+    for (i, r) in swatch_rects(rect, cols, palette.len())
+        .into_iter()
+        .enumerate()
+    {
         match i {
-            0 => draw_checker(p, x, y, swatch),
-            n => p.rect(x, y, swatch, swatch, palette_color(palette[n - 1])),
+            0 => draw_checker(p, r.x, r.y, r.w),
+            n => p.rect(r.x, r.y, r.w, r.h, palette_color(palette[n - 1])),
         }
         if selected as usize == i {
             p.rect_lines(
-                x,
-                y,
-                swatch,
-                swatch,
+                r.x,
+                r.y,
+                r.w,
+                r.h,
                 SELECTED_SWATCH_THICKNESS,
                 SELECTED_SWATCH_COLOR,
             );
         }
     }
+}
+
+/// Where `draw_swatch_grid` puts each swatch, in drawn order (index 0 is the
+/// transparent one). The one derivation drawing and the pointer targets
+/// share, so a click lands on the swatch that is drawn.
+pub(crate) fn swatch_rects(rect: Rect, cols: usize, palette_len: usize) -> Vec<Rect> {
+    let count = swatch_count(palette_len);
+    let cols = cols.max(1);
+    let swatch = swatch_side(rect.h, swatch_rows(count, cols));
+    let gap = swatch * SWATCH_GAP_RATIO;
+    (0..count)
+        .map(|i| {
+            Rect::new(
+                rect.x + (i % cols) as f32 * (swatch + gap),
+                rect.y + (i / cols) as f32 * (swatch + gap),
+                swatch,
+                swatch,
+            )
+        })
+        .collect()
 }
 
 /// The transparent swatch: a 2x2 checker, the convention for "no colour".

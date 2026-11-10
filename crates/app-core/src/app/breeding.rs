@@ -123,16 +123,10 @@ impl App {
         self.pending_breed_bay = None;
         self.pending_breed_first = None;
         self.pending_breed_second = None;
-        let info = self.structure_hub.as_ref().and_then(|h| {
-            h.current()
-                .pages
-                .iter()
-                .position(|p| *p == StructurePage::Info)
-        });
-        if let Some(page) = info {
-            self.enter_structure_page(page);
+        if let Some(bay) = self.held_structure() {
+            self.enter_structure_page(bay, StructurePage::Info);
         } else if let Some((hub, page, _)) = self.hub_for(Mode::Breed) {
-            let key = hub.kind().pages(self)[page].key.clone();
+            let key = hub.kind().pages(self)[page].key;
             self.enter_hub_at(hub, key, Mode::Breed);
         } else {
             self.close_screen();

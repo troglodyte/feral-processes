@@ -1010,7 +1010,6 @@ pub struct Fx {
     last_log_line: Option<LogLine>,
     round_seen: Option<u32>,
     round_banner: Option<(u32, f64)>,
-    map_click: Option<crate::render::MapClickLayout>,
     notice_dock: crate::render::Dock,
 }
 
@@ -1069,20 +1068,8 @@ impl Fx {
             last_log_line: None,
             round_seen: None,
             round_banner: None,
-            map_click: None,
             notice_dock: crate::render::Dock::Centre,
         }
-    }
-
-    /// Stashes the map pane's layout for this frame — written by
-    /// `draw_surface_map` when it draws the ordinary surface/base grid and
-    /// by `draw_tactical_map` for a battle board, cleared by
-    /// `draw_playing_base` before its third branch (a Stack corridor) so a
-    /// click there finds nothing to invert rather than reading a stale
-    /// layout from a screen the player has since left. Read back by
-    /// `lib.rs::handle_map_pointer`.
-    pub(crate) fn set_map_click(&mut self, layout: Option<crate::render::MapClickLayout>) {
-        self.map_click = layout;
     }
 
     /// Which side the open focused notice docks to this frame, `Centre` when
@@ -1095,12 +1082,6 @@ impl Fx {
 
     pub(crate) fn notice_dock(&self) -> crate::render::Dock {
         self.notice_dock
-    }
-
-    /// This frame's map pane layout, if the surface grid or a battle board
-    /// drew one — see `set_map_click`.
-    pub(crate) fn map_click(&self) -> Option<crate::render::MapClickLayout> {
-        self.map_click
     }
 
     /// Called once per frame before drawing: stamps the frame's time,

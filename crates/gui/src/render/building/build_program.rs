@@ -184,7 +184,7 @@ pub(super) fn build_program_title(commit: Option<&BuildCommit>) -> &'static str 
 }
 
 /// The build-program screen's rows and the line it shows when no program
-/// qualifies, shared by the popup and the structure hub's Rebuild page.
+/// qualifies, shared by the popup and the BESIDE YOU Rebuild tab.
 pub(crate) fn build_program_page(
     game: &mut Game,
     commit: Option<&BuildCommit>,

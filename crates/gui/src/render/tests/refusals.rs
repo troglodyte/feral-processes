@@ -1,7 +1,7 @@
 use super::*;
 
 /// Every `Mode`, as the status-line census below drives them.
-const ALL_MODES: [Mode; 183] = [
+const ALL_MODES: [Mode; 178] = [
     Mode::Dossier,
     Mode::TacticalBattle,
     Mode::TacticalRoutine,
@@ -51,12 +51,9 @@ const ALL_MODES: [Mode; 183] = [
     Mode::WorkOrderPick,
     Mode::WorkOrderQuantity,
     Mode::BaseStaff,
-    Mode::WorkStructure,
-    Mode::Remove,
     Mode::RemoveConfirm,
     Mode::RemoveDirection,
     Mode::TrapDirection,
-    Mode::UpgradeDirection,
     Mode::InspectDirection,
     Mode::FrameMap,
     Mode::WorldMap,
@@ -78,6 +75,7 @@ const ALL_MODES: [Mode; 183] = [
     Mode::DownedPrograms,
     Mode::Tools,
     Mode::Companion,
+    Mode::PartyMember,
     Mode::CompanionEquip,
     Mode::CompanionMemories,
     Mode::Fuse,
@@ -127,6 +125,7 @@ const ALL_MODES: [Mode; 183] = [
     Mode::ModPickAffix,
     Mode::RefitCopy,
     Mode::Contracts,
+    Mode::ContractsHeld,
     Mode::Alerts,
     Mode::SiteStatus,
     Mode::SiteGoods,
@@ -144,10 +143,6 @@ const ALL_MODES: [Mode; 183] = [
     Mode::StructureAssign,
     Mode::BaseOutput,
     Mode::BaseOverview,
-    Mode::BaseBuild,
-    Mode::BaseResearch,
-    Mode::BaseTrade,
-    Mode::BaseCompile,
     Mode::PartyPrograms,
     Mode::ManifestIntro,
     Mode::PartyRoutines,
@@ -198,6 +193,8 @@ pub(super) const CENSUS_REFUSAL: &str = "Requires Zone 3 first.";
 /// must *not* appear on them but not where it must. Their `draw_popup`
 /// calls are threaded the same way every other one is.
 const NEEDS_PENDING_STATE: [Mode; 42] = [
+    // A member's page needs a held member, which a fresh run has not got.
+    Mode::PartyMember,
     // The Sites tabs are shared by every site, so `settle_hub` cannot adopt
     // one without a held key; `sites::every_sites_tab_draws_a_refusal_once`
     // drives them held instead.
@@ -209,7 +206,7 @@ const NEEDS_PENDING_STATE: [Mode; 42] = [
     Mode::OutpostStatus,
     Mode::OutpostCrew,
     Mode::OutpostStock,
-    // The Workbench pages are drawn only inside the structure hub frame,
+    // The Workbench pages are drawn only inside a BESIDE YOU entry's frame,
     // which the census app never opens.
     Mode::RoutineBuild,
     Mode::BuiltRoutines,
@@ -249,21 +246,14 @@ const NEEDS_PENDING_STATE: [Mode; 42] = [
     Mode::TradeAction,
     Mode::TradeQuantity,
     Mode::StackMarket,
-    // The caravan screen needs a trader actually standing at the
-    // counter, which a fresh run has not got — `StackMarket`'s case.
-    // `a_caravan_page_says_a_refusal_exactly_once` below is what says
-    // its `draw_popup` call is threaded, since this census can only say
-    // where a refusal must *not* appear on it.
-    Mode::Caravan,
     Mode::TradeProgramConfirm,
     Mode::StructureAssign,
     // The market needs a settlement actually adjacent, which the
-    // census app never places — `Mode::Caravan`'s case just above,
-    // one vendor over.
+    // census app never places — `StackMarket`'s case, one vendor over.
     Mode::SettlementMarket,
 ];
 
-/// The Sites hub's site pages: they draw only when the rail holds a site,
+/// `b`'s site pages: they draw only when the rail holds a site,
 /// which is the map's doing and not the census's.
 pub(super) const SITE_PAGES: [Mode; 5] = [
     Mode::SiteStatus,

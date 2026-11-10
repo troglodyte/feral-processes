@@ -24,44 +24,9 @@ impl App {
     /// digit, or an Enter aimed at a screen that has never had one, stood a
     /// party member down with nothing to undo it but noticing.
     pub(crate) fn handle_companion_key(&mut self, key: GameKey) {
-        let shift = match key {
-            GameKey::Char('<') | GameKey::Char(',') => Some(SlotShift::Forward),
-            GameKey::Char('>') | GameKey::Char('.') => Some(SlotShift::Back),
-            _ => None,
-        };
-        if let Some(shift) = shift {
-            self.shift_party_slot(shift);
+        if self.companion_action(key) {
             return;
         }
-        if key == GameKey::Char('W') {
-            self.toggle_wield();
-            return;
-        }
-        if key == GameKey::Char('N') {
-            self.begin_rename();
-            return;
-        }
-        if key == GameKey::Char('E') {
-            self.open_companion_equip();
-            return;
-        }
-        if key == GameKey::Char('P') {
-            self.toggle_party_member();
-            return;
-        }
-        if key == GameKey::Char('M') {
-            self.open_companion_manifest();
-            return;
-        }
-        if key == GameKey::Char('R') {
-            self.open_companion_memories();
-            return;
-        }
-        if key == GameKey::Char('U') {
-            self.strip_highlighted();
-            return;
-        }
-
         let Some(game) = &mut self.game else { return };
         let rows = game.owned_pets().len();
         // Highlight only. Enter resolves to `menu_selected.min(len - 1)`, so
@@ -70,6 +35,68 @@ impl App {
         if let Some(idx) = self.selected_index(key, rows) {
             self.menu_selected = idx;
         }
+    }
+
+    /// A member's page: the roster's keys, aimed at the member the page is
+    /// held for. Up/Down pick nothing, since there is one program here.
+    pub(crate) fn handle_party_member_key(&mut self, key: GameKey) {
+        if let Some(HubPageKey::Member(member)) = self.hub_page().cloned() {
+            self.select_member(member);
+        }
+        self.companion_action(key);
+    }
+
+    /// Puts the roster highlight on `member`, which is what every action
+    /// key reads. Run on turning to a member's page and before each key, so
+    /// a reorder or another page's highlight cannot aim a key elsewhere.
+    pub(crate) fn select_member(&mut self, member: Entity) {
+        let Some(game) = &mut self.game else { return };
+        if let Some(row) = game.owned_pets().iter().position(|p| p.entity == member) {
+            self.menu_selected = row;
+        }
+    }
+
+    /// The party member the held page names, `None` on any other page or
+    /// outside the hub.
+    pub fn held_member(&self) -> Option<Entity> {
+        match self.hub_page()? {
+            HubPageKey::Member(member) => Some(*member),
+            _ => None,
+        }
+    }
+
+    /// The screen the roster's side trips come back to: the held member's
+    /// page when one is held, else the roster.
+    pub(crate) fn roster_mode(&self) -> Mode {
+        match self.hub_place.as_ref().map(|p| &p.key) {
+            Some(HubPageKey::Member(_)) => Mode::PartyMember,
+            _ => Mode::Companion,
+        }
+    }
+
+    /// The keys that act on the highlighted program, from either screen.
+    /// Answers whether it took the key.
+    fn companion_action(&mut self, key: GameKey) -> bool {
+        let shift = match key {
+            GameKey::Char('<') | GameKey::Char(',') => Some(SlotShift::Forward),
+            GameKey::Char('>') | GameKey::Char('.') => Some(SlotShift::Back),
+            _ => None,
+        };
+        if let Some(shift) = shift {
+            self.shift_party_slot(shift);
+            return true;
+        }
+        match key {
+            GameKey::Char('W') => self.toggle_wield(),
+            GameKey::Char('N') => self.begin_rename(),
+            GameKey::Char('E') => self.open_companion_equip(),
+            GameKey::Char('P') => self.toggle_party_member(),
+            GameKey::Char('M') => self.open_companion_manifest(),
+            GameKey::Char('R') => self.open_companion_memories(),
+            GameKey::Char('U') => self.strip_highlighted(),
+            _ => return false,
+        }
+        true
     }
 
     /// Takes every piece of gear back off the highlighted program in one
@@ -165,7 +192,7 @@ impl App {
             GameKey::Esc => {
                 self.pending_rename = None;
                 self.rename_input.clear();
-                self.mode = Mode::Companion;
+                self.mode = self.roster_mode();
             }
             GameKey::Backspace => {
                 self.rename_input.pop();
@@ -180,7 +207,7 @@ impl App {
             GameKey::Enter => {
                 let name = std::mem::take(&mut self.rename_input);
                 let Some(entity) = self.pending_rename.take() else {
-                    self.mode = Mode::Companion;
+                    self.mode = self.roster_mode();
                     return;
                 };
                 let Some(game) = &mut self.game else { return };
@@ -189,7 +216,7 @@ impl App {
                 // species name. `None` here would mean "leave it alone".
                 let outcome = game.rename_companion(entity, Some(name));
                 self.report(outcome);
-                self.mode = Mode::Companion;
+                self.mode = self.roster_mode();
             }
             _ => {}
         }
@@ -252,7 +279,7 @@ impl App {
             return;
         };
         self.pending_memory_program = Some(program);
-        self.memories_origin = Mode::Companion;
+        self.memories_origin = self.roster_mode();
         self.memories_return_row = self.menu_selected;
         self.status_line = None;
         self.mode = Mode::CompanionMemories;
@@ -287,11 +314,11 @@ impl App {
         if key == GameKey::Esc {
             self.pending_equip_program = None;
             self.status_line = None;
-            self.mode = Mode::Companion;
+            self.mode = self.roster_mode();
             return;
         }
         let Some(program) = self.pending_equip_program else {
-            self.mode = Mode::Companion;
+            self.mode = self.roster_mode();
             return;
         };
         // The same three rows the inventory leads with, so they answer `[I]`

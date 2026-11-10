@@ -325,13 +325,10 @@ impl App {
             Mode::WorkOrderPick => self.handle_work_order_pick_key(key),
             Mode::WorkOrderQuantity => self.handle_work_order_quantity_key(key),
             Mode::BaseStaff => self.handle_base_staff_key(key),
-            Mode::WorkStructure => self.handle_work_structure_key(key),
-            Mode::Remove => self.handle_remove_key(key),
             Mode::RemoveConfirm => self.handle_remove_confirm_key(key),
             Mode::RemoveDirection => self.handle_remove_direction_key(key),
             Mode::TrapDirection => self.handle_trap_direction_key(key),
             Mode::TradeProgramConfirm => self.handle_trade_program_confirm_key(key),
-            Mode::UpgradeDirection => self.handle_upgrade_direction_key(key),
             Mode::InspectDirection => self.handle_inspect_direction_key(key),
             Mode::StructureManifest => self.handle_structure_manifest_key(key),
             Mode::CellDescribe => self.handle_cell_describe_key(key),
@@ -354,6 +351,7 @@ impl App {
             Mode::DownedPrograms => self.handle_downed_programs_key(key),
             Mode::Tools => self.handle_tools_key(key),
             Mode::Companion => self.handle_companion_key(key),
+            Mode::PartyMember => self.handle_party_member_key(key),
             Mode::CompanionEquip => self.handle_companion_equip_key(key),
             Mode::CompanionMemories => self.handle_companion_memories_key(key),
             Mode::Dossier => self.handle_dossier_key(key),
@@ -407,7 +405,7 @@ impl App {
             Mode::ModCopy => self.handle_mod_copy_key(key),
             Mode::RefitCopy => self.handle_refit_copy_key(key),
             Mode::ModPickAffix => self.handle_mod_pick_affix_key(key),
-            Mode::Contracts => self.handle_contracts_key(key),
+            Mode::Contracts | Mode::ContractsHeld => self.handle_contracts_key(key),
             Mode::Alerts => self.handle_alerts_key(key),
             Mode::History => self.handle_history_key(key),
             Mode::Compass => self.handle_compass_key(key),
@@ -426,12 +424,7 @@ impl App {
             | Mode::RoutesInFlight => self.handle_sites_key(key),
             Mode::BaseOutput => {}
             Mode::BaseOverview => self.handle_base_overview_key(key),
-            Mode::BaseBuild
-            | Mode::BaseResearch
-            | Mode::BaseTrade
-            | Mode::BaseCompile
-            | Mode::PartyPrograms
-            | Mode::PartyRoutines => self.handle_command_page_key(key),
+            Mode::PartyPrograms | Mode::PartyRoutines => self.handle_command_page_key(key),
             Mode::StaffWellbeing | Mode::StaffCoverage | Mode::StaffDiscontent => {
                 self.handle_staff_key(key)
             }
@@ -508,28 +501,34 @@ impl App {
         if self.mode != Mode::QuitRunConfirm {
             self.quit_unsaved_pending = false;
         }
+        // The hub takes the Trader tab's Esc before its handler can, so the
+        // basket is dropped here; a gear look returns to it and keeps it.
+        let inspecting_from_caravan = self.mode == Mode::ItemDescribe
+            && self
+                .pending_inspect
+                .as_ref()
+                .is_some_and(|i| i.from == Mode::Caravan);
+        if self.mode != Mode::Caravan && !inspecting_from_caravan {
+            self.caravan_amounts.clear();
+        }
         // A hub that remembers is reopened where the player last was.
         self.settle_hub();
         if let Some((hub, ..)) = self.hub_at()
             && hub.kind().remembers()
             && let Some(place) = &self.hub_place
         {
-            self.hub_last[hub.slot()] = Some((place.key.clone(), self.mode));
-        }
-        // The structure hub is only open while a mode of its own is up; any
-        // other mode (the map after an action) means it was left. A popup
-        // over one of its pages is still inside it.
-        if self.structure_hub.is_some()
-            && self.hub_at().is_none()
-            && base_popup_parent(self.mode).is_none()
-        {
-            self.structure_hub = None;
+            self.hub_last[hub.slot()] = Some((place.key, self.mode));
         }
         // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
         // own reset rule — no other screen reads it, so there is no
         // `keeps_highlight` pair to preserve it across.
         if self.mode != mode_before && self.mode == Mode::BaseStaff {
             self.work_column = 0;
+        }
+        // The Deploy tab opens on its list of categories, whichever way it
+        // was reached; only its own keys open one.
+        if self.mode != mode_before && self.mode == Mode::Build {
+            self.build_category = None;
         }
         // A group menu's origin only outlives the screen it opened. Landing
         // on the map means the errand is over — completing an action drops

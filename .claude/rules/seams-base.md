@@ -148,7 +148,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   the *other* rows from `basket_room` so the highlighted row can still be
   lowered and raised; `App::take_available` is that row's shelf alone.
 - **On the picker screen `+` takes and `-` puts, the amount's own sign,
-  because the bare arrows belong to the structure hub's nav** — Shift/Ctrl
+  because the bare arrows belong to `i`'s hub nav** — Shift/Ctrl
   on an arrow still reach the basket, Left toward `you`.
 - **The picker's two figures are where the basket would leave the units**,
   `carried + amount` and `on_shelves - amount`, and they are the screen's only
@@ -307,7 +307,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `Game::install_rig_tool` is the one writer of `Hopper::standing_tool`, the
   strip resolves against `ToolDb`, and a rig with nothing fitted runs on
   the starter tool, derived by `Game::rig_tool` and never stored.
-- **The rig's tool screen is the Tool page of the structure hub, never a map
+- **The rig's tool screen is a Tool tab on a BESIDE YOU entry of `i`, never a map
   key**, and `T` is one of `EASTER_EGGS.md`'s hidden keys.
 - **A carrier in transit is carried, so the never-free rule and both
   destruction paths name `CarryingProgram` beside `Carrying`.**
@@ -498,7 +498,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
 
 - **Rooms are derived per call by `rooms::of_world`, never a Resource or a stored field, and a `door` is the only structure anchor `blocked_tiles` lets the crew through.**
 
-- **`[c]` opens the structure hub, and `Game::adjacent_structures` is the one answer to what is beside the party and which pages each has.**
+- **`[c]` opens `i` on its first BESIDE YOU entry, and `Game::adjacent_structures` is the one answer to what is beside the party and which pages each has; an Info-only structure is an entry only when `U` can upgrade it or `W` can work it.**
 - **Destruction records a ruin in `damage_structure` (never in a demolish), and `file_ruins` files it only when no siege runs.**
 - **Build sites are raised lowest production level first by `StructureDb::level`, which is derived at load and never authored in assets.**
 

@@ -5,30 +5,6 @@ use crate::*;
 use feral_processes_engine::save;
 use feral_processes_engine::structures::StructureCategory;
 
-#[test]
-fn the_upgrade_prompt_opens_from_the_build_page_and_esc_backs_into_it() {
-    // A Extractor, not a Home: the row is hidden unless something nearby
-    // actually declares an upgrade path (see `App::upgradeable_structures`).
-    let mut app = app_owning_a_program_and_an_extractor(230, &[]);
-    // Upgrading is a base action, so the row is offered in one locale only.
-    //
-    // The *exit* cell, two tiles off the Extractor, and deliberately: the row
-    // is gated on the scan radius rather than on adjacency, so it has to be
-    // offered from here as well. `stand_beside_the_extractor` is what an
-    // upgrade that actually lands needs.
-    stand_in_base(&mut app);
-
-    open_command(&mut app, "Upgrade a structure");
-    assert_eq!(app.mode, Mode::UpgradeDirection);
-
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild, "Esc walks back up one level");
-    app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "Esc on the page goes to the rail");
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::Playing, "and out to the map from there");
-}
-
 /// A structure the current zone caps at Mk1 is still offered, not filtered
 /// out. Hiding it would take the whole Upgrade row out of the Build page for
 /// the entirety of zone 1 — see `app/group_menu.rs`, which drops a row whose
@@ -76,25 +52,6 @@ fn deploy_home(app: &mut App) {
     // first keypress to a screen it never asked for.
     dismiss_notifications(app);
     stand_in_base(app);
-}
-
-/// Home declares no upgrade path, so a base consisting only of one leaves
-/// nothing to upgrade — and the Build page says so by not offering the
-/// row at all, rather than opening a picker with no entries in it.
-#[test]
-fn a_structure_with_no_upgrade_path_hides_the_upgrade_row() {
-    let mut app = test_app(231);
-    deploy_home(&mut app);
-
-    let rows = command_labels_all(&mut app);
-    assert!(
-        rows.contains(&"Demolish a structure"),
-        "Home is deployed, so the rows that take any structure are live: {rows:?}"
-    );
-    assert!(
-        !rows.contains(&"Upgrade a structure"),
-        "Home has no upgrade path, so the row leads nowhere: {rows:?}"
-    );
 }
 
 /// Guards Finding 3: `handle_build_direction_key` must recognise Home by
@@ -193,63 +150,6 @@ fn build_menu_number_key_reaches_the_direction_picker_and_can_place_a_structure(
     );
 }
 
-/// Exercises the demolish flow end to end through `App::handle_key`:
-/// picking Home moves to a confirmation step instead of demolishing
-/// immediately (unlike any other structure — see `Game::remove_structure`
-/// for why Home is special), `n` backs out leaving it standing, and `y`
-/// actually demolishes it.
-#[test]
-fn remove_key_on_home_requires_confirmation_before_demolishing() {
-    let mut app = test_app(203);
-    deploy_home(&mut app);
-
-    open_command(&mut app, "Demolish a structure");
-    assert_eq!(app.mode, Mode::Remove);
-    app.handle_key(GameKey::Enter);
-    assert!(
-        app.mode == Mode::RemoveConfirm,
-        "picking Home should require confirmation instead of demolishing immediately"
-    );
-    assert_eq!(
-        structure_count(&mut app),
-        1,
-        "Home shouldn't be removed yet"
-    );
-
-    app.handle_key(GameKey::Char('n'));
-    assert!(app.mode == Mode::Playing);
-    assert_eq!(
-        structure_count(&mut app),
-        1,
-        "declining the warning should leave Home in place"
-    );
-
-    open_command(&mut app, "Demolish a structure");
-    app.handle_key(GameKey::Enter);
-    assert!(app.mode == Mode::RemoveConfirm);
-    app.handle_key(GameKey::Char('y'));
-    assert!(app.mode == Mode::Playing);
-    assert_eq!(
-        structure_count(&mut app),
-        0,
-        "confirming should demolish Home"
-    );
-}
-
-/// A cronjob posts a program to a node; working it yourself is the same job,
-/// so it offers the same `App::workable_structures` list rather than a second
-/// kind of screen.
-#[test]
-fn working_a_structure_yourself_opens_the_same_structure_list() {
-    let mut app = app_owning_a_program_and_an_extractor(960, &[]);
-    stand_in_base(&mut app);
-    open_command(&mut app, "Work a structure yourself");
-    assert_eq!(app.mode, Mode::WorkStructure);
-
-    app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild, "Esc backs into the Build page");
-}
-
 /// `d` + a direction demolishes what is on the neighbouring tile, without
 /// going through the Build page's picker at all.
 #[test]
@@ -296,6 +196,17 @@ fn the_demolish_key_still_asks_before_taking_down_home() {
     );
     assert_eq!(structure_count(&mut app), 2, "nothing is gone yet");
 
+    app.handle_key(GameKey::Char('n'));
+    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(
+        structure_count(&mut app),
+        2,
+        "declining leaves Home standing"
+    );
+
+    app.handle_key(GameKey::Char('d'));
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.mode, Mode::RemoveConfirm);
     app.handle_key(GameKey::Char('y'));
     assert_eq!(
         structure_count(&mut app),
@@ -1048,7 +959,7 @@ fn an_order_at_the_top_refuses_to_move_up() {
 /// picker this task adds. Row 1, `extractor`, is the first structure that
 /// actually costs a program.
 fn deploy_second_structure(app: &mut App) {
-    app.mode = Mode::Build;
+    open_hub_screen(app, Mode::Build);
     // Row 2 is the first category after the Home; its row 1 is the first
     // structure past the Home in `StructureDb::all` order.
     pick_row(app, 1);
@@ -1268,17 +1179,13 @@ fn the_pickers_confirm_surfaces_the_engines_refusal() {
     );
 }
 
-/// `Mode::UpgradeDirection`'s counterpart to `deploy_second_structure` —
-/// aims at the one upgradeable structure the fixture offers, the Extractor,
-/// through the Build page rather than by hand-setting `app.mode`, since that
-/// menu path is also what proves the verb is still reachable at all.
+/// `U` on the Extractor's Info tab, the way a player files an upgrade.
 ///
-/// Callers stand the party with `stand_beside_the_extractor`, so east is the
-/// machine.
+/// Callers stand the party with `stand_beside_the_extractor`, so the
+/// machine is a neighbour.
 fn open_upgrade_picker(app: &mut App) {
-    open_command(app, "Upgrade a structure");
-    assert_eq!(app.mode, Mode::UpgradeDirection);
-    app.handle_key(GameKey::Right); // the Extractor, one tile east
+    on_the_info_tab_of(app, "Extractor");
+    app.handle_key(GameKey::Char('U'));
 }
 
 #[test]
@@ -1335,88 +1242,6 @@ fn escaping_the_upgrade_picker_files_nothing_and_spends_nothing() {
         app.game.as_mut().unwrap().owned_pets().len(),
         2,
         "nothing is spent until the picker confirms"
-    );
-}
-
-/// Aiming at a tile with nothing on it is a sentence, not a dead end — the
-/// gesture `handle_remove_direction_key` already answers this way.
-///
-/// The row is offered off the *scan radius*, so a player can reach this
-/// prompt while standing nowhere near the machine they were thinking of;
-/// silently dropping back to the map would read as the key doing nothing.
-#[test]
-fn aiming_the_upgrade_at_empty_ground_refuses_and_files_nothing() {
-    let mut app = app_owning_a_program_and_an_extractor(877, &[]);
-    stand_beside_the_extractor(&mut app);
-    tame_program_at_zone(&mut app, 2);
-
-    open_command(&mut app, "Upgrade a structure");
-    // North. Not west — the exit cell that way carries Home, which is a
-    // structure and so answers the other refusal below.
-    app.handle_key(GameKey::Up);
-
-    assert_eq!(app.mode, Mode::Playing, "a refusal leaves the prompt");
-    assert!(
-        app.status_line
-            .as_deref()
-            .is_some_and(|s| s.contains("Nothing to upgrade")),
-        "the player has to be told the tile was empty, got: {:?}",
-        app.status_line
-    );
-    assert!(app.pending_build.is_none(), "and nothing is filed");
-    assert_eq!(
-        app.game.as_mut().unwrap().owned_pets().len(),
-        2,
-        "nor spent"
-    );
-}
-
-/// A structure with no upgrade path at all is answered in **the engine's own
-/// words**, not app-core's.
-///
-/// `App::handle_upgrade_direction_key` reaches that sentence by filing the
-/// order against no program: every refusal in `Game::upgrade_structure`
-/// lands before `commit_for_build`, so the machine's own "can't be upgraded"
-/// comes back with nothing spent. A copy of that string in app-core is what
-/// this shape exists to avoid — the list this prompt replaced dodged the
-/// question by filtering such structures out, and a prompt cannot filter a
-/// tile.
-#[test]
-fn aiming_the_upgrade_at_a_structure_that_cannot_climb_quotes_the_engine() {
-    let mut app = app_owning_a_program_and_an_extractor(878, &[]);
-    // The exit cell: Home stands here, and Home declares no upgrade path —
-    // see `a_structure_with_no_upgrade_path_hides_the_upgrade_row`.
-    stand_beside_the_extractor(&mut app);
-    tame_program_at_zone(&mut app, 2);
-
-    let home = app
-        .nearby_structures()
-        .into_iter()
-        .find(|s| s.is_home)
-        .expect("the fixture founded a base");
-    let (px, py) = (1, 0);
-    assert_eq!(
-        home.pos,
-        (px - 1, py),
-        "precondition: Home is the party's western neighbour"
-    );
-
-    open_command(&mut app, "Upgrade a structure");
-    app.handle_key(GameKey::Left);
-
-    assert_eq!(app.mode, Mode::Playing);
-    assert!(
-        app.status_line
-            .as_deref()
-            .is_some_and(|s| s.contains("can't be upgraded")),
-        "the engine's own refusal has to reach the player, got: {:?}",
-        app.status_line
-    );
-    assert!(app.pending_build.is_none());
-    assert_eq!(
-        app.game.as_mut().unwrap().owned_pets().len(),
-        2,
-        "a refusal spends nothing"
     );
 }
 
@@ -1647,7 +1472,7 @@ fn picking_a_program_in_the_study_screen_pins_it() {
     assert_eq!(app.mode, Mode::PinSubject);
     pick_row(&mut app, 0);
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::PinSubject, "a pick stays on the Study tab");
     assert_eq!(
         app.game.as_mut().unwrap().program_role(program),
         Some(ProgramRole::UnderStudy),
@@ -1687,11 +1512,73 @@ fn the_study_screen_unpins_the_current_subject_through_its_one_row() {
     assert_eq!(app.mode, Mode::PinSubject);
     pick_row(&mut app, 0);
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::PinSubject, "a pick stays on the Study tab");
     assert_eq!(
         app.game.as_mut().unwrap().program_role(program),
         Some(ProgramRole::Staff),
         "the one row on screen must have released the subject"
+    );
+}
+
+/// The Study tab is reachable from the Stack, but the pen is up on the
+/// field: the pin door refuses in its own words, and nobody is pinned.
+#[test]
+fn the_study_tab_refuses_a_pin_from_underground() {
+    let mut app = app_owning_a_program_and_a_research_station(888);
+    stand_in_base(&mut app);
+    go_underground(&mut app);
+    assert!(app.game.as_ref().unwrap().is_underground(), "precondition");
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+
+    open_hub_screen(&mut app, Mode::PinSubject);
+    pick_row(&mut app, 0);
+
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Not down here — that's back up on the field.")
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().program_role(program),
+        Some(ProgramRole::Staff),
+        "a refused pin pins nobody"
+    );
+}
+
+/// Unpinning is the same door's other half and refuses the same way.
+#[test]
+fn the_study_tab_refuses_an_unpin_from_underground() {
+    let mut app = app_owning_a_program_and_a_research_station(889);
+    stand_in_base(&mut app);
+    let program = app.game.as_mut().unwrap().base_staff()[0];
+    let station = app.game.as_mut().unwrap().study_station().unwrap();
+    app.game
+        .as_mut()
+        .unwrap()
+        .pin_subject(program, station)
+        .unwrap();
+    for _ in 0..8 {
+        app.game.as_mut().unwrap().wait();
+    }
+    go_underground(&mut app);
+    // The reload mints new entities, so the subject is read back after it.
+    let program = app
+        .game
+        .as_mut()
+        .unwrap()
+        .pinned_subject()
+        .expect("precondition: the subject reached the pen and stays pinned underground");
+
+    open_hub_screen(&mut app, Mode::PinSubject);
+    pick_row(&mut app, 0);
+
+    assert_eq!(
+        app.status_line.as_deref(),
+        Some("Not down here — that's back up on the field.")
+    );
+    assert_eq!(
+        app.game.as_mut().unwrap().program_role(program),
+        Some(ProgramRole::UnderStudy),
+        "a refused unpin leaves the subject pinned"
     );
 }
 
@@ -1706,11 +1593,8 @@ fn escaping_the_study_screen_pins_nobody() {
     open_command(&mut app, "Study a program");
     app.handle_key(GameKey::Esc);
 
-    assert_eq!(
-        app.mode,
-        Mode::BaseResearch,
-        "Esc from a group-menu screen returns to the menu it opened from"
-    );
+    assert_eq!(app.mode, Mode::PinSubject);
+    assert!(app.hub_on_rail, "Esc in the Study tab goes to the rail");
     assert_eq!(
         app.game.as_mut().unwrap().program_role(program),
         Some(ProgramRole::Staff),
@@ -1836,7 +1720,7 @@ fn a_deploy_category_opens_its_structures_and_esc_walks_back_up() {
     assert_eq!(app.build_category, None);
     assert_eq!(app.menu_selected, row, "back on the category it opened");
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert!(app.hub_on_rail, "Esc on the category list goes to the rail");
 
     // Back in, and through to a deploy.
     app.handle_key(GameKey::Enter);

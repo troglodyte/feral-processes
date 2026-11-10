@@ -34,5 +34,8 @@
     "refactor": "off",
     "improve-codebase-architecture": "off",
     "writing-guidelines": "off"
+  },
+  "env": {
+    "CARGO_TARGET_DIR": "/home/trog/.cache/feral-processes-target"
   }
 }

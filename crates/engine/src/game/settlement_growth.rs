@@ -62,7 +62,7 @@ impl Game {
 
     /// What a town's commerce says about it as of now: a city's vitality and
     /// trend, or a town's growth outlook. The one derivation the world map
-    /// and the Sites hub share, so the two cannot word one town differently.
+    /// and `b`'s site pages share, so the two cannot word one town differently.
     /// Settles the drift on a copy of the relation and writes nothing.
     pub(crate) fn growth_reading(&self, key: SettlementKey) -> GrowthReading {
         let Some(kind) = self.settlement_kind(key) else {

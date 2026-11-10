@@ -163,7 +163,7 @@ fn a_hostile_outside_sight_is_neither_drawn_nor_counted() {
     let mut drawn = Vec::new();
     let (_, shapes) = with_sprites(SpriteTable::default(), |p| {
         let status = game.player_status();
-        drawn = draw_surface_map(
+        (drawn, _) = draw_surface_map(
             &mut game,
             &mut fx,
             p,

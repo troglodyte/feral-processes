@@ -173,7 +173,7 @@ impl App {
                 return;
             }
             GameKey::Char('i') => {
-                self.open_hub(Hub::Inventory);
+                self.open_inventory();
                 return;
             }
             // The downed-program store: a body goes down in most fights and
@@ -283,8 +283,8 @@ impl App {
                 self.open_hub(Hub::Base);
                 return;
             }
-            // The Sites hub. Opens at base or beside a site, and says so when
-            // it does not.
+            // `b` opened on the site pages: the site beside the party, else
+            // the first town.
             GameKey::Char('w') => {
                 self.open_sites_hub();
                 return;
@@ -530,7 +530,7 @@ impl App {
             self.refuse(reason);
         }
         if open_hub {
-            self.open_structure_hub();
+            self.open_beside();
         }
         self.after_world_action(acted, is_move_key, ground_bite);
     }

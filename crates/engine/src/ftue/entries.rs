@@ -93,7 +93,7 @@ pub const ENTRIES: &[FtueEntry] = &[
                    program walks there itself and is written up to full Integrity a tick at \
                    a time. Until one stands in your base, benched is where it stays — you \
                    can still sell it or pull a routine out of it.\n\n[b] for the base \
-                   report, then Deploy a structure on the Build page.",
+                   report, then the Deploy tab on the Build page.",
         sprite: None,
         glyph: 'r',
         color: GlyphColor::Red,

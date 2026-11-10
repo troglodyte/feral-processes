@@ -18,7 +18,15 @@
 
 use crate::app::basket::halve;
 use crate::*;
+use feral_processes_engine::CaravanReach;
 use feral_processes_engine::views::CaravanView;
+
+const NO_TRADER: &str = "No trader is at the base's counter.";
+const TRADER_ON_ITS_WAY: &str = "The trader hasn't reached the base's counter yet.";
+const TRADER_AT_BASE: &str =
+    "The trader is waiting at the base's counter. Walk back to the base to trade.";
+/// Every sentence `App::trader_absence` can say, for gui's width census.
+pub const TRADER_ABSENCE_LINES: &[&str] = &[NO_TRADER, TRADER_ON_ITS_WAY, TRADER_AT_BASE];
 
 /// Which section of the caravan screen a picked row lands in, and its index
 /// within that section.
@@ -143,6 +151,18 @@ impl App {
     ///
     /// Enter commits, clears the basket and **leaves the screen open**: a
     /// wagon is a place you shop at, not a form you submit.
+    /// Why the Trader tab has no wagon to deal with, `None` when it has
+    /// one. The tab's empty line and its keys' refusal are this sentence.
+    pub fn trader_absence(&mut self) -> Option<&'static str> {
+        let game = self.game.as_mut()?;
+        match game.caravan_reach() {
+            CaravanReach::AtCaravan => None,
+            CaravanReach::NoCaravan => Some(NO_TRADER),
+            CaravanReach::NotDocked if game.caravan_docked() => Some(TRADER_AT_BASE),
+            CaravanReach::NotDocked => Some(TRADER_ON_ITS_WAY),
+        }
+    }
+
     pub(crate) fn handle_caravan_key(&mut self, key: GameKey) {
         if key == GameKey::Esc {
             self.caravan_amounts.clear();
@@ -150,9 +170,16 @@ impl App {
             return;
         }
         let Some(view) = self.game.as_mut().and_then(|g| g.caravan_view()) else {
-            // The wagon was bought out, or the trader has rolled away.
+            // No wagon to deal with: the Trader tab says why and has no rows
+            // to act on, so a key that would act says it again.
             self.caravan_amounts.clear();
-            self.mode = Mode::Playing;
+            let browsing = matches!(
+                key,
+                GameKey::Up | GameKey::Down | GameKey::PageUp | GameKey::PageDown
+            );
+            if !browsing && let Some(line) = self.trader_absence() {
+                self.refuse(line);
+            }
             return;
         };
         let total = view.offers.len() + view.sells.len();
@@ -262,8 +289,8 @@ impl App {
     }
 
     /// A trade costs a tick, and a tick can be the one the trader leaves on
-    /// — or the one that starves the player. `handle_stack_market_key`'s
-    /// `close_if_bought_out`, and for both of its reasons.
+    /// — or the one that starves the player. A wagon that left takes its
+    /// basket with it and the tab says it is gone.
     fn close_if_gone(&mut self) {
         self.check_game_over();
         if self.mode == Mode::GameOver {
@@ -275,7 +302,6 @@ impl App {
             .is_some_and(|g| g.caravan_view().is_none())
         {
             self.caravan_amounts.clear();
-            self.mode = Mode::Playing;
         }
     }
 }

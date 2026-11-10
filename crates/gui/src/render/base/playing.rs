@@ -7,6 +7,9 @@ use super::*;
 /// every mode that draws a popup over the map shows the refusal inside that
 /// popup instead, and drawing it here as well would put the same sentence
 /// on screen twice.
+///
+/// Answers the layout of the map it drew, `None` for a Stack corridor or no
+/// run: what a notice anchors to.
 pub(crate) fn draw_playing_base(
     app: &mut App,
     fx: &mut Fx,
@@ -14,7 +17,7 @@ pub(crate) fn draw_playing_base(
     painter: &Painter,
     m: &Metrics,
     reveal: bool,
-) {
+) -> Option<MapLayout> {
     let (tile_px, glyph_px) = map_cell(app.zoom);
     let status_line = refusal.map(str::to_string);
     // Read before the `game` borrow, like `status_line` above.
@@ -155,7 +158,7 @@ pub(crate) fn draw_playing_base(
         .map(|v| tactical::keybar_rows(mode, &v, tactical_auto, tactical_cursor));
     // A fight's bar replaces the map's whole, as one group.
     let keybar = tactical_actions.map_or(map_keybar, |actions| vec![actions]);
-    let Some(game) = &mut app.game else { return };
+    let game = app.game.as_mut()?;
 
     let stock_rows = game.base_stock();
     let research = game.research_readout();
@@ -200,15 +203,12 @@ pub(crate) fn draw_playing_base(
     } else {
         game.tactical_view()
     };
-    // Cleared here, unconditionally, ahead of the three-way branch below:
-    // `draw_surface_map` and `draw_tactical_map` each overwrite it with
-    // `Some(..)` in their own branch, so a Stack corridor leaves it `None`
-    // rather than a click inheriting a layout from the screen the player
-    // has since left.
-    fx.set_map_click(None);
+    // `Some` only in the branches that draw a map with tiles; a Stack
+    // corridor has none.
+    let layout;
     fx.set_notice_dock(crate::render::Dock::Centre);
     if let Some(view) = board {
-        let washes = tactical::draw_tactical_map(
+        let (washes, drawn) = tactical::draw_tactical_map(
             &view,
             &tactical_overlay,
             fx,
@@ -217,7 +217,8 @@ pub(crate) fn draw_playing_base(
             tile_px,
             glyph_px,
         );
-        reach_circle::draw_reach_circles(fx, painter, &reach_circles, true);
+        reach_circle::draw_reach_circles(fx, painter, &drawn, &reach_circles, true);
+        layout = Some(drawn);
         hud::map_frame::draw_map_frame(
             regions.map_pane,
             terrain,
@@ -240,6 +241,7 @@ pub(crate) fn draw_playing_base(
         tactical::draw_wash_legend(&washes, regions.map_pane, painter, m);
         tactical::draw_round_banner(fx, regions.map_pane, painter, m);
     } else if let Some(view) = game.stack_view() {
+        layout = None;
         draw_stack(
             &view,
             painter,
@@ -292,7 +294,7 @@ pub(crate) fn draw_playing_base(
             }
             None => base_centre,
         };
-        let entities = draw_surface_map(
+        let (entities, drawn) = draw_surface_map(
             game,
             fx,
             painter,
@@ -308,7 +310,8 @@ pub(crate) fn draw_playing_base(
             camera,
             reveal,
         );
-        reach_circle::draw_reach_circles(fx, painter, &reach_circles, false);
+        reach_circle::draw_reach_circles(fx, painter, &drawn, &reach_circles, false);
+        layout = Some(drawn);
         let hostiles = entities.iter().filter(|e| e.is_hostile).count();
         hud::map_frame::draw_map_frame(
             regions.map_pane,
@@ -440,4 +443,5 @@ pub(crate) fn draw_playing_base(
         painter,
         m,
     );
+    layout
 }

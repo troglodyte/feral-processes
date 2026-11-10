@@ -316,6 +316,7 @@ fn the_map_reports_exactly_the_washes_it_drew() {
             )
         })
         .0
+        .0
     };
     assert_eq!(
         draw(&view, &[cell], &[]),
@@ -642,17 +643,18 @@ fn the_whole_legend_fits_the_map_pane() {
     }
 }
 
-/// The board stashes the layout it drew with, exactly as the surface
+/// The board returns the layout it drew with, exactly as the surface
 /// map does, so a pixel on a body inverts to the cell that body was
 /// drawn on — `tile_at_px` against `tile_origin_px` through the
-/// published numbers rather than a recomputed camera.
+/// returned numbers rather than a recomputed camera.
 #[test]
-fn the_board_publishes_a_layout_that_inverts_a_bodys_pixel_to_its_cell() {
+fn the_board_returns_a_layout_that_inverts_a_bodys_pixel_to_its_cell() {
     let mut game = fighting();
     let view = game.tactical_view().expect("the fight is open");
     let mut fx = Fx::new();
-    with_painter(|p| draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24));
-    let layout = fx.map_click().expect("the board published its layout");
+    let ((_, layout), _) = with_painter(|p| {
+        draw_tactical_map(&view, &Overlay::default(), &mut fx, p, pane(), 32.0, 24)
+    });
     assert_eq!(layout.pane, pane());
     for body in &view.bodies {
         let (px, py) = tile_origin_px(
@@ -686,7 +688,7 @@ fn a_hover_path_is_washed_and_named_in_the_legend() {
         ..Default::default()
     };
     let mut fx = Fx::new();
-    let (washes, shapes) =
+    let ((washes, _), shapes) =
         with_painter(|p| draw_tactical_map(&view, &overlay, &mut fx, p, pane(), 32.0, 24));
     assert!(
         washes.contains(&Wash::Path),
@@ -718,12 +720,11 @@ fn a_marked_target_is_outlined() {
         ..Default::default()
     };
     let mut fx = Fx::new();
-    let (_, marked) =
+    let ((_, layout), marked) =
         with_painter(|p| draw_tactical_map(&view, &overlay, &mut fx, p, pane(), 32.0, 24));
     let before = crate::paint::painted_rect_stroke_boxes(&plain, palette::EMPHASIS);
     let after = crate::paint::painted_rect_stroke_boxes(&marked, palette::EMPHASIS);
     assert_eq!(after.len(), before.len() + 1, "the mark drew no outline");
-    let layout = fx.map_click().expect("the board published its layout");
     let (px, py) = tile_origin_px(
         hostile.cell,
         layout.center,

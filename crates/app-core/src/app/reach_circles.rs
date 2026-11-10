@@ -1,6 +1,6 @@
 //! The Shield and Patch Node circles the map draws: under the pointer, and
-//! as a preview while the player picks where to deploy or which node to
-//! upgrade.
+//! as a preview while the player picks where to deploy, and the next tier's
+//! circle while a Shield's or Patch Node's Info tab is the page shown.
 
 use crate::*;
 
@@ -37,7 +37,7 @@ impl App {
     /// footprint" is the pointer on its anchor. An unarmed Shield still shows
     /// its circle: the player should see what it would cover.
     pub fn reach_circles(&mut self) -> Vec<ReachCircle> {
-        let hover = self.map_hover;
+        let hover = self.hovered_tile();
         match self.mode {
             Mode::Playing => self.hover_circle(hover, (0, 0)),
             Mode::TacticalBattle => {
@@ -50,7 +50,7 @@ impl App {
                 self.hover_circle(hover, view.siege_origin)
             }
             Mode::BuildDirection => self.deploy_previews(),
-            Mode::UpgradeDirection => self.upgrade_previews(),
+            Mode::StructureManifest => self.info_tab_circles(),
             _ => Vec::new(),
         }
     }
@@ -112,34 +112,49 @@ impl App {
             .collect()
     }
 
-    fn upgrade_previews(&mut self) -> Vec<ReachCircle> {
-        let Some(game) = self.game.as_mut() else {
+    /// The circle a Shield or Patch Node has now and, faint beside it, the
+    /// one its next tier would have, while that structure's BESIDE YOU Info
+    /// tab is the page shown: the tab is where `U` is pressed, so the
+    /// player sees what it buys. Nothing for another structure, nor for the
+    /// examine sheet, which holds no entry.
+    fn info_tab_circles(&mut self) -> Vec<ReachCircle> {
+        let (Some(entity), Some(game)) = (self.held_structure(), self.game.as_mut()) else {
             return Vec::new();
         };
-        let adjacent: Vec<_> = NEIGHBOURS
-            .iter()
-            .filter_map(|&(dx, dy)| game.adjacent_structure(dx, dy))
-            .map(|e| e.entity)
-            .collect();
-        let shields = game
-            .view_shields()
-            .into_iter()
-            .map(|s| (s.entity, s.anchor, s.next_radius, ReachKind::Shield));
-        let patches = game
-            .view_patch_nodes()
-            .into_iter()
-            .map(|n| (n.entity, n.anchor, n.next_radius, ReachKind::Patch));
-        shields
-            .chain(patches)
-            .filter(|(entity, ..)| adjacent.contains(entity))
-            .filter_map(|(_, anchor, next, kind)| {
-                Some(ReachCircle {
-                    anchor,
-                    radius: next?,
-                    style: ReachCircleStyle::Preview,
-                    kind,
-                })
-            })
-            .collect()
+        if self.hub_place.is_none() || game.is_underground() {
+            return Vec::new();
+        }
+        let shields = game.view_shields().into_iter().map(|s| {
+            (
+                s.entity,
+                s.anchor,
+                s.radius,
+                s.next_radius,
+                ReachKind::Shield,
+            )
+        });
+        let patches = game.view_patch_nodes().into_iter().map(|n| {
+            (
+                n.entity,
+                n.anchor,
+                n.radius,
+                n.next_radius,
+                ReachKind::Patch,
+            )
+        });
+        let Some((_, anchor, radius, next, kind)) =
+            shields.chain(patches).find(|(e, ..)| *e == entity)
+        else {
+            return Vec::new();
+        };
+        let circle = |radius, style| ReachCircle {
+            anchor,
+            radius,
+            style,
+            kind,
+        };
+        let mut circles = vec![circle(radius, ReachCircleStyle::Hover)];
+        circles.extend(next.map(|r| circle(r, ReachCircleStyle::Preview)));
+        circles
     }
 }

@@ -21,15 +21,16 @@ use crate::*;
 /// against: which notice is waiting is not what any caller of this is about.
 pub(crate) fn drain_compile(app: &mut App) {
     assert_eq!(app.mode, Mode::Compiling, "nothing is compiling to drain");
-    app.advance_compile(3600.0);
-    while app.mode == Mode::Notification {
-        app.handle_key(GameKey::Esc);
-    }
-    let home = if app.structure_hub.is_some() {
+    // The hub page the compile was opened from, read while it is held.
+    let home = if app.hub_for(Mode::Craft).is_some() {
         Mode::Craft
     } else {
         Mode::Playing
     };
+    app.advance_compile(3600.0);
+    while app.mode == Mode::Notification {
+        app.handle_key(GameKey::Esc);
+    }
     assert_eq!(app.mode, home, "a drained compile should have gone home");
 }
 
@@ -82,7 +83,7 @@ fn careful_compiling_toggles_on_the_quantity_page_and_never_leaks() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Craft);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseCompile);
+    assert!(app.hub_on_rail, "Esc on the Compile tab goes to the rail");
     open_quantity_page(&mut app);
     assert!(
         !app.careful_craft,
@@ -268,7 +269,7 @@ fn committing_a_craft_opens_the_compiling_screen_rather_than_finishing_at_once()
 /// there is nothing to page through on this screen, so even Esc just aborts
 /// like every other key would.
 #[test]
-fn a_key_during_compiling_aborts_and_returns_to_playing() {
+fn a_key_during_compiling_aborts_and_returns_to_the_compile_tab() {
     let mut app = stocked_app(711);
     open_compile_of(&mut app, "ice_breaker");
     app.handle_key(GameKey::Enter);
@@ -281,11 +282,8 @@ fn a_key_during_compiling_aborts_and_returns_to_playing() {
 
     app.handle_key(GameKey::Char('q'));
 
-    assert_eq!(
-        app.mode,
-        Mode::Playing,
-        "any key should abort back to the map"
-    );
+    assert_eq!(app.mode, Mode::Craft, "any key aborts back to the tab");
+    assert!(app.hub_at().is_some());
     assert!(
         !app.game.as_ref().unwrap().hand_craft_in_progress(),
         "an abort should clear the engine's in-flight compile"
@@ -326,7 +324,7 @@ fn a_compile_fills_at_the_selected_world_speed() {
 /// outcome itself — the mode change and the fact that nothing is left
 /// standing over the map as a refusal.
 #[test]
-fn advancing_to_completion_returns_to_playing_and_reports_the_outcome() {
+fn advancing_to_completion_returns_to_the_compile_tab_and_reports_the_outcome() {
     let mut app = stocked_app(712);
     open_compile_of(&mut app, "ice_breaker");
     let before = held(&app, "ice_breaker");
@@ -335,7 +333,8 @@ fn advancing_to_completion_returns_to_playing_and_reports_the_outcome() {
 
     drain_compile(&mut app);
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::Craft, "back on the tab it was opened from");
+    assert!(app.hub_at().is_some());
     assert_eq!(
         held(&app, "ice_breaker"),
         before + quantity,
@@ -511,7 +510,7 @@ fn compiling_the_most_with_a_flat_reserve_names_power_not_materials() {
     let said = app.status_line.clone().unwrap_or_default();
     assert!(said.contains("Power"), "should name the reserve: {said:?}");
     assert!(!said.contains("resources"), "and not the pack: {said:?}");
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.mode, Mode::Craft, "refused back onto the Compile tab");
 }
 
 /// The four gear recipes that name a Workbench (weapons are designed, not
@@ -542,9 +541,9 @@ fn open_bench_compile(app: &mut App) {
         if app.mode == Mode::Craft {
             break;
         }
-        app.handle_key(GameKey::Down);
+        app.handle_key(GameKey::Tab);
     }
-    assert_eq!(app.mode, Mode::Craft, "the rail reaches the Compile page");
+    assert_eq!(app.mode, Mode::Craft, "the tabs reach the Compile page");
     app.handle_key(GameKey::Right);
 }
 
@@ -588,12 +587,13 @@ fn the_bench_page_lists_the_bench_recipes_too() {
 }
 
 #[test]
-fn craft_outside_any_hub_is_not_a_hub_screen() {
+fn compile_off_the_bench_is_the_production_pages_tab() {
     let mut app = stocked_app(712);
     open_command(&mut app, "Compile an item");
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_none());
-    assert_eq!(app.hub_at(), None);
+    assert!(app.held_structure().is_none());
+    assert!(!app.craft_at_bench(), "the field list, not the bench's");
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Production")));
 }
 
 #[test]
@@ -612,7 +612,7 @@ fn compiling_from_the_bench_page_returns_to_the_page_not_the_map() {
         app.handle_key(GameKey::Esc);
     }
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some(), "the hub stays open");
+    assert!(app.held_structure().is_some(), "the hub stays open");
 }
 
 #[test]
@@ -625,10 +625,10 @@ fn aborting_a_bench_compile_returns_to_the_page() {
     assert_eq!(app.mode, Mode::Compiling);
     app.handle_key(GameKey::Char('x'));
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some());
+    assert!(app.held_structure().is_some());
 }
 
-/// `refresh_structure_hub` runs inside `after_tick` while compiling; a bench
+/// `refresh_beside` runs inside `after_tick` while compiling; a bench
 /// that leaves the cycle must not strand the armed batch, whose in-flight
 /// unit's material would otherwise be lost to the next arm.
 #[test]
@@ -642,7 +642,7 @@ fn losing_the_bench_mid_compile_aborts_the_batch() {
     assert_eq!(app.mode, Mode::Compiling);
     assert!(app.game.as_ref().unwrap().hand_craft_in_progress());
 
-    let bench = app.structure_hub.as_ref().unwrap().current().entity;
+    let bench = app.held_structure().unwrap();
     app.game.as_mut().unwrap().remove_structure(bench).unwrap();
     app.advance_compile(1.0);
 
@@ -663,7 +663,7 @@ fn a_zero_or_refused_bench_compile_returns_to_the_page() {
     app.handle_key(GameKey::Char('0'));
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some());
+    assert!(app.held_structure().is_some());
 
     // No material: the engine refuses to arm the batch.
     let mut app = app_at_a_workbench(716);
@@ -672,7 +672,7 @@ fn a_zero_or_refused_bench_compile_returns_to_the_page() {
     pick_row(&mut app, row);
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Craft);
-    assert!(app.structure_hub.is_some());
+    assert!(app.held_structure().is_some());
 }
 
 /// Picks `packet_buffer` on the bench page and types `quantity`.

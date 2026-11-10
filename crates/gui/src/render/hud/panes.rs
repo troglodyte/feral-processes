@@ -621,7 +621,9 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
                     vec![body(format!("  {t}"))],
                     suffix.map(|s| vec![dim(s)]).unwrap_or_default(),
                 ),
-                PopupRow::TextColored(t, _) => text(vec![dim(format!("  {t}"))]),
+                PopupRow::TextColored(t, _) | PopupRow::Detail(t, _) => {
+                    text(vec![dim(format!("  {t}"))])
+                }
                 PopupRow::Text(t) => text(vec![dim(format!("  {t}"))]),
                 PopupRow::TextEntry { text: t, .. } => text(vec![dim(format!("  {t}"))]),
             });
@@ -682,8 +684,8 @@ fn is_ready(c: &ContractRow) -> bool {
 /// is `Game::active_contracts`' own rule — so there is no locale for the
 /// body to be empty in.
 ///
-/// The chip says `b` because the Contracts screen hangs off the base group
-/// menu, at `Locality::Anywhere`.
+/// The chip says `b` because the Contracts screen hangs off the base
+/// report's Contracts page, which opens anywhere.
 fn contract_rows(d: &PaneData) -> Vec<Row> {
     let mut out = vec![head("CONTRACTS", 'b', "contracts")];
     if d.contracts.is_empty() {

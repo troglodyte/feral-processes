@@ -64,8 +64,8 @@
   `is_structure` **before** `build.is_some()`, or an upgrading machine draws
   as a bare slab. And the bill is quoted through `Game::upgrade_cost` and
   `build_cost_display`, the pack no longer being the store the verb reads —
-  on the program picker since `Mode::UpgradeDirection` replaced the upgrade
-  list, because a prompt aimed at a *tile* does not know the machine yet.
+  on the program picker since the upgrade became `U` on a structure's Info
+  tab, because a key aimed at a *tile* does not know the machine yet.
 
 - **A drop pod's recharge is `Upgrade`'s build request with a third goal,
   and it cannot be cancelled.** `Game::spend_pod` files `BuildGoal::Recharge`
@@ -370,7 +370,7 @@
   bounds a room like a wall does. Nothing is saved: `door` and `room_tags` are
   asset-side, so `SAVE_FORMAT_VERSION` did not move.
 
-- **`[c]` opens the structure hub, and `Game::adjacent_structures` is the one answer to what is beside the party: one entry per structure, N,E,S,W by the first side it occupies, each with the pages its capabilities earn.** A second adjacency test in app-core would drift from what the engine offers, and a per-kind page table in app-core would stop a modded structure from getting the union of its capabilities. A structure with only an Info page is never in the cycle, or `c` beside a wall would open a hub with nothing to do.
+- **`[c]` opens `i` on the first BESIDE YOU entry, and `Game::adjacent_structures` is the one answer to what is beside the party: one entry per structure, N,E,S,W by the first side it occupies, each with the pages its capabilities earn.** A second adjacency test in app-core would drift from what the engine offers, and a per-kind page table in app-core would stop a modded structure from getting the union of its capabilities. A structure with only an Info page is in the cycle only when `U` can upgrade it or `W` can work it (`Game::has_info_verb`, read off the def, never the tier or state): a Patch Node, Shield or Research Station has no other page, and leaving them out left U with no way to upgrade them. Demolish alone does not earn an entry, because admitting the Home, a Broker, a Market or a Turret changed `c` beside them from the pack-only transfer (or its refusal) to their Info tab, and `i` from the last page to theirs. `U` and `X` act on the held entry's entity, never a re-lookup by direction, which finds only a structure's anchor tile.
 - **Destruction records a ruin in `damage_structure` (not `remove_structure`, which is the player's demolish), and `file_ruins` files it as a rebuild site only when no siege runs.** Filing mid-siege would raise a build site on a board still being fought over; a raid files on the next tick.
 - **Build sites are raised lowest production level first (`StructureDb::level`, derived at load from what a structure makes and needs, never authored in assets).** A stored level would let a mod disagree with its own recipes.
 

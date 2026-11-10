@@ -50,17 +50,9 @@ impl App {
         // gives a contract up.
         if key == GameKey::Char('A') {
             let idx = self.menu_selected;
-            if let Some(ContractScreenRow::Active(row)) =
-                contract_row(idx, active.len(), offers.len())
-            {
-                let id = active[row].id.clone();
-                if let Some(game) = &mut self.game {
-                    game.abandon_contract(&id);
-                }
-                self.status_line = None;
-            } else {
-                self.status_line =
-                    Some("Highlight a job you are holding to give it back.".to_string());
+            match contract_row(idx, active.len(), offers.len()) {
+                Some(ContractScreenRow::Active(row)) => self.give_back(&active[row]),
+                _ => self.refuse("Highlight a job you are holding to give it back."),
             }
             return;
         }

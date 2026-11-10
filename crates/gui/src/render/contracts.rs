@@ -1,4 +1,5 @@
-//! The contracts screen: what the run holds, then what a Broker is offering.
+//! The Contracts page's two tabs: Held, what the run holds and who for,
+//! and Board, what a Broker is offering. Drawn in the hub's frame.
 
 use super::popup::*;
 use super::*;
@@ -22,71 +23,49 @@ fn offered_header(reach: BrokerReach, onboarding: bool) -> String {
     }
 }
 
-/// Two stacked sections, numbered continuously — active contracts first, then
-/// the board's offers.
+/// The Held tab: every contract in hand, each under its issuer.
 ///
-/// The two lists come in from app-core rather than being asked of the engine
+/// The list comes in from app-core rather than being asked of the engine
 /// here, because `App::handle_contracts_key` resolves a row number against
-/// the same pair: a renderer that rebuilt them would drift out of index and
+/// the same list: a renderer that rebuilt it would drift out of index and
 /// row 2 would act on a different contract from the one under the highlight.
-pub(super) fn draw_contracts(
-    active: &[ContractRow],
-    offers: &[ContractRow],
-    reach: BrokerReach,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let rows = contract_rows(active, offers, reach, selected);
-    draw_popup("Contracts", PopupSize::Large, &rows, refusal, painter, m);
+pub(super) fn held_rows(active: &[ContractRow], selected: usize) -> Vec<Row> {
+    let mut rows = Vec::new();
+    if active.is_empty() {
+        rows.push(text_row("Nothing in hand."));
+    }
+    for (idx, contract) in active.iter().enumerate() {
+        rows.extend(page_entry(contract, idx, selected, true));
+    }
+    rows
 }
 
-/// Every row the screen draws, built without touching a `Painter`.
-///
-/// Split out so the width censuses measure **what the screen emits** rather
-/// than what a helper would have returned if it were called — a census that
-/// calls `description_rows` itself stays green through a `draw_contracts`
-/// that stopped calling it, which is the regression that put an unwrapped
-/// paragraph on this screen in the first place.
-fn contract_rows(
-    active: &[ContractRow],
+/// Who a held contract is for: the run's own Broker, or the town that
+/// posted it, which is also where it is handed in.
+fn issuer_line(issuer: Option<&str>) -> String {
+    match issuer {
+        None => "Broker".to_string(),
+        Some(town) => format!("for {town} · hand in there"),
+    }
+}
+
+/// The Board tab: the Broker's offers under the header that says whether
+/// they can be signed from here. `onboarding` is whether a held contract is
+/// an onboarding mission, read off the Held list app-core already built so
+/// the header and the list cannot disagree.
+pub(super) fn board_rows(
     offers: &[ContractRow],
+    onboarding: bool,
     reach: BrokerReach,
     selected: usize,
 ) -> Vec<Row> {
-    let mut rows = Vec::new();
-    let mut idx = 0;
-
-    rows.push(Row::TextColored("Held".to_string(), CYAN));
-    if active.is_empty() {
-        rows.push(text_row("    Nothing in hand."));
-    }
-    for contract in active {
-        rows.push(contract_line(contract, idx, selected, true));
-        rows.extend(description_rows(&contract.description));
-        rows.extend(hint_rows(contract));
-        idx += 1;
-    }
-
-    rows.push(text_row(""));
-    // Derived from the rows the screen is already holding rather than asked
-    // of the engine a second time, so the header and the list cannot
-    // disagree — the same reason both lists come in from app-core.
-    let onboarding = active.iter().any(|row| row.tutorial);
-    rows.push(Row::TextColored(offered_header(reach, onboarding), CYAN));
+    let mut rows = vec![Row::TextColored(offered_header(reach, onboarding), CYAN)];
     if offers.is_empty() {
         rows.push(text_row("    Nothing on the board."));
     }
-    for contract in offers {
-        rows.push(contract_line(contract, idx, selected, false));
-        rows.extend(description_rows(&contract.description));
-        rows.extend(hint_rows(contract));
-        idx += 1;
+    for (idx, contract) in offers.iter().enumerate() {
+        rows.extend(page_entry(contract, idx, selected, false));
     }
-
-    rows.push(text_row(""));
-    rows.push(text_row(contract_footer()));
     rows
 }
 
@@ -108,12 +87,6 @@ fn hint_rows(contract: &ContractRow) -> Vec<Row> {
         .unwrap_or_default()
 }
 
-/// The footer line. Split out, like `rename_help`, so a test can measure
-/// exactly the string `draw_contracts` pushes.
-fn contract_footer() -> String {
-    key_hints(&["Enter take or hand over", "[A] give back", "Esc back"])
-}
-
 /// One contract's headline row. A held one shows its progress; an offer has
 /// none to show, which is why the bar is not simply always drawn.
 pub(super) fn contract_line(
@@ -127,17 +100,23 @@ pub(super) fn contract_line(
     } else {
         String::new()
     };
-    let mut row = item_row(
+    contract_head(
+        contract,
         format!(
             "{} - {}{progress} - pays {}",
             contract.name, contract.objective_line, contract.reward_line
         ),
         idx == selected,
-    );
-    // Onboarding missions, and nothing else on this screen. `color` means
+    )
+}
+
+/// A contract's selectable row reading `text`.
+fn contract_head(contract: &ContractRow, text: String, selected: bool) -> Row {
+    let mut row = item_row(text, selected);
+    // Onboarding missions, and nothing else on these screens. `color` means
     // fusion tier on the gear screens and CRITICAL HP on the party screen;
-    // the contracts screen has never used it, so green lands on a free axis
-    // rather than becoming a second meaning on a loaded one.
+    // the contracts screens have never used it, so green lands on a free
+    // axis rather than becoming a second meaning on a loaded one.
     if contract.tutorial
         && let Row::Item { color, .. } = &mut row
     {
@@ -146,25 +125,39 @@ pub(super) fn contract_line(
     row
 }
 
-/// How many rows the contracts screen spends on chrome alone — headers, the
-/// two empty-section lines, the blank separators and the footer.
-///
-/// Exists for `render/settlement_board.rs`'s parity census, and built by
-/// calling `contract_rows` rather than counting the pushes by eye, which is
-/// the only version of it that can catch a row added here later.
-#[cfg(test)]
-pub(super) fn contract_rows_for_census(
-    active: &[ContractRow],
-    offers: &[ContractRow],
-    reach: BrokerReach,
-) -> usize {
-    contract_rows(active, offers, reach, usize::MAX).len()
+/// One contract on a Contracts tab: the name (and a held one's progress) as
+/// the selectable row, then what it asks and pays on lines of their own. The
+/// hub's content rect is narrower than the town board's popup, and the
+/// shipped one-line form ran 137px past it.
+fn page_entry(contract: &ContractRow, idx: usize, selected: usize, held: bool) -> Vec<Row> {
+    let progress = if held {
+        format!(" [{}/{}]", contract.progress, contract.target)
+    } else {
+        String::new()
+    };
+    let mut rows = vec![
+        contract_head(
+            contract,
+            format!("{}{progress}", contract.name),
+            idx == selected,
+        ),
+        Row::TextColored(format!("    {}", contract.objective_line), TEXT_DIM),
+        Row::TextColored(format!("    pays {}", contract.reward_line), TEXT_DIM),
+    ];
+    if held {
+        rows.push(Row::TextColored(
+            format!("    {}", issuer_line(contract.issuer_name.as_deref())),
+            TEXT_DIM,
+        ));
+    }
+    rows.extend(description_rows(&contract.description));
+    rows.extend(hint_rows(contract));
+    rows
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paint::with_painter;
     use feral_processes_engine::{DifficultyMode, Game};
 
     /// The board stays on screen off the base, so the header is the only
@@ -254,8 +247,8 @@ mod tests {
         let rows: Vec<Row> = description_rows(long).collect();
         assert!(rows.len() > 1, "a paragraph this long is more than one row");
         for row in &rows {
-            let Row::Item { text, .. } = row else {
-                panic!("`description_rows` builds item rows");
+            let Row::Detail(text, _) = row else {
+                panic!("`description_rows` builds detail rows");
             };
             assert!(
                 text.chars().count() <= DESCRIBE_WRAP_COLUMNS,
@@ -266,10 +259,10 @@ mod tests {
 
     /// **The hint reaches the screen, and an absent one costs no row.**
     ///
-    /// `contract_rows` is measured rather than `hint_rows`, for the reason the
+    /// `held_rows` is measured rather than `hint_rows`, for the reason the
     /// builder is split out at all: a census that calls the helper itself
-    /// stays green through a `draw_contracts` that stopped calling it, which
-    /// is how an unwrapped paragraph shipped on this screen once already.
+    /// stays green through a tab that stopped calling it, which is how an
+    /// unwrapped paragraph shipped on this screen once already.
     #[test]
     fn a_hint_is_drawn_under_the_contract_it_belongs_to() {
         let with = ContractRow {
@@ -282,18 +275,13 @@ mod tests {
         };
 
         let drawn = |contract: &ContractRow| -> Vec<String> {
-            contract_rows(
-                std::slice::from_ref(contract),
-                &[],
-                BrokerReach::AtBroker,
-                usize::MAX,
-            )
-            .into_iter()
-            .filter_map(|r| match r {
-                Row::Item { text, .. } => Some(text),
-                _ => None,
-            })
-            .collect()
+            held_rows(std::slice::from_ref(contract), usize::MAX)
+                .into_iter()
+                .filter_map(|r| match r {
+                    Row::Item { text, .. } | Row::Detail(text, _) => Some(text),
+                    _ => None,
+                })
+                .collect()
         };
 
         assert!(
@@ -310,125 +298,89 @@ mod tests {
         );
     }
 
-    /// **No shipped contract's description overflows the popup either.**
-    ///
-    /// The row census below measures the `Name - objective - pays` line
-    /// and has never looked at the paragraph under it — which is how eleven
-    /// onboarding missions, whose descriptions are several times longer than
-    /// any other contract's, shipped against a green suite.
+    /// A held row names who it is for, which the old popup never drew.
     #[test]
-    fn no_shipped_contract_description_overflows_its_popup() {
-        let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
-        let game = Game::new(43, DifficultyMode::Forgiving, assets).expect("shipped assets");
-
-        // Through the screen's own row builder, so a `draw_contracts` that
-        // stopped wrapping fails here.
-        let catalogue = game.contract_catalogue();
-        let widest = contract_rows(&catalogue, &[], BrokerReach::AtBroker, usize::MAX)
-            .into_iter()
-            .filter(is_description_row)
-            .filter_map(|row| match row {
-                Row::Item { text, .. } => Some(text),
-                _ => None,
-            })
-            .max_by_key(|line| line.chars().count())
-            .expect("the shipped assets define contracts");
-
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
-            let drawn = p.measure_ui_advance(&widest, m.font_size);
-            assert!(
-                drawn > 0.0,
-                "the census measured nothing — the shipped set has to reach here"
-            );
-            assert!(
-                drawn <= room,
-                "the widest description line overflows by {:.0}px \
-                 ({drawn:.0} into {room:.0}):\n{widest}",
-                drawn - room
-            );
-        });
+    fn a_held_row_names_its_issuer() {
+        let town = ContractRow {
+            issuer_name: Some("Ashford".to_string()),
+            ..row("town", false)
+        };
+        let texts = |rows: Vec<Row>| -> Vec<String> { rows.iter().map(row_label_text).collect() };
+        let broker = texts(held_rows(&[row("own", false)], 0));
+        assert!(broker.iter().any(|t| t.trim() == "Broker"), "{broker:?}");
+        let posted = texts(held_rows(&[town], 0));
+        assert!(
+            posted
+                .iter()
+                .any(|t| t.trim() == "for Ashford · hand in there"),
+            "{posted:?}"
+        );
     }
 
-    /// **The widest contract row the shipped assets can build still fits.**
-    ///
-    /// The popup never wraps or clips horizontally — an overflowing row simply
-    /// runs off the right edge, taking the payout with it, which is the same
-    /// failure two open `TODO.md` bugs already record. Measured against the
-    /// real font rather than counted in characters, because counting is what
-    /// missed it there.
-    ///
-    /// Built from the real `assets/contracts/` rather than hand-written, which
-    /// is the difference between a census and a fixture: the widest row is a
-    /// property of the assets, so a long contract name or reward list added
-    /// later has to fail here rather than be caught by eye.
+    /// The row ordinals are the handler's indices on each tab: `Row::Item`
+    /// headlines are numbered from zero per tab, description lines aside.
     #[test]
-    fn no_shipped_contract_row_overflows_its_popup() {
+    fn each_tab_highlights_its_own_list_from_zero() {
+        let two = [row("a", false), row("b", false)];
+        for rows in [
+            held_rows(&two, 1),
+            board_rows(&two, false, BrokerReach::AtBroker, 1),
+        ] {
+            let picked: Vec<_> = rows
+                .iter()
+                .filter_map(|r| match r {
+                    Row::Item {
+                        text,
+                        selected: true,
+                        ..
+                    } => Some(text.clone()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(picked.len(), 1, "{picked:?}");
+            assert!(picked[0].starts_with("A Contract"), "{picked:?}");
+        }
+    }
+
+    /// **No row a shipped contract builds runs past the hub's content rect**,
+    /// on either tab: the headline (held carries a progress figure the offer
+    /// does not), the issuer line, the wrapped description and the hint.
+    /// Built from the real `assets/contracts/`, so a long contract added
+    /// later fails here rather than being caught by eye.
+    #[test]
+    fn no_shipped_contract_row_overflows_the_page() {
         let assets = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets"));
         let game = Game::new(41, DifficultyMode::Forgiving, assets).expect("shipped assets");
-
-        // Every shipped contract as though it were held, since a held row is
-        // the wider of the two: it carries a progress figure the offer does
-        // not. The counts are the widest the shipped set asks for.
-        let widest = game
+        let (towns, _) = feral_processes_engine::settlements::SettlementDb::load_dir(
+            &assets.join("settlements"),
+        )
+        .expect("the catalogue loads");
+        let widest_town = towns
+            .iter()
+            .map(|def| def.name.clone())
+            .max_by_key(|name| name.chars().count())
+            .expect("the shipped catalogue defines a settlement");
+        let catalogue: Vec<ContractRow> = game
             .contract_catalogue()
             .into_iter()
-            .map(|row| {
-                let line = contract_line(&row, 35, usize::MAX, true);
-                match line {
-                    Row::Item { text, .. } => text,
-                    _ => unreachable!("contract_line builds an item row"),
-                }
+            .map(|row| ContractRow {
+                issuer_name: Some(widest_town.clone()),
+                // A held row's widest progress figure is a full one.
+                progress: row.target,
+                ..row
             })
-            .max_by_key(|row| row.chars().count())
-            .expect("the shipped assets define contracts");
-
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
-            let drawn = p.measure_ui_advance(format!("  {widest}"), m.font_size);
-            assert!(
-                drawn > 0.0,
-                "the census measured nothing — the shipped set has to reach here"
+            .collect();
+        assert!(!catalogue.is_empty(), "the census must walk real contracts");
+        crate::render::base_report::assert_rows_fit(&held_rows(&catalogue, 0), "held contract");
+        crate::render::base_report::assert_rows_fit(
+            &board_rows(&catalogue, false, BrokerReach::AtBroker, 0),
+            "board contract",
+        );
+        for (onboarding, reach) in [(true, BrokerReach::AtBroker), (false, BrokerReach::OffBase)] {
+            crate::render::base_report::assert_rows_fit(
+                &board_rows(&[], onboarding, reach, 0),
+                "board header",
             );
-            assert!(
-                drawn <= room,
-                "the widest contract row overflows by {:.0}px \
-                 ({drawn:.0} into {room:.0}):\n{widest}",
-                drawn - room
-            );
-        });
-    }
-
-    /// The footer is `Row::Text`, never wrapped or clipped horizontally
-    /// either, so it stays inside the same body the item census above
-    /// measures against. Every line the screen draws, not just the first —
-    /// a two-line footer that only checked line one would miss an overflow
-    /// on line two.
-    #[test]
-    fn no_contract_footer_overflows_its_popup() {
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            // `PopupSize::Large`'s body, matching `draw_popup`'s 0.88 width.
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
-            // The section headers ride along: they are drawn on this screen
-            // and are the only other lines on it that are not built from a
-            // contract row, which the census above already measures.
-            let headers = [
-                offered_header(BrokerReach::AtBroker, true),
-                offered_header(BrokerReach::OffBase, false),
-            ];
-            for line in std::iter::once(contract_footer()).chain(headers) {
-                let drawn = p.measure_ui_advance(&line, m.font_size);
-                assert!(
-                    drawn <= room,
-                    "the contract footer overflows its popup by {:.0}px \
-                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                    drawn - room
-                );
-            }
-        });
+        }
     }
 }

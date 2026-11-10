@@ -29,7 +29,7 @@ pub(crate) fn draw_tactical_map(
     pane: Rect,
     tile_px: f32,
     glyph_px: u16,
-) -> Vec<Wash> {
+) -> (Vec<Wash>, super::super::base::MapLayout) {
     let cursor = overlay.cursor;
     let half_w = ((pane.w / tile_px) / 2.0).max(1.0) as i32;
     let half_h = ((pane.h / tile_px) / 2.0).max(1.0) as i32;
@@ -58,16 +58,16 @@ pub(crate) fn draw_tactical_map(
     // is no blank edge to expose — and at one tile the move between two
     // bodies standing apart is a teleport rather than a pan.
     let (off_x, off_y) = fx.camera_offset_toward(target, center, painter.delta(), None);
-    // Stashed for the pointer system exactly as `draw_surface_map` stashes
-    // its own: these are `tile_origin_px`'s arguments for this frame, with
-    // the offset already eased, so a click inverts the frame it saw.
-    fx.set_map_click(Some(super::super::base::MapClickLayout {
+    // These are `tile_origin_px`'s arguments for this frame, with the offset
+    // already eased, so the tiles registered are the ones drawn.
+    let layout = super::super::base::MapLayout {
         pane,
         center,
         half: (half_w, half_h),
         off: (off_x, off_y),
         tile_px,
-    }));
+    };
+    layout.register_tiles(painter);
     // Every draw below is gated on this. The camera is held on the body that
     // acted *last*, so the acting body, the arrow over its head and a cursor
     // opened on its cell can each be an arbitrary distance off centre while
@@ -452,5 +452,5 @@ pub(crate) fn draw_tactical_map(
             draw_range_tag(painter, body.swing_range, px, py, cell_px, glyph_px);
         }
     }
-    washes.into_iter().map(|(wash, _)| wash).collect()
+    (washes.into_iter().map(|(wash, _)| wash).collect(), layout)
 }

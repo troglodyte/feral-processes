@@ -163,6 +163,7 @@ mod tests {
             .map(|r| match r {
                 Row::Text(t)
                 | Row::TextColored(t, _)
+                | Row::Detail(t, _)
                 | Row::TextEntry { text: t, .. }
                 | Row::Item { text: t, .. } => t.as_str(),
             })
@@ -216,30 +217,6 @@ mod tests {
         board_rows(&a_view(&widest_name), &held, &offers, usize::MAX)
     }
 
-    /// **The board's only extra chrome is its three-row header**, and that
-    /// is the property worth pinning rather than an absolute fits-the-popup
-    /// gate: `draw_contracts`, this page's twin, has never had one, because
-    /// a numbered list whose rows carry authored prose genuinely can run
-    /// past a 600px popup and the wrap is what bounds a *row*, not the page.
-    ///
-    /// What can be held is the delta. The page is already taller than the
-    /// Broker's by four jobs (`SETTLEMENT_ALLIED_BOARD_SLOTS` against
-    /// `CONTRACT_BOARD_SLOTS` and `MAX_ACTIVE_CONTRACTS`), so a fourth
-    /// header row quietly added here — or a section label growing a line —
-    /// has to fail somewhere, and this is that somewhere.
-    #[test]
-    fn the_boards_only_extra_chrome_is_its_three_row_header() {
-        const HEADER_ROWS: usize = 3; // town name, standing, blank
-        let board = board_rows(&a_view("T"), &[], &[], usize::MAX).len();
-        let contracts =
-            super::super::contracts::contract_rows_for_census(&[], &[], BrokerReach::AtBroker);
-        assert_eq!(
-            board,
-            contracts + HEADER_ROWS,
-            "the board spends {board} rows of chrome against the contracts screen's {contracts}"
-        );
-    }
-
     /// The other axis, and the one nothing clamps: `draw_row` clips a row
     /// vertically and never horizontally. Every row the page emits, item
     /// rows included — the header, the two section labels, the footer and
@@ -255,7 +232,10 @@ mod tests {
             let mut measured = 0;
             for row in &rows {
                 let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, .. } => text,
                 };
                 measured += 1;

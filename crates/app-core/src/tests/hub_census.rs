@@ -47,44 +47,63 @@ fn expect(rows: &[(&str, &[Mode])]) -> Vec<(String, Vec<Mode>)> {
 
 const BASE_RAIL: &[(&str, &[Mode])] = &[
     ("Overview", &[Mode::BaseOverview]),
-    ("Build", &[Mode::BaseBuild]),
-    ("Research", &[Mode::BaseResearch]),
-    ("Trade", &[Mode::BaseTrade]),
-    ("Compile", &[Mode::BaseCompile]),
-    ("Recipes", &[Mode::Recipes]),
+    (
+        "Build",
+        &[
+            Mode::Build,
+            Mode::BuildOrders,
+            Mode::DigOrders,
+            Mode::FloorOrders,
+        ],
+    ),
+    (
+        "Production",
+        &[
+            Mode::BaseOutput,
+            Mode::BaseMachines,
+            Mode::BasePower,
+            Mode::Recipes,
+            Mode::Craft,
+        ],
+    ),
+    ("Stock", &[Mode::BaseStock, Mode::WorkOrders]),
     (
         "Staff",
         &[
             Mode::StaffWellbeing,
             Mode::StaffCoverage,
             Mode::StaffDiscontent,
+            Mode::BaseStaff,
+            Mode::Structures,
         ],
     ),
     (
-        "Production",
-        &[Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
-    ),
-    ("Stock", &[Mode::BaseStock]),
-    ("Work orders", &[Mode::WorkOrders]),
-    ("Duties", &[Mode::BaseStaff]),
-    ("Staffing", &[Mode::Structures]),
-    (
-        "Build orders",
-        &[Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
+        "Research",
+        &[
+            Mode::Research,
+            Mode::RoutineResearch,
+            Mode::AffixResearch,
+            Mode::WeaponResearch,
+            Mode::PinSubject,
+        ],
     ),
     ("Alerts", &[Mode::Alerts]),
 ];
 
 const INVENTORY_RAIL: &[(&str, &[Mode])] = &[
-    ("Items", &[Mode::Inventory]),
-    ("Phase keys", &[Mode::PhaseKeys]),
-    ("Downed programs", &[Mode::DownedPrograms]),
-    ("Tools", &[Mode::Tools]),
-    ("Companions", &[Mode::Companion]),
-    ("Manifests", &[Mode::ManifestIntro]),
-    ("Programs", &[Mode::PartyPrograms]),
-    ("Routines", &[Mode::PartyRoutines]),
-    ("Perks", &[Mode::Perks]),
+    (
+        "You",
+        &[
+            Mode::Inventory,
+            Mode::Tools,
+            Mode::PhaseKeys,
+            Mode::PartyRoutines,
+            Mode::Perks,
+            Mode::ManifestIntro,
+        ],
+    ),
+    ("Roster", &[Mode::Companion, Mode::PartyPrograms]),
+    ("Downed", &[Mode::DownedPrograms]),
 ];
 
 const GAME_MENU_RAIL: &[(&str, &[Mode])] = &[
@@ -99,17 +118,24 @@ const GAME_MENU_RAIL: &[(&str, &[Mode])] = &[
 #[test]
 fn every_fixed_rail_reads_as_it_does_today() {
     // Base, no bay.
+    // The fixed table leads `b`'s rail; `b_rail.rs` has the sections after.
+    let fixed = |app: &App| {
+        let mut rail = plain(rail(app, Hub::Base));
+        rail.truncate(rail.iter().position(|(t, _)| t == "Alerts").unwrap() + 1);
+        rail
+    };
     let app = app_inside_a_small_base_with_programs(41001, false, 2);
-    assert_eq!(plain(rail(&app, Hub::Base)), expect(BASE_RAIL));
+    assert_eq!(fixed(&app), expect(BASE_RAIL));
 
-    // Base with a bay: Breed last; with the structure hub open: none.
+    // Base with a bay: Breed before Alerts, beside the bay or not.
     let mut app = app_with_a_breeding_bay(41002, 1, false);
     let mut with_breed = expect(BASE_RAIL);
-    with_breed.push(("Breed".to_string(), vec![Mode::Breed]));
-    assert_eq!(plain(rail(&app, Hub::Base)), with_breed);
+    let alerts = with_breed.iter().position(|(t, _)| t == "Alerts").unwrap();
+    with_breed.insert(alerts, ("Breed".to_string(), vec![Mode::Breed]));
+    assert_eq!(fixed(&app), with_breed);
     app.handle_key(GameKey::Char('c'));
-    assert!(app.structure_hub.is_some());
-    assert_eq!(plain(rail(&app, Hub::Base)), expect(BASE_RAIL));
+    assert!(app.held_structure().is_some());
+    assert_eq!(fixed(&app), with_breed);
 
     // Inventory.
     let app = test_app(41003);
@@ -125,17 +151,18 @@ fn every_fixed_rail_reads_as_it_does_today() {
         expect(&GAME_MENU_RAIL[..5])
     );
 
-    // Structure hub beside a Depot.
-    let mut app = app_beside_depots(41006, 1, 0, &[]);
-    app.handle_key(GameKey::Char('c'));
-    assert_eq!(
-        plain(rail(&app, Hub::Structure)),
-        expect(&[
-            ("Inventory", &[Mode::Transfer]),
-            ("Filter", &[Mode::DepotFilter]),
-            ("Info", &[Mode::StructureManifest]),
-        ])
-    );
+    // BESIDE YOU, beside a Depot: one entry, the structure's pages as tabs.
+    let app = app_beside_depots(41006, 1, 0, &[]);
+    let mut want = expect(INVENTORY_RAIL);
+    want.push((
+        "Depot".to_string(),
+        vec![Mode::Transfer, Mode::DepotFilter, Mode::StructureManifest],
+    ));
+    assert_eq!(plain(rail(&app, Hub::Inventory)), want);
+    let pages = Hub::Inventory.kind().pages(&app);
+    assert_eq!(pages[3].section, Some("BESIDE YOU"));
+    let names: Vec<_> = pages[3].tabs.iter().map(|t| t.name).collect();
+    assert_eq!(names, ["Inventory", "Filter", "Info"]);
 }
 
 #[test]
@@ -156,12 +183,13 @@ fn base_report_marks_are_its_flags() {
     for app in &apps {
         let flags = app.game.as_ref().unwrap().base_report_flags();
         let pages = rail(app, Hub::Base);
-        for (i, (_, _, marked)) in pages.iter().enumerate() {
-            if i < BASE_REPORT_PAGES.len() {
-                assert_eq!(*marked, base_page_flag(&flags, i).is_some(), "page {i}");
-                any_marked |= *marked;
-            } else {
-                assert!(!marked, "Breed is never marked");
+        for (title, _, marked) in &pages {
+            match BASE_REPORT_PAGES.iter().position(|p| p.title == *title) {
+                Some(i) => {
+                    assert_eq!(*marked, base_page_flag(&flags, i).is_some(), "{title}");
+                    any_marked |= *marked;
+                }
+                None => assert!(!marked, "Breed is never marked"),
             }
         }
     }
@@ -186,31 +214,31 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         &mut app,
         &[
             (Char('b'), at(Mode::BaseOverview, Hub::Base, 0, 0, true)),
-            (Down, at(Mode::BaseBuild, Hub::Base, 1, 0, true)),
-            (Down, at(Mode::BaseResearch, Hub::Base, 2, 0, true)),
-            (Right, at(Mode::BaseResearch, Hub::Base, 2, 0, false)),
-            (Esc, at(Mode::BaseResearch, Hub::Base, 2, 0, true)),
-            (Char(']'), at(Mode::BaseTrade, Hub::Base, 3, 0, true)),
-            (Char('['), at(Mode::BaseResearch, Hub::Base, 2, 0, true)),
+            (Down, at(Mode::Build, Hub::Base, 1, 0, true)),
+            (Down, at(Mode::BaseOutput, Hub::Base, 2, 0, true)),
+            (Right, at(Mode::BaseOutput, Hub::Base, 2, 0, false)),
+            (Esc, at(Mode::BaseOutput, Hub::Base, 2, 0, true)),
+            (Char(']'), at(Mode::BaseStock, Hub::Base, 3, 0, true)),
+            (Char('['), at(Mode::BaseOutput, Hub::Base, 2, 0, true)),
             (Esc, (Mode::Playing, None, true)),
         ],
     );
 
-    // The Staff page's three screens.
+    // The Staff page's first screens.
     let mut app = test_app(41021);
     let mut keys = vec![Char('b')];
-    keys.extend([Char(']'); 6]);
+    keys.extend([Char(']'); 4]);
     for k in keys {
         app.handle_key(k);
     }
     walk(
         &mut app,
         &[
-            (Right, at(Mode::StaffWellbeing, Hub::Base, 6, 0, false)),
-            (Tab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Tab, at(Mode::StaffDiscontent, Hub::Base, 6, 2, false)),
-            (ShiftTab, at(Mode::StaffCoverage, Hub::Base, 6, 1, false)),
-            (Left, at(Mode::StaffCoverage, Hub::Base, 6, 1, true)),
+            (Right, at(Mode::StaffWellbeing, Hub::Base, 4, 0, false)),
+            (Tab, at(Mode::StaffCoverage, Hub::Base, 4, 1, false)),
+            (Tab, at(Mode::StaffDiscontent, Hub::Base, 4, 2, false)),
+            (ShiftTab, at(Mode::StaffCoverage, Hub::Base, 4, 1, false)),
+            (Left, at(Mode::StaffCoverage, Hub::Base, 4, 1, true)),
         ],
     );
 
@@ -220,11 +248,12 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         &mut app,
         &[
             (Char('i'), at(Mode::Inventory, Hub::Inventory, 0, 0, true)),
-            (Down, at(Mode::PhaseKeys, Hub::Inventory, 1, 0, true)),
+            (Down, at(Mode::Companion, Hub::Inventory, 1, 0, true)),
             (Down, at(Mode::DownedPrograms, Hub::Inventory, 2, 0, true)),
             (Right, at(Mode::DownedPrograms, Hub::Inventory, 2, 0, false)),
             (Esc, at(Mode::DownedPrograms, Hub::Inventory, 2, 0, true)),
-            (Char(']'), at(Mode::Tools, Hub::Inventory, 3, 0, true)),
+            (Char(']'), at(Mode::Inventory, Hub::Inventory, 0, 0, true)),
+            (Tab, at(Mode::Tools, Hub::Inventory, 0, 1, true)),
             (
                 Char('['),
                 at(Mode::DownedPrograms, Hub::Inventory, 2, 0, true),
@@ -255,24 +284,30 @@ fn the_nav_walks_every_hub_as_it_does_today() {
         at(Mode::ManualOptions, Hub::GameMenu, 4, 0, true)
     );
 
-    // The structure hub beside a Depot and a machine.
+    // BESIDE YOU, beside a Depot and a machine: `c` opens on the first
+    // entry, `]` walks to the next, Tab stays on one structure.
     let mut app = app_between_a_depot_and_a_machine(41024);
     walk(
         &mut app,
         &[
-            (Char('c'), at(Mode::Transfer, Hub::Structure, 0, 0, true)),
-            (Right, at(Mode::Transfer, Hub::Structure, 0, 0, false)),
+            (Char('c'), at(Mode::Transfer, Hub::Inventory, 3, 0, true)),
+            (Right, at(Mode::Transfer, Hub::Inventory, 3, 0, false)),
         ],
     );
-    let first = app.structure_hub.as_ref().unwrap().current().entity;
+    let first = app.held_structure().unwrap();
     app.handle_key(Tab);
-    assert_ne!(app.structure_hub.as_ref().unwrap().current().entity, first);
-    assert!(app.hub_at().is_some_and(|(h, ..)| h == Hub::Structure));
+    assert_eq!(app.held_structure().unwrap(), first);
+    app.handle_key(Char(']'));
+    assert_ne!(app.held_structure().unwrap(), first);
+    assert_eq!(
+        app.hub_at().map(|(h, p, _)| (h, p)),
+        Some((Hub::Inventory, 4))
+    );
     app.handle_key(Esc);
     assert!(app.hub_on_rail);
     app.handle_key(Esc);
     assert_eq!(place(&app).0, Mode::Playing);
-    assert!(app.structure_hub.is_none());
+    assert!(app.held_structure().is_none());
 }
 
 #[test]
@@ -280,7 +315,7 @@ fn a_hub_reopens_where_it_was_left() {
     use GameKey::*;
     let mut app = test_app(41030);
     app.handle_key(Char('b'));
-    for _ in 0..6 {
+    for _ in 0..4 {
         app.handle_key(Char(']'));
     }
     app.handle_key(Right);
@@ -303,17 +338,18 @@ fn a_hub_reopens_where_it_was_left() {
     app.handle_key(Esc);
     assert_eq!(app.mode, Mode::GameplayOptions);
 
-    // Nor does the structure hub.
+    // `c` always opens on the first structure beside, on its first tab.
     let mut app = app_between_a_depot_and_a_machine(41032);
     app.handle_key(Char('c'));
-    app.handle_key(Down);
+    app.handle_key(Tab);
     assert_eq!(app.mode, Mode::MachineRecipe);
     app.handle_key(Esc);
     assert_eq!(app.mode, Mode::Playing);
     app.handle_key(Char('c'));
+    assert_eq!(app.mode, Mode::Transfer);
     assert_eq!(
         app.hub_at().map(|(h, p, _)| (h, p)),
-        Some((Hub::Structure, 0))
+        Some((Hub::Inventory, 3))
     );
 }
 
@@ -326,7 +362,7 @@ fn a_screen_reached_off_the_map_is_in_its_hub() {
 
     let mut app = test_app(41041);
     app.handle_key(GameKey::Char('N'));
-    assert_eq!(app.hub_at(), Some((Hub::Base, 13, 0)));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 6, 0)));
 
     // Overview Enter on its "Stock" row.
     let mut app = test_app(41042);
@@ -353,7 +389,7 @@ fn a_popup_over_a_hub_screen_keeps_its_parent_frame() {
     assert_eq!(app.mode, Mode::WorkOrderPick);
     assert_eq!(
         app.hub_for(base_popup_parent(app.mode).unwrap()),
-        Some((Hub::Base, 9, 0))
+        Some((Hub::Base, 3, 1))
     );
     assert_eq!(app.hub_at(), None);
 }
@@ -366,7 +402,7 @@ fn hub_for_answers_only_from_the_held_page() {
     assert_eq!(app.hub_for(Mode::BaseStock), None);
     let stock = HubPageKey::Named("Stock");
     app.turn_hub_to(Hub::Base, &stock);
-    assert_eq!(app.hub_at(), Some((Hub::Base, 8, 0)));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 3, 0)));
     assert_eq!(app.hub_page(), Some(&stock));
 }
 
@@ -375,7 +411,7 @@ fn a_held_key_that_left_the_rail_is_forgotten_on_reopen() {
     // The bay is gone: the remembered Breed page is not on the rail.
     let mut app = app_inside_a_small_base_with_programs(41061, false, 2);
     let breed = HubPageKey::Named("Breed");
-    app.hub_last[Hub::Base.slot()] = Some((breed.clone(), Mode::Breed));
+    app.hub_last[Hub::Base.slot()] = Some((breed, Mode::Breed));
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.hub_at(), Some((Hub::Base, 0, 0)));
 
@@ -417,9 +453,9 @@ fn landing_on_the_map_clears_the_held_page() {
 fn enter_hub_at_holds_the_named_page() {
     let mut app = test_app(41065);
     let key = HubPageKey::Named("Staff");
-    app.enter_hub_at(Hub::Base, key.clone(), Mode::StaffCoverage);
+    app.enter_hub_at(Hub::Base, key, Mode::StaffCoverage);
     assert_eq!(app.hub_page(), Some(&key));
-    assert_eq!(app.hub_at(), Some((Hub::Base, 6, 1)));
+    assert_eq!(app.hub_at(), Some((Hub::Base, 4, 1)));
     app.settle_hub();
     assert_eq!(app.hub_page(), Some(&key), "settle keeps the held page");
 }
@@ -431,6 +467,15 @@ const SHARED_SCREENS: &[Mode] = &[];
 
 pub(super) fn shared_screens(app: &App) -> Vec<Mode> {
     shared_screens_of(app, &Hub::ALL)
+}
+
+/// `shared_screens` less the site tabs, which every run that has met two
+/// towns shares; `shared_screens_with_sites_are_pinned` pins those.
+fn shared_screens_outside_sites(app: &App) -> Vec<Mode> {
+    shared_screens(app)
+        .into_iter()
+        .filter(|m| !SHARED_WITH_SITES.contains(m))
+        .collect()
 }
 
 fn shared_screens_of(app: &App, hubs: &[Hub]) -> Vec<Mode> {
@@ -454,20 +499,104 @@ fn shared_screens_of(app: &App, hubs: &[Hub]) -> Vec<Mode> {
 
 #[test]
 fn shared_screens_are_pinned() {
-    let mut app = app_with_a_breeding_bay(41066, 1, false);
     let message = "a screen is now shared by several pages: enter it with App::enter_hub_at";
+    let app = app_inside_a_small_base_with_programs(41066, false, 2);
     assert_eq!(
         shared_screens_outside_sites(&app),
         SHARED_SCREENS,
         "{message}"
     );
+}
+
+/// A bay beside the party has two homes: `b`'s Breed page and the bay's own
+/// Breed tab in `i`. Each enters it by its own page. The fixture's Extractor
+/// beside it shares the Info tab, which each entry opens for its own
+/// structure.
+#[test]
+fn breed_beside_a_bay_is_pinned() {
+    let app = app_with_a_breeding_bay(41069, 1, false);
+    let mut shared = shared_screens_outside_sites(&app);
+    shared.sort_by_key(|m| format!("{m:?}"));
+    assert_eq!(shared, [Mode::Breed, Mode::StructureManifest]);
+
+    let bay = structure_page_titled(&app, "Breeding Bay");
+    let tabs: Vec<Mode> = bay.tabs.iter().map(|t| t.mode).collect();
+    assert_eq!(tabs, [Mode::Breed, Mode::StructureManifest]);
+}
+
+/// A structure's page on `i`'s rail, by its title.
+fn structure_page_titled(app: &App, title: &str) -> HubPage {
+    Hub::Inventory
+        .kind()
+        .pages(app)
+        .into_iter()
+        .find(|p| matches!(p.key, HubPageKey::Structure(_)) && p.title == title)
+        .unwrap_or_else(|| panic!("an entry for {title}"))
+}
+
+/// Two structures of one kind beside the party share every tab they offer:
+/// each is entered by its own entry (`enter_structure_page` for that
+/// structure), never by the guess in `settle_hub`, which skips a structure's
+/// page (`HubPage::adoptable`).
+#[test]
+fn two_depots_beside_the_party_share_their_tabs_and_that_is_pinned() {
+    let app = app_beside_depots(41070, 2, 0, &[]);
+    let mut shared = shared_screens_outside_sites(&app);
+    shared.sort_by_key(|m| format!("{m:?}"));
+    let mut depot_tabs: Vec<Mode> = Hub::Inventory
+        .kind()
+        .pages(&app)
+        .into_iter()
+        .filter(|p| matches!(p.key, HubPageKey::Structure(_)))
+        .flat_map(|p| p.modes().collect::<Vec<_>>())
+        .collect();
+    depot_tabs.sort_by_key(|m| format!("{m:?}"));
+    depot_tabs.dedup();
+    assert_eq!(shared, depot_tabs, "every tab of the pair is shared");
+    assert!(shared.contains(&Mode::Transfer), "{shared:?}");
+    assert!(shared.contains(&Mode::StructureManifest), "{shared:?}");
+}
+
+/// Compile has two homes once a routine bench stands beside the party: `b`'s
+/// Production page and the bench's own `c` page. Each enters it by its own
+/// page (`turn_hub_to` / the structure hub's turn), never `settle_hub`'s
+/// guess.
+const SHARED_WITH_A_BENCH: &[Mode] = &[Mode::Craft];
+
+#[test]
+fn compile_beside_a_bench_is_pinned_and_each_hub_keeps_its_own() {
+    let mut app = app_at_a_workbench(41068);
     app.handle_key(GameKey::Char('c'));
-    assert!(app.structure_hub.is_some());
-    assert_eq!(
-        shared_screens_outside_sites(&app),
-        SHARED_SCREENS,
-        "{message}"
+    assert!(
+        app.held_structure().is_some(),
+        "the bench is beside the party"
     );
+    assert_eq!(shared_screens_outside_sites(&app), SHARED_WITH_A_BENCH);
+
+    // The bench's Compile is a BESIDE YOU entry's tab...
+    let pages = Hub::Inventory.kind().pages(&app);
+    let compile = pages
+        .iter()
+        .position(|p| matches!(p.key, HubPageKey::Structure(_)))
+        .expect("a routine bench has an entry");
+    for _ in 0..pages.len() {
+        if app.hub_at().is_some_and(|(_, page, _)| page == compile) {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
+    while app.mode != Mode::Craft {
+        app.handle_key(GameKey::Tab);
+    }
+    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Inventory));
+    app.handle_key(GameKey::Esc);
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing);
+
+    // ...and b's is Production's tab.
+    open_hub_screen(&mut app, Mode::Craft);
+    assert_eq!(app.hub_at().map(|(hub, ..)| hub), Some(Hub::Base));
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("Production")));
 }
 
 /// With two towns and two outposts on the rail, every tab of a site page is
@@ -491,12 +620,4 @@ fn shared_screens_with_sites_are_pinned() {
     let mut pinned = SHARED_WITH_SITES.to_vec();
     pinned.sort_by_key(|m| format!("{m:?}"));
     assert_eq!(shared, pinned);
-}
-
-/// The fixed hubs. The Sites rail lists every known town, so the Sites tab
-/// modes are shared in any run that has met two of them; `sites_hub.rs` pins
-/// that hub's Esc and reopen paths.
-fn shared_screens_outside_sites(app: &App) -> Vec<Mode> {
-    let hubs: Vec<Hub> = Hub::ALL.into_iter().filter(|h| *h != Hub::Sites).collect();
-    shared_screens_of(app, &hubs)
 }

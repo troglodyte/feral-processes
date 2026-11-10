@@ -2,7 +2,7 @@
 //! (`Mode::SortieSquad`) and a cargo basket (`Mode::RouteCargo`).
 //!
 //! The hub lists sortie sites alone; sending cargo, stopping a standing route
-//! and fast-travel live on the Sites hub (`app::sites_hub`), which is also
+//! and fast-travel live on `b`'s site pages (`app::sites_hub`), which is also
 //! the only opener of `RouteCargo`. The picker screens are
 //! `app::settlement_market`'s basket shape, one door over.
 

@@ -115,3 +115,17 @@ fn giving_back_with_nothing_highlighted_says_what_to_highlight() {
         app.status_line
     );
 }
+
+/// The offset arithmetic the town board resolves a picked row through:
+/// held contracts first, then offers.
+#[test]
+fn a_row_number_resolves_against_the_right_section() {
+    use crate::app::contracts::{ContractScreenRow, contract_row};
+    assert_eq!(contract_row(0, 2, 3), Some(ContractScreenRow::Active(0)));
+    assert_eq!(contract_row(1, 2, 3), Some(ContractScreenRow::Active(1)));
+    assert_eq!(contract_row(2, 2, 3), Some(ContractScreenRow::Offer(0)));
+    assert_eq!(contract_row(4, 2, 3), Some(ContractScreenRow::Offer(2)));
+    assert_eq!(contract_row(5, 2, 3), None, "past the end");
+    assert_eq!(contract_row(0, 0, 1), Some(ContractScreenRow::Offer(0)));
+    assert_eq!(contract_row(0, 0, 0), None);
+}

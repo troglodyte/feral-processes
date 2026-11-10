@@ -8,17 +8,9 @@ use super::support::*;
 use crate::*;
 use feral_processes_engine::items::DownedProgram;
 
-const RAIL: [Mode; 9] = [
-    Mode::Inventory,
-    Mode::PhaseKeys,
-    Mode::DownedPrograms,
-    Mode::Tools,
-    Mode::Companion,
-    Mode::ManifestIntro,
-    Mode::PartyPrograms,
-    Mode::PartyRoutines,
-    Mode::Perks,
-];
+/// The first screen of each entry on a rail with no party and nothing
+/// beside the player.
+const RAIL: [Mode; 3] = [Mode::Inventory, Mode::Companion, Mode::DownedPrograms];
 
 fn press(app: &mut App, keys: &[GameKey]) {
     for key in keys {
@@ -61,31 +53,28 @@ fn assert_on_items_in_page(app: &App) {
 }
 
 #[test]
-fn the_inventory_hub_lists_nine_pages_in_rail_order() {
+fn the_inventory_hub_lists_its_fixed_entries_in_rail_order() {
     assert_eq!(Hub::Inventory.kind().title(), "INVENTORY");
-    let titles: Vec<_> = Hub::Inventory
-        .kind()
-        .pages(&test_app(9500))
-        .iter()
-        .map(|p| p.title.clone())
-        .collect();
-    assert_eq!(
-        titles,
-        [
-            "Items",
-            "Phase keys",
-            "Downed programs",
-            "Tools",
-            "Companions",
-            "Manifests",
-            "Programs",
-            "Routines",
-            "Perks"
-        ]
-    );
+    let pages = Hub::Inventory.kind().pages(&test_app(9500));
+    let titles: Vec<_> = pages.iter().map(|p| p.title.clone()).collect();
+    assert_eq!(titles, ["You", "Roster", "Downed"]);
+    let sections: Vec<_> = pages.iter().map(|p| p.section).collect();
+    assert_eq!(sections, [Some("YOU"), Some("PROGRAMS"), None]);
     for (page, mode) in RAIL.into_iter().enumerate() {
         assert_eq!(hub_of(mode), Some((Hub::Inventory, page, 0)));
     }
+    let you: Vec<_> = pages[0].tabs.iter().map(|t| t.name).collect();
+    assert_eq!(
+        you,
+        [
+            "Items",
+            "Tools",
+            "Phase keys",
+            "Routines",
+            "Perks",
+            "Manifests"
+        ]
+    );
 }
 
 #[test]
@@ -97,7 +86,7 @@ fn i_opens_on_items_with_the_cursor_on_the_rail() {
 }
 
 #[test]
-fn rail_up_and_down_wrap_across_the_nine_pages() {
+fn rail_up_and_down_wrap_across_the_entries() {
     let mut app = test_app(9501);
     app.handle_key(GameKey::Char('i'));
     for expected in RAIL[1..].iter().chain(&RAIL[..1]) {
@@ -106,7 +95,11 @@ fn rail_up_and_down_wrap_across_the_nine_pages() {
         assert!(app.hub_on_rail);
     }
     app.handle_key(GameKey::Up);
-    assert_eq!(app.mode, Mode::Perks, "Up from the first page wraps");
+    assert_eq!(
+        app.mode,
+        Mode::DownedPrograms,
+        "Up from the first page wraps"
+    );
 }
 
 #[test]
@@ -114,10 +107,10 @@ fn brackets_turn_inventory_pages_from_the_rail_and_from_a_page() {
     let mut app = test_app(9502);
     app.handle_key(GameKey::Char('i'));
     app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::PhaseKeys);
+    assert_eq!(app.mode, Mode::Companion);
     app.handle_key(GameKey::Char('['));
     app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::Perks);
+    assert_eq!(app.mode, Mode::DownedPrograms);
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::Inventory);
@@ -146,9 +139,8 @@ fn the_manifests_rail_entry_opens_the_manifest_and_esc_returns_to_it() {
     for into in [GameKey::Right, GameKey::Enter] {
         let mut app = test_app(9504);
         app.handle_key(GameKey::Char('i'));
-        while app.mode != Mode::ManifestIntro {
-            app.handle_key(GameKey::Down);
-        }
+        app.handle_key(GameKey::ShiftTab);
+        assert_eq!(app.mode, Mode::ManifestIntro, "the last tab of You");
         assert!(
             Hub::Inventory
                 .kind()
@@ -287,7 +279,7 @@ fn leaving_the_hub_from_a_drill_down_does_not_keep_the_pick_for_the_return() {
 fn the_tools_page_is_entered_on_the_rail_and_swallows_actions_there() {
     let mut app = test_app(9509);
     app.handle_key(GameKey::Char('i'));
-    press(&mut app, &[GameKey::Down, GameKey::Down, GameKey::Down]);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::Tools);
     assert!(app.hub_on_rail);
     let status = app.status_line.clone();
@@ -300,13 +292,7 @@ fn tools_esc_goes_to_the_rail_then_the_map() {
     let mut app = test_app(9510);
     press(
         &mut app,
-        &[
-            GameKey::Char('i'),
-            GameKey::Down,
-            GameKey::Down,
-            GameKey::Down,
-            GameKey::Right,
-        ],
+        &[GameKey::Char('i'), GameKey::Tab, GameKey::Right],
     );
     assert_eq!(app.mode, Mode::Tools);
     app.handle_key(GameKey::Esc);
@@ -320,7 +306,12 @@ fn phase_keys_is_a_read_only_page_whose_highlight_walks_ten_rows() {
     let mut app = test_app(9511);
     press(
         &mut app,
-        &[GameKey::Char('i'), GameKey::Char(']'), GameKey::Right],
+        &[
+            GameKey::Char('i'),
+            GameKey::Tab,
+            GameKey::Tab,
+            GameKey::Right,
+        ],
     );
     assert_eq!(app.mode, Mode::PhaseKeys);
     app.handle_key(GameKey::Up);

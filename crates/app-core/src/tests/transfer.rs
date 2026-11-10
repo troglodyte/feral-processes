@@ -141,7 +141,7 @@ fn c_beside_an_empty_machine_opens_an_empty_window() {
 
 /// **`-` takes out and `+` puts in**, the keyboard's left-to-right matching
 /// Shift/Ctrl+Left (take) and Right (put): the bare arrows belong to the
-/// structure hub's navigation. This test is the pin.
+/// hub's navigation. This test is the pin.
 #[test]
 fn minus_takes_out_and_plus_puts_in() {
     let mut app = depot_picker(973, SHELF, &[(ITEM, 5)]);
@@ -385,7 +385,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
     let shelf = row_of(&app, ITEM);
     let pack = row_of(&app, "power_cell");
     let before = app.game.as_ref().unwrap().current_tick();
-    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let at = TransferAt::Structure(app.held_structure().unwrap());
 
     app.menu_selected = shelf;
     app.handle_key(GameKey::Char('4'));
@@ -415,7 +415,7 @@ fn enter_moves_both_halves_and_spends_one_turn() {
 fn enter_on_an_empty_basket_moves_nothing() {
     let mut app = picker(987);
     let before = app.game.as_ref().unwrap().current_tick();
-    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let at = TransferAt::Structure(app.held_structure().unwrap());
     let offer = app.game.as_ref().unwrap().transfer_offer_at(at);
 
     app.handle_key(GameKey::Enter);
@@ -430,7 +430,7 @@ fn enter_on_an_empty_basket_moves_nothing() {
 fn esc_moves_nothing_and_spends_no_turn() {
     let mut app = picker(988);
     let before = app.game.as_ref().unwrap().current_tick();
-    let at = TransferAt::Structure(app.structure_hub.as_ref().unwrap().current().entity);
+    let at = TransferAt::Structure(app.held_structure().unwrap());
     let offer = app.game.as_ref().unwrap().transfer_offer_at(at);
 
     app.handle_key(GameKey::Char('9'));

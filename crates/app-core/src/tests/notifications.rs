@@ -30,7 +30,7 @@ fn a_notification_waits_for_the_map_and_is_not_dropped() {
     app.handle_key(GameKey::Down);
     assert_eq!(
         app.mode,
-        Mode::BaseBuild,
+        Mode::Build,
         "a menu must not be interrupted by a notification"
     );
 

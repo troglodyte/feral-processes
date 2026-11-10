@@ -39,6 +39,15 @@ pub(super) enum Row {
         /// copy was compiled, which nothing else on the row can say.
         tag: Option<ItemTag>,
     },
+    /// A line that belongs to the entry above it — an authored description
+    /// or a hint — drawn dim under that entry's text. Never selectable, so
+    /// `Row::Item` ordinals stay the handler's indices, but part of the
+    /// scrolling body: `page_rows` ends the body at the last `Item` or
+    /// `Detail`, so the last entry keeps its prose. The text is the
+    /// entry's, unprefixed; the row lines up under an unselected item. The
+    /// colour is the line's own (dim prose, or cyan for what a research
+    /// node buys).
+    Detail(String, Color),
     /// A text field being typed into, with a blinking bar before byte
     /// `caret` of `text`. The bar is painted over the text rather than
     /// spliced into it, so the text does not shift as it blinks.
@@ -705,8 +714,20 @@ fn popup_layout<'a>(
 /// the selected row in view. The one paging rule: a popup and a hub content
 /// rect both call it, so they cannot scroll differently.
 fn page_rows<'a>(rows: &'a [Row], rows_shown: usize, status: usize, h: f32) -> PopupLayout<'a> {
-    let first_item = rows.iter().position(|r| matches!(r, Row::Item { .. }));
-    let last_item = rows.iter().rposition(|r| matches!(r, Row::Item { .. }));
+    // A section heading drawn as a `Detail` ahead of the first entry
+    // belongs to the list, so it scrolls with it rather than pinning.
+    let first_item = rows
+        .iter()
+        .position(|r| matches!(r, Row::Item { .. }))
+        .map(|first| {
+            rows[..first]
+                .iter()
+                .rposition(|r| !matches!(r, Row::Detail(..)))
+                .map_or(0, |last_other| last_other + 1)
+        });
+    let last_item = rows
+        .iter()
+        .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(_, _)));
     let (header, body, footer): (&[Row], &[Row], &[Row]) = match (first_item, last_item) {
         (Some(first), Some(last)) => (&rows[..first], &rows[first..=last], &rows[last + 1..]),
         _ => (rows, &[], &[]),
@@ -834,6 +855,7 @@ pub(super) fn draw_popup(
         w,
         y + m.line_height * 2.0,
         y + h - m.inset,
+        None,
         painter,
         m,
     );
@@ -850,6 +872,7 @@ pub(super) fn draw_rows_in(
     rect: Rect,
     rows: &[Row],
     focused: bool,
+    targets: Option<RowTargets>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -863,6 +886,7 @@ pub(super) fn draw_rows_in(
         rect.w,
         rect.y + m.font_size as f32,
         rect.y + rect.h,
+        targets,
         painter,
         m,
     );
@@ -879,6 +903,7 @@ fn draw_layout_rows(
     w: f32,
     mut cy: f32,
     max_y: f32,
+    targets: Option<RowTargets>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -897,11 +922,23 @@ fn draw_layout_rows(
                 String::new()
             };
             painter.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            if let (Some(t), true) = (targets, layout.offset > 0) {
+                register_more(Direction::Up, &text, t, (x, w, cy), painter, m);
+            }
             cy += m.line_height;
         }
 
         let visible_end = (layout.offset + layout.capacity).min(layout.body.len());
+        let mut ordinal = item_ordinal(&layout.body[..layout.offset]);
         for row in &layout.body[layout.offset..visible_end] {
+            if let (Some(t), Row::Item { selected, .. }) = (targets, row) {
+                let bar = row_bar(x, w, cy, m);
+                painter.target(bar, PointerHit::Row(ordinal));
+                if t.hover == Some(PointerHit::Row(ordinal)) && !(*selected && focused) {
+                    painter.rect(bar.x, bar.y, bar.w, bar.h, hud::palette::HOVER_BG);
+                }
+                ordinal += 1;
+            }
             cy = match row {
                 Row::Item { selected: true, .. } if !focused => {
                     draw_row(&unselected(row), x, w, cy, max_y, painter, m)
@@ -918,6 +955,9 @@ fn draw_layout_rows(
                 String::new()
             };
             painter.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            if let (Some(t), true) = (targets, below > 0) {
+                register_more(Direction::Down, &text, t, (x, w, cy), painter, m);
+            }
             cy += m.line_height;
         }
     }
@@ -925,6 +965,74 @@ fn draw_layout_rows(
     for row in layout.footer {
         cy = draw_row(row, x, w, cy, max_y, painter, m);
     }
+}
+
+/// What a hub's row list is to the pointer: its `Row::Item`s and its
+/// scroll markers are targets, and `hover` is what the app says is under
+/// the pointer. A popup's rows are not (`draw_popup` passes none).
+#[derive(Clone, Copy)]
+pub(super) struct RowTargets {
+    pub(super) hover: Option<PointerHit>,
+}
+
+/// An entry's continuation line as a `Row::Detail` in the colour it had.
+///
+/// **Only an entry's own head is a `Row::Item`**: the ordinal a click reports
+/// is the item's position among them, and that has to be the index the
+/// handler selects by. A wrapped tail, a heading or a spacer drawn as an
+/// `Item` would number itself into the list and shift every entry below it.
+/// `Detail` draws identically (the same two-column prefix) and is part of
+/// the scrolling body (`page_rows`), which is why these were `Item`s at all.
+pub(super) fn as_detail(row: Row) -> Row {
+    match row {
+        Row::Item { text, color, .. } => Row::Detail(text, color),
+        other => other,
+    }
+}
+
+/// How many `Row::Item`s `rows` holds: the ordinal the next one carries,
+/// which is the index its handler selects by.
+pub(super) fn item_ordinal(rows: &[Row]) -> usize {
+    rows.iter()
+        .filter(|r| matches!(r, Row::Item { .. }))
+        .count()
+}
+
+/// The highlight bar `draw_row` fills behind the row whose baseline is
+/// `cy`, which is also the row's pointer target.
+fn row_bar(x: f32, w: f32, cy: f32, m: &Metrics) -> Rect {
+    let bleed = m.pad - m.inset;
+    Rect::new(
+        x + bleed,
+        cy - m.font_size as f32,
+        w - bleed * 2.0,
+        m.line_height,
+    )
+}
+
+/// Registers an "n more" marker drawn at baseline `cy` as the scroll it
+/// stands for, tinted when hovered. `at` is the list's `(x, width, cy)`.
+fn register_more(
+    dir: Direction,
+    text: &str,
+    targets: RowTargets,
+    (x, w, cy): (f32, f32, f32),
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let bar = Rect::new(
+        x + m.pad,
+        cy - m.small() as f32,
+        painter
+            .measure_ui_advance(text, m.small())
+            .min(w - m.pad * 2.0),
+        m.line_height,
+    );
+    let hit = PointerHit::More(dir);
+    if targets.hover == Some(hit) {
+        painter.rect(bar.x, bar.y, bar.w, bar.h, hud::palette::HOVER_BG);
+    }
+    painter.target(bar, hit);
 }
 
 fn unselected(row: &Row) -> Row {
@@ -978,6 +1086,7 @@ pub(super) const fn row_prefix(selected: bool) -> &'static str {
 pub(super) fn row_label_text(row: &Row) -> String {
     match row {
         Row::Text(s) | Row::TextColored(s, _) | Row::TextEntry { text: s, .. } => s.clone(),
+        Row::Detail(s, _) => format!("{}{s}", row_prefix(false)),
         Row::Item {
             text,
             selected,
@@ -1065,6 +1174,9 @@ pub(super) fn draw_row(
         }
         Row::TextColored(s, color) => {
             painter.ui(s, x + m.pad, cy, m.font_size, *color);
+        }
+        Row::Detail(_, color) => {
+            painter.ui(row_label_text(row), x + m.pad, cy, m.font_size, *color);
         }
         Row::TextEntry { text, caret } => {
             painter.ui(text, x + m.pad, cy, m.font_size, TEXT);
@@ -1282,11 +1394,10 @@ pub(super) fn continuation_lines_within(text: &str, columns: usize) -> Vec<Strin
 /// indent.
 pub(super) const DESCRIPTION_INDENT: &str = "";
 
-/// Whether `row` came out of `description_rows`: an unselected `Item` in the
-/// dim prose colour.
+/// Whether `row` came out of `description_rows`.
 #[cfg(test)]
 pub(super) fn is_description_row(row: &Row) -> bool {
-    matches!(row, Row::Item { color, selected: false, .. } if *color == TEXT_DIM)
+    matches!(row, Row::Detail(_, color) if *color == TEXT_DIM)
 }
 
 /// One entry's authored description, wrapped to the popup and indented under
@@ -1305,10 +1416,11 @@ pub(super) fn is_description_row(row: &Row) -> bool {
 /// screen wraps a product's description to, so no two screens can disagree
 /// about how wide the game's prose runs.
 ///
-/// The lines stay `Row::Item`, which `perks_menu_rows` and `build_menu_rows`
-/// both document as load-bearing: `popup_layout` cuts the scrollable body at
-/// the last `Row::Item`, so a description made of `Row::Text` is torn off the
-/// entry it describes and pinned to the foot of the box.
+/// The lines are `Row::Detail`, not `Row::Text`: `popup_layout` cuts the
+/// scrollable body at the last `Row::Item` or `Row::Detail`, so a
+/// description made of `Row::Text` is torn off the entry it describes and
+/// pinned to the foot of the box. Not `Row::Item` either, which would count
+/// as a row the handler can select.
 pub(super) fn description_rows(description: &str) -> impl Iterator<Item = Row> + '_ {
     description_rows_at(
         description,
@@ -1324,7 +1436,7 @@ pub(super) fn description_rows_at(
 ) -> impl Iterator<Item = Row> + '_ {
     wrap_text(description, columns)
         .into_iter()
-        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, TEXT_DIM))
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), TEXT_DIM))
 }
 
 /// A menu row wrapped onto indented continuation lines at its own segment
@@ -1428,8 +1540,8 @@ mod tests {
     fn detail_and_description_start_under_the_row_name() {
         let lines = continuation_lines("detail");
         assert_eq!(lines[0], format!("{ICON_SLOT}detail"));
-        let Some(Row::Item { text, .. }) = description_rows("prose").next() else {
-            panic!("a description is an item row");
+        let Some(Row::Detail(text, _)) = description_rows("prose").next() else {
+            panic!("a description is a detail row");
         };
         assert_eq!(text, "prose", "no icon, so no indent past the prefix");
     }

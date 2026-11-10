@@ -71,7 +71,7 @@ impl Game {
     }
 }
 
-/// The views the Sites hub reads. Each is a call into the door that already
+/// The views `b`'s site pages reads. Each is a call into the door that already
 /// answers the question, so the hub and the visit pages cannot disagree.
 impl Game {
     /// Where the party stands relative to the sites. `beside` is a settlement
@@ -84,20 +84,45 @@ impl Game {
             .world
             .resource::<crate::resources::Settlements>()
             .0
-            .iter()
-            .find(|(key, known)| known.visited && self.settlement_reach(**key))
-            .map(|(key, _)| RouteDestinationId::Settlement(*key));
+            .keys()
+            .map(|key| RouteDestinationId::Settlement(*key))
+            .find(|site| self.beside_site(*site));
         let beside = town.or_else(|| {
             self.world
                 .resource::<crate::resources::Outposts>()
                 .0
                 .keys()
-                .find(|tile| self.standing_at_outpost(**tile))
                 .map(|tile| RouteDestinationId::Outpost(*tile))
+                .find(|site| self.beside_site(*site))
         });
         SiteReach {
             on_base: self.on_base_floor(),
             beside,
+        }
+    }
+
+    /// Whether the party is beside `site` itself: a visited town within
+    /// `settlement_reach`, or an outpost within `standing_at_outpost`.
+    /// `site_reach().beside` names only one site, so a door about a
+    /// particular site asks this rather than comparing against it — an
+    /// outpost standing in a town's reach would otherwise never be beside.
+    pub fn beside_site(&self, site: RouteDestinationId) -> bool {
+        match site {
+            RouteDestinationId::Settlement(key) => {
+                self.world
+                    .resource::<crate::resources::Settlements>()
+                    .0
+                    .get(&key)
+                    .is_some_and(|known| known.visited)
+                    && self.settlement_reach(key)
+            }
+            RouteDestinationId::Outpost(tile) => {
+                self.world
+                    .resource::<crate::resources::Outposts>()
+                    .0
+                    .contains_key(&tile)
+                    && self.standing_at_outpost(tile)
+            }
         }
     }
 

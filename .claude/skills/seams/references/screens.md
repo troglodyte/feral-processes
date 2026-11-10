@@ -131,12 +131,14 @@
   any per-row transform must live in the engine.** Both sides call
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
-- **A group menu's rows are hidden dynamically**, so `command_rows` /
-  `party_menu_rows` must be the *only* source of them. A row survives two
+- **A group menu's rows are hidden dynamically**, so `command_rows`
+  (the party pages; the base's structure verbs are `W`/`U`/`X` on a BESIDE
+  YOU entry's Info tab) must be the *only* source of them; the base launcher
+  tables are gone and their verbs are tabs of `b`'s pages or keys on a tab. A row survives two
   clauses, and `surface_only` is a flag in that table rather than a check
   inside each predicate, because what it must stay in step with is
   `require_field`'s caller list.
-- **Every hub — `b`, `i`, `c`, `w` and the game menu — walks one nav rule,
+- **Every hub — `b`, `i` and the game menu (`c` opens `i` on the first structure beside; `w` is a shortcut that opens `b` on the site beside the party, else the first town, else Overview) — walks one nav rule,
   `App::handle_hub_nav`, and `App::screen_claims` is the one place a page
   takes an arrow, `Esc` or a brace back from it.** The rule (ADR 0045):
   arrows move the cursor, so `Right` in a page is the page's own and `Left`
@@ -152,21 +154,66 @@
   had it, so the canvas editor, help links and the map's manifest keep a
   Shift-held Tab. **A manifest shown as a hub tab** gives `Tab` to the hub and
   its faces to `→/←` (`step_manifest_face`); off every hub (the map's sheet)
-  it keeps `Tab`, because the hub rule is not running. The structure hub's
-  own `Tab` (next structure, `Shift+Tab` back) stays until it folds into `i`.
-  The structure hub had its own rule
-  (open in the page, Left/Right to the page, rail by `Esc` alone) and read as
-  a different screen from the base report's; a page that wants an arrow adds
+  it keeps `Tab`, because the hub rule is not running. The structure hub is
+  gone: its pages are the tabs of `i`'s BESIDE YOU entries
+  (`HubPageKey::Structure`, one per `Game::adjacent_structures`), so `Tab`
+  walks one structure's pages and `[ ]` walks the structures. `i`'s rail is
+  YOU, PARTY (`HubPageKey::Member`), PROGRAMS and BESIDE YOU, built live;
+  `HubKind::show_tab` opens a tab's per-structure or per-member state,
+  `entry_tab` carries the tab on show to an entry that has it, and
+  `settle_hub` never adopts a `Structure` page by guess (their screens are
+  also opened from the map for whatever was aimed at) and opens a vanished
+  entry's successor through `show_tab`. A page that wants an arrow adds
   an arm to `screen_claims`, never a guard inside the nav match or a second
   nav function. **What a hub *is* is its `HubKind` (`app/hub.rs`), one impl
   in that hub's module**, and neither the nav nor gui names a hub: a fixed
-  hub writes `title` and `table` and takes the defaults, and the structure
-  hub overrides `pages`, `turn` (a page is re-opened for its structure),
-  `leave`, `key` (`Tab`, keeping the cursor on whichever half it was),
-  `extra_keys` and `heading`. A new hub is a `Hub` variant, its arm in
+  hub writes `title` and `table` and takes the defaults, and `i`'s hub
+  overrides `pages`, `show_tab` (a tab is re-opened for its structure or
+  member), `leave`, `key`, `extra_keys` and `heading`. A new hub is a `Hub` variant, its arm in
   `Hub::kind`, and the impl — a `match hub` anywhere else is the trap
   coming back, and gui choosing a draw path by hub rather than by mode is
   the same trap (`render/mod.rs`'s `page_rows` is by mode).
+- **A pointer target is registered by the draw that places it
+  (`Painter::target`), `gui/src/pointer.rs` is the only reader of egui pointer
+  input, and every `PointerHit` ends in a key the keyboard already presses
+  (`App::handle_pointer_event`).** The traps: (1) **recomputing or stashing a
+  layout** to hit-test it (the sprite editor's old hit rects, the map's old
+  `Fx` layout stash) is the pattern this retired — the rect is known only
+  where it is drawn, and a stash is a frame old by construction; the map's
+  `MapLayout` is a draw-time value the map draw returns, and each tile is a
+  `MapTile` target, whose click is resolved at the release (the camera eases
+  between press and release) and whose Alt+click stays primary; (2) a hit
+  that does *new* work instead of a key (a bespoke setter for "select row")
+  drifts from the keyboard — `Row(i)` is the arrows walked to `i` and a
+  second click or a double-click is `Enter`, once (`second || double`, never
+  both), and `Page`/`Tab` call the same `turn_hub_to`/`show_hub_tab` the
+  keys do; (3) **`Row::Item` ordinal must equal the handler's selection
+  index**, so only an entry's own head is an `Item`: a heading, spacer or
+  wrapped tail is a `Row::Detail` (`popup::as_detail`; `page_rows` keeps
+  Details above the first entry in the scrolling body), and the wielded
+  weapon line stays an `Item` because the cursor has a slot there.
+  `item_ordinals.rs` drives the **real** `render::draw` into a recording
+  painter for every `b`, `i` and game-menu tab, with the cursor on the first
+  and the last row, and compares the registered ordinals to the cursor's wrap
+  length; a tab that skips `draw_rows_in` or hands it no targets fails it;
+  (4) the frame drawn
+  behind a popup child (`keybar_mode == None`) registers nothing, or a click
+  would land under the popup, and `hub_at` is `None` there so app-core
+  ignores a stale hub hit anyway; (5) `pointer.rs` reading **before** the
+  draw swaps last frame's list in, so hover runs one frame behind, a button
+  already held when a screen opens is unarmed until a frame with none held,
+  and the list is dropped when `Reader::drawn`'s screen stamp (mode and held
+  page) is no longer the app's; **a hub acts on the click (release over the
+  press's target, no drag), never the press**, and while that gesture is live
+  `Reader::owns_gesture` keeps the world-map path from
+  reading the same press or release again (a keycap that closes a hub must
+  not also travel; egui's double-click flag spans screens, so the picker
+  takes it only if `double_click_on_one_screen`); there is no double-click
+  flag in `PointerEvent`, since a click on the row already under the cursor
+  is `Enter`; (6) `App::handle_pointer(hit, button, phase)` is the sprite editor's
+  stroke door, driven from `handle_pointer_event`; (7)
+  keycap labels *are* the keys (`keys_of`): `↑/↓` is two targets, `1–9` is
+  none, so a hint spelled differently from its handler is also unclickable.
 - **A Broker's board is derived, never stored** — seeded off
   `(world seed, zone, epoch)`. No save field, no `GameRng` draw, no
   save-scumming, and it rotates on its own. Readable from **anywhere**,

@@ -74,7 +74,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-ARENA="target/release/arena"
+ARENA="${CARGO_TARGET_DIR:-target}/release/arena"
 
 build_arena() {
     echo "building arena..."

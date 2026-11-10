@@ -59,8 +59,9 @@ fn esc_clears_the_compile_filter_before_closing() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Craft);
     assert!(!app.filter_applied());
+    assert!(!app.hub_on_rail);
     app.handle_key(GameKey::Esc);
-    assert_ne!(app.mode, Mode::Craft);
+    assert!(app.hub_on_rail, "the second Esc goes to the rail");
 }
 
 #[test]

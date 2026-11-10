@@ -14,121 +14,6 @@ fn b_opens_the_hub() {
     assert_eq!(app.mode, Mode::BaseOverview);
 }
 
-/// The whole point of clause 2: a row is not offered when the screen behind
-/// it has nothing in it. A fresh game has no structures deployed and no
-/// programs compiled, so five of the nine base rows have nowhere to go.
-#[test]
-fn the_command_pages_hide_rows_whose_screen_would_be_empty() {
-    let mut app = test_app(4002);
-    // Inside the base, which is where every one of these rows is legal at
-    // all now — see `the_command_pages_offer_their_base_rows_only_inside_base_space`.
-    // Without it the Deploy assertion below would be asking the locale
-    // rather than asking whether the screen has anything in it.
-    stand_in_base(&mut app);
-    let rows = command_labels_all(&mut app);
-    for absent in [
-        "Work a structure yourself",
-        "Upgrade a structure",
-        "Demolish a structure",
-    ] {
-        assert!(
-            !rows.contains(&absent),
-            "nothing is deployed yet, so {absent:?} leads to an empty screen: {rows:?}"
-        );
-    }
-    assert!(rows.contains(&"Deploy a structure"), "{rows:?}");
-    assert!(rows.contains(&"Research"), "{rows:?}");
-}
-
-/// A program the player owns makes the row that hands one to the base
-/// appear, and only that — the structure-side rows still have nothing to
-/// offer.
-#[test]
-fn a_program_in_range_brings_back_the_rows_that_need_one() {
-    let mut app = app_owning_a_program_and_an_extractor(4003, &[]);
-    stand_in_base(&mut app);
-    let rows = command_labels_all(&mut app);
-    assert!(rows.contains(&"Demolish a structure"), "{rows:?}");
-}
-
-/// Every row `Locality::Field` gates. Each of them is a `Game::require_field`
-/// caller, so the Stack is where the engine refuses them — offering them
-/// there advertises a screen whose every action is refused on the far side.
-const GUARDED: [&str; 4] = [
-    "Deploy a structure",
-    "Work a structure yourself",
-    "Upgrade a structure",
-    "Demolish a structure",
-];
-
-/// Which of `GUARDED` `app` offers on the field, having asserted the fixture
-/// stands there and that the rows no locale gates survive alongside them.
-///
-/// Returns what it found so the caller can prove the fixtures between them
-/// exercise all four rows. A row no fixture ever makes available is a row
-/// whose locality has no coverage at all, which is exactly the hole this
-/// returns a value to close.
-fn base_rows_offered(mut app: App) -> Vec<&'static str> {
-    assert!(
-        app.game.as_ref().is_some_and(|g| !g.is_underground()),
-        "the fixture must start on the field"
-    );
-    let offered: Vec<&'static str> = command_labels_all(&mut app)
-        .into_iter()
-        .filter(|label| GUARDED.contains(label))
-        .collect();
-    let rows = command_labels_all(&mut app);
-    assert!(
-        rows.contains(&"Research"),
-        "research is not locale-gated: {rows:?}"
-    );
-
-    offered
-}
-
-#[test]
-fn the_command_pages_offer_their_base_rows_on_the_field() {
-    let mut covered: Vec<&'static str> = Vec::new();
-
-    // Two fixtures because no single one stands up every guarded row: the
-    // extractor fixture has something to upgrade and clearance to deploy, the
-    // small base has an extractor whose product can be ordered.
-    let mut extractor = app_owning_a_program_and_an_extractor(4004, &[]);
-    stand_in_base(&mut extractor);
-    covered.extend(base_rows_offered(extractor));
-    covered.extend(base_rows_offered(app_inside_a_small_base_with_programs(
-        4006, false, 1,
-    )));
-
-    for row in GUARDED {
-        assert!(
-            covered.contains(&row),
-            "no fixture here ever offers {row:?} on the field, so its locality is untested: {covered:?}"
-        );
-    }
-}
-
-/// The same rows are off screen four frames down.
-#[test]
-fn the_command_pages_drop_their_base_rows_underground_too() {
-    for mut app in [
-        app_owning_a_program_and_an_extractor_deep(4005, &[], &[], true),
-        app_inside_a_small_base_with_programs(4007, true, 1),
-    ] {
-        assert!(
-            app.game.as_ref().is_some_and(|g| g.is_underground()),
-            "precondition: the fixture really went down"
-        );
-        let rows = command_labels_all(&mut app);
-        for absent in GUARDED {
-            assert!(
-                !rows.contains(&absent),
-                "{absent:?} is a field verb: {rows:?}"
-            );
-        }
-    }
-}
-
 /// The party pages are deliberately almost all non-surface — managing what you
 /// brought with you is exactly what the Stack is for.
 #[test]
@@ -174,17 +59,20 @@ fn fuse_row_is_hidden_until_fusion_is_researched_then_shown() {
 }
 
 #[test]
-fn esc_from_a_screen_opened_by_a_group_menu_returns_to_it() {
+fn esc_from_a_screen_opened_by_a_hub_tab_returns_to_it() {
     let mut app = test_app(4008);
     stand_in_base(&mut app);
     open_command(&mut app, "Deploy a structure");
     assert_eq!(app.mode, Mode::Build);
+    pick_row(&mut app, 0);
+    assert_eq!(app.mode, Mode::BuildDirection);
 
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild, "Esc walks back up one level");
+    assert_eq!(app.mode, Mode::Build, "Esc walks back up one level");
+    assert!(app.hub_at().is_some(), "onto the Deploy tab of the hub");
+    assert!(!app.hub_on_rail);
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild, "the first goes to the rail");
-    assert!(app.hub_on_rail);
+    assert!(app.hub_on_rail, "the next goes to the rail");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing, "and out to the map from there");
 }
@@ -242,14 +130,15 @@ fn esc_from_a_group_menu_returns_to_the_map() {
 /// would have meant the flat surface never actually shrank, and the help
 /// screen would have had two systems to document.
 ///
-/// `B` has left this list, reissued as the base report. `d` has too: it was
+/// `B` has left this list, reissued as the base report, and `w`, reissued as
+/// `b`'s shortcut onto the site pages. `d` has too: it was
 /// the manifest picker's key, and is now the direct demolish (`the_demolish_key_*` in
 /// `tests/building.rs`). A retired key is free to be *reissued* — what this
 /// census forbids is an old binding surviving as a silent alias, which is a
 /// different thing from the key being used again deliberately.
 #[test]
 fn the_retired_map_keys_do_nothing() {
-    for key in ['c', 'w', 'W', 'G', 'R', 'U', 'T', 'f', 'M', 'v'] {
+    for key in ['c', 'W', 'G', 'R', 'U', 'T', 'f', 'M', 'v'] {
         let mut app = test_app(4012);
         app.handle_key(GameKey::Char(key));
         assert_eq!(
@@ -367,55 +256,45 @@ fn refactoring_works_underground() {
     );
 }
 
-/// Manual posting is gone: the base says *what to make*, and works out who
-/// stands where itself. The two rows that used to pick a program and then a
-/// structure are replaced by one that queues an order and one that hands a
-/// program to the base.
+/// The parked row is an index into a list that can shrink while the child
+/// screen is open; Esc must land on a row that still exists. Ported from the
+/// deleted BASE Structures page to the party's Programs page, whose rows hide
+/// dynamically too (Develop wants a program). No other test covers the clamp
+/// in `handle_key`'s mode-change tail.
 #[test]
-fn the_build_page_offers_work_orders_and_staff_rather_than_manual_posting() {
-    let mut app = app_owning_a_program_and_an_extractor(4030, &[]);
-    stand_in_base(&mut app);
-    let rows = command_labels_all(&mut app);
+fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
+    let mut app = app_inside_a_small_base_with_programs(4010, false, 1);
+    open_hub_screen(&mut app, Mode::PartyPrograms);
+    let rows = labels(&app.command_rows(Mode::PartyPrograms).unwrap());
+    let develop = rows
+        .iter()
+        .position(|l| *l == "Develop a program")
+        .expect("a program is enough to develop");
+    assert!(develop > 0, "precondition: the parked row is not the first");
+    pick_row(&mut app, develop);
+    assert_eq!(app.mode, Mode::Develop);
 
-    assert!(!rows.contains(&"Assign a cronjob"), "{rows:?}");
-    assert!(!rows.contains(&"Post a guard"), "{rows:?}");
-    assert!(!rows.contains(&"Base staff"), "{rows:?}");
-    assert!(!rows.contains(&"Work orders"), "{rows:?}");
+    // Every program leaves the party, so the page keeps only "Read a
+    // manifest" (the player is still a subject).
+    let path = scratch_path("parked_row_shrinks", 4010);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+    data.creatures.retain(|c| !c.tamed);
+    feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &test_assets_dir()).ok();
+    let _ = std::fs::remove_file(&path);
+    let after = app.command_rows(Mode::PartyPrograms).unwrap().len();
     assert!(
-        rows.contains(&"Work a structure yourself"),
-        "the player is not staff, and that flow is untouched: {rows:?}"
+        after <= develop,
+        "precondition: the page shrank under the parked row ({after} rows)"
     );
-}
 
-/// `Mode::PinSubject`'s row: hidden until a `studies` structure stands, and
-/// offered once one does — `Game::study_station` is the closure's own
-/// question, so a mod naming a second `studies` structure needs no change
-/// here.
-#[test]
-fn the_study_row_is_hidden_with_no_station_and_shown_with_one() {
-    let mut app = app_owning_a_program_and_an_extractor(883, &[]);
-    stand_in_base(&mut app);
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::PartyPrograms);
     assert!(
-        !command_labels_all(&mut app).contains(&"Study a program"),
-        "an Extractor alone declares no `studies` pen"
+        app.menu_selected < after.max(1),
+        "highlight {} is past the {after} rows the page now has",
+        app.menu_selected
     );
-
-    let mut app = app_owning_a_program_and_a_research_station(884);
-    stand_in_base(&mut app);
-    assert!(
-        command_labels_all(&mut app).contains(&"Study a program"),
-        "a standing Research Station must offer the row"
-    );
-}
-
-/// `Mode::PinPrisoner`'s row: hidden until a Holding Cell stands.
-#[test]
-fn the_hold_row_is_hidden_with_no_cell_and_shown_with_one() {
-    let mut app = app_owning_a_program_and_an_extractor(887, &[]);
-    stand_in_base(&mut app);
-    assert!(!command_labels_all(&mut app).contains(&"Hold a program"));
-
-    let mut app = app_beside_a_holding_cell(888, Vec::new(), 0);
-    stand_in_base(&mut app);
-    assert!(command_labels_all(&mut app).contains(&"Hold a program"));
 }

@@ -32,7 +32,7 @@ impl Game {
     }
 
     /// Whether this structure is a configurable machine — the per-entity test
-    /// the structure hub's Recipe page asks.
+    /// a BESIDE YOU entry's Recipe tab asks.
     pub(crate) fn is_machine(&self, structure: Entity) -> bool {
         self.structure_def_of(structure)
             .is_some_and(|d| d.machine.is_some())

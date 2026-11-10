@@ -176,8 +176,8 @@ impl Game {
     }
 
     /// Whether this structure is flagged `StructureDef::indexes_storage` —
-    /// the per-entity question `indexes_storage_here` and the structure hub
-    /// both ask.
+    /// the per-entity question `indexes_storage_here` and the BESIDE YOU
+    /// entries both ask.
     pub(crate) fn indexes_storage(&self, structure: Entity) -> bool {
         self.structure_def_of(structure)
             .is_some_and(|d| d.indexes_storage)

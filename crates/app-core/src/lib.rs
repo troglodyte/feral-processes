@@ -22,6 +22,7 @@ pub use app::building::{
     roster_rows,
 };
 pub use app::canvas_editor::{CanvasFocus, CanvasView, Tool};
+pub use app::caravan::TRADER_ABSENCE_LINES;
 pub use app::crafting::{craft_list, craft_visible};
 pub use app::creation::{CREATION_COLOURS, CREATION_ICONS};
 pub use app::depot_filter::DepotFilterScreen;
@@ -39,7 +40,10 @@ pub use app::group_menu::GroupMenuRow;
 pub use app::hub::HubTab;
 pub use app::hub::{FixedPage, Hub, HubKind, HubPage, HubPageKey};
 pub use app::inventory::{equip_swap_visible, inventory_visible};
-pub use app::inventory_hub::INVENTORY_PAGES;
+pub use app::inventory_hub::{
+    BESIDE_SECTION, INVENTORY_PAGES, MEMBER_TABS, PARTY_SECTION, PROGRAMS_SECTION, ROSTER_TABS,
+    YOU_SECTION, YOU_TABS,
+};
 /// One name rather than `pub mod app`: `train` needs the JSONL writer and
 /// nothing else of app-core's internals.
 pub use app::level_up::LevelUpOrigin;
@@ -47,23 +51,24 @@ pub use app::list_filter::filter_matches;
 pub use app::machine_recipe::MachineRecipeScreen;
 pub use app::map_keybar::{KeyGroup, MapLocale, locale_keybar};
 pub use app::outposts::OutpostPostRow;
+pub use app::pointer::{Direction, PointerEvent, PointerHit, Region};
 pub use app::reach_circles::{ReachCircle, ReachCircleStyle, ReachKind};
 pub use app::rig_tool::RigToolScreen;
 pub use app::routine_craft::{
     BUILD_PAGE_ROWS, COMPILE_ROW, NAME_ROW, ROUTINE_NAME_MAX, RoutineDraft,
 };
 pub use app::shortcuts::{ShortcutArea, ShortcutGroup, ShortcutSheet, shortcut_sheet_for};
-pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, TOWN_TABS, sites_screen_keys};
+pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, SORTIE_TABS, TOWN_TABS, sites_screen_keys};
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
     DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,
-    PointerHit, PointerPhase, SPRITE_FRAME_MS_MAX, SPRITE_FRAME_MS_MIN, SPRITE_FRAME_MS_STEP,
-    SpriteEditorView, SubjectTint, WIZARD_BUTTONS,
+    PointerPhase, SPRITE_FRAME_MS_MAX, SPRITE_FRAME_MS_MIN, SPRITE_FRAME_MS_STEP, SpriteEditorView,
+    SubjectTint, WIZARD_BUTTONS,
 };
 pub use app::sprite_forge::{InstalledSprite, SpriteArt, SpriteOp, SpriteSubject, SpriteWrite};
 pub use app::stack_market::{MarketVisible, market_visible};
 pub use app::stat_allocation::{AllocationFor, AllocationOrigin, StatAllocation};
-pub use app::structure_hub::{StructureHub, structure_page};
+pub use app::structure_hub::structure_page;
 pub use app::tactical::prop_readout;
 pub use app::tactical::tactical_items_visible;
 pub use app::telemetry::append_records;
@@ -155,15 +160,14 @@ use feral_processes_engine::WorkSection;
 use feral_processes_engine::duties::Duty;
 use feral_processes_engine::views::{WorkColumnKey, WorldMapMark, WorldMapView};
 use feral_processes_engine::{
-    AchievementRow, AutoResolve, BattleView, BrokerReach, CaravanReach, CharacterChoice,
-    ContractRefusal, ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode,
-    DispatchReach, DuelComparison, Entity, EntityView, FieldRoutinePick, FieldRoutineTarget,
-    FieldRoutineTargetView, Game, HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine,
-    MESSAGE_LOG_CAP, MachineRecipeView, MessageSource, OutpostReport, PerkPreview, PerkReport,
-    ProgramSaleOption, RigToolView, RouteDestinationId, RouteRefusal, RouteReport, SlotShift,
-    SortieRefusal, SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket,
-    TransferCarrier, TransferRow, TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport,
-    WorkTable, condense,
+    AchievementRow, AutoResolve, BattleView, BrokerReach, CharacterChoice, ContractRefusal,
+    ContractRow, CreationCatalogue, DepotFilterView, DifficultyMode, DispatchReach, DuelComparison,
+    Entity, EntityView, FieldRoutinePick, FieldRoutineTarget, FieldRoutineTargetView, Game,
+    HandCraftProgress, Impact, LevelUpReport, LogEntry, LogLine, MESSAGE_LOG_CAP,
+    MachineRecipeView, MessageSource, OutpostReport, PerkPreview, PerkReport, ProgramSaleOption,
+    RigToolView, RouteDestinationId, RouteRefusal, RouteReport, SlotShift, SortieRefusal,
+    SortieReport, SortieRow, StockRow, SwingOutcome, TransferBasket, TransferCarrier, TransferRow,
+    TravelGoal, TravelStep, Visit, WorkOrder, WorkOrderReport, WorkTable, condense,
 };
 
 /// Chunks from the centre to the edge of the world map's grid. The grid and
@@ -1629,8 +1633,8 @@ pub enum Mode {
     /// for a reveal to swallow.
     TacticalResult,
     Transfer,
-    /// One Depot's allow/deny list, a page of the structure hub, opened from
-    /// a Depot's rail — see `App::depot_filter`.
+    /// One Depot's allow/deny list, a tab of a Depot's BESIDE YOU entry in `i`,
+    /// opened from it — see `App::depot_filter`.
     ///
     /// A screen of its own rather than a section of the picker: the picker
     /// is a basket of quantities committed in one action, and this is a
@@ -1690,8 +1694,8 @@ pub enum Mode {
     BuildDirection,
     /// Picking which owned program pays for the order assembled in
     /// `App::pending_build` — see `Game::programs_for_build`. Reached from
-    /// `Mode::BuildDirection` for a deploy or from `Mode::UpgradeDirection`
-    /// for an upgrade, and never for a Home: a fresh run owns zero programs, so a
+    /// `Mode::BuildDirection` for a deploy or from `U` on a structure's Info
+    /// tab for an upgrade, and never for a Home: a fresh run owns zero programs, so a
     /// Home that needed one to found would be unfoundable, and
     /// `handle_build_direction_key` still calls `place_structure(.., None)`
     /// straight for it. Nothing is spent reaching this screen — the commit
@@ -1784,22 +1788,14 @@ pub enum Mode {
     /// scheduler's own pick order. `App::work_column` is the column half of
     /// the cursor; `menu_selected` is the row half, as everywhere else.
     BaseStaff,
-    /// Picking a nearby structure for the *player* to work themselves rather
-    /// than posting a program to it — see `Game::work_structure`. The player
-    /// is not staff, so this flow is untouched by work orders.
-    WorkStructure,
-    /// Lists nearby structures to demolish (see `App::pending_remove_structure`).
-    /// Picking the Home moves to `Mode::RemoveConfirm` instead of demolishing
-    /// immediately, since it cascades; anything else is removed right away.
-    Remove,
     /// Warns that demolishing the Home destroys every other base structure
     /// too, before `Game::remove_structure` is actually called.
     RemoveConfirm,
     /// Aiming the demolish key at one of the four neighbouring tiles, reached
-    /// with `d` from `Mode::Playing`. The direct route to the same removal
-    /// `Mode::Remove` lists — a structure has to be *adjacent*, so a single
-    /// keypress can never take down something off the far side of the screen.
-    /// Home still routes into `Mode::RemoveConfirm`.
+    /// with `d` from `Mode::Playing`, or `X` on a structure's Info tab. A
+    /// structure has to be *adjacent*, so a single keypress can never take
+    /// down something off the far side of the screen. Home routes into
+    /// `Mode::RemoveConfirm`.
     RemoveDirection,
     /// Aiming a placeable item at one of the four neighbouring tiles,
     /// reached with `[P]lace` from `Mode::InventoryItemAction`. The item is
@@ -1808,18 +1804,6 @@ pub enum Mode {
     /// popup like every other picker, so it does not join
     /// `needs_status_banner`.
     TrapDirection,
-    /// Aiming the upgrade verb at one of the four neighbouring tiles,
-    /// reached from the Build page. Whatever structure stands that way
-    /// **files a request** for the next tier, which the base's build crew
-    /// fetches for and works.
-    ///
-    /// A direction rather than the list this used to be, for
-    /// `Mode::RemoveDirection`'s reason one verb over: the machine is a
-    /// thing on the map, and a player who can see it there would rather
-    /// point at it than find its row. The cost the list used to quote per
-    /// row moved down one screen to `Mode::BuildProgram`, which is the
-    /// first point the target is known.
-    UpgradeDirection,
     InspectDirection,
     /// The party's own map of the Stack frame they are standing in — see
     /// `Game::frame_map`. Underground only, opened with `g` — a no-op on the
@@ -1889,7 +1873,7 @@ pub enum Mode {
     /// `Mode::CompanionEquip`'s shape one level over.
     SettlementMarket,
     /// A settlement's job board, opened with `[J]` from `Mode::Settlement` —
-    /// Phase 5. `Mode::Contracts`' shape exactly, and deliberately so: two
+    /// Phase 5. Two
     /// stacked sections numbered continuously, `app::contracts::contract_row`
     /// shared as the resolver, `[A]` to hand one back. What differs is the
     /// issuer it passes into all three engine doors — the held section is
@@ -2126,7 +2110,7 @@ pub enum Mode {
     /// is no buyback: what is sold here is gone.
     StackMarket,
     /// The counter a visiting caravan sets out — see `Game::caravan_view`.
-    /// Reached from the Trade page, and only while one is actually docked.
+    /// The Caravans page's Trader tab; empty unless one is actually docked.
     ///
     /// One list with two sections, the wagon's stock then cargo it will
     /// take, resolved by `caravan_row`. There is no buyback section, because
@@ -2136,12 +2120,12 @@ pub enum Mode {
     /// together by Enter — one basket, one commit, one turn. There is no
     /// per-item quantity page: `Mode::CaravanQuantity` was deleted with it.
     Caravan,
-    /// The Relay hub, opened with the Trade page's "Dispatch" row — sortie
+    /// The Relay hub, the Sorties page of `b` — sortie
     /// sites (`Game::sortie_board`) in one list, and every trip in flight
     /// (`Game::sortie_reports` / `Game::route_reports`) drawn below as
     /// read-only status. Uppercase actions only, since lowercase is a row
     /// selector: `[S]` opens `Mode::SortieSquad` for the highlighted site.
-    /// Cargo routes are sent from the Sites hub.
+    /// Cargo routes are sent from `b`'s site pages.
     Dispatch,
     /// Multi-select over `Game::base_staff`, opened with `[S]` from
     /// `Mode::Dispatch`. `App::dispatch_squad` is the toggled set — `[X]`
@@ -2191,9 +2175,13 @@ pub enum Mode {
     /// The weapon research tree — `Mode::Research`'s screen for
     /// `ResearchTree::Weapons`, its row gated on `has_research_tree`.
     WeaponResearch,
-    /// Contracts: what the run is holding, then what a Broker in range is
-    /// offering. Stays open after each verb so several can be taken in one
-    /// visit, as `Mode::Research` does.
+    /// The Contracts page's Held tab: every contract the run is holding,
+    /// each naming who it is for (`ContractRow::issuer_name`). Enter hands
+    /// a delivery over and `[A]` gives one back.
+    ContractsHeld,
+    /// The Contracts page's Board tab: what a Broker in range is offering.
+    /// Stays open after each take so several can be taken in one visit, as
+    /// `Mode::Research` does.
     ///
     /// Not surface-only. The screen reaches no zone-map state through
     /// `Position` — the offers half is `Game::contract_board`, which answers
@@ -2274,17 +2262,15 @@ pub enum Mode {
     /// with its worst gap or "ok" — see `BASE_REPORT_PAGES`. Enter jumps to
     /// the highlighted page's first screen.
     BaseOverview,
-    /// The hub's command pages, one per kind of base errand: each lists the
-    /// errands that are currently possible and dispatches to the screen
-    /// behind the highlighted one — see `App::command_rows`.
-    BaseBuild,
-    BaseResearch,
-    BaseTrade,
-    BaseCompile,
     /// The party's command pages on the inventory rail: the program errands and the
-    /// routine errands, drawn from `App::command_rows` like the base's.
+    /// routine errands, drawn from `App::command_rows`.
     PartyPrograms,
     PartyRoutines,
+    /// One party member's page on the inventory rail: their roster row's
+    /// facts and the keys that act on them (`P`, `< >`, `N`, `E`, `U`, `M`,
+    /// `R`), through the same handler the roster uses. The member is the
+    /// held page's key (`HubPageKey::Member`), not the highlight.
+    PartyMember,
     /// The Staff page's first screen: every staff program, worst morale
     /// first, with its mood, health, needs and what it is doing — see
     /// `Game::staff_wellbeing`. Scrolls by cursor. `Enter` is unbound: the
@@ -2307,29 +2293,29 @@ pub enum Mode {
     /// The Stock page: what the base holds against the work-order targets,
     /// short rows first - see `Game::stock_report`. Scrolls by cursor.
     BaseStock,
-    /// Sites hub, a town or city's first tab: kind, specialty, standing and
+    /// Site page, a town or city's first tab: kind, specialty, standing and
     /// what it means - see `Game::town_status`. `T`, `G` and `H` act.
     SiteStatus,
-    /// Sites hub, a town or city's goods: the last-seen shelf, or the live
+    /// Site page, a town or city's goods: the last-seen shelf, or the live
     /// one after the Price Feeds research - see `Game::town_goods`.
     SiteGoods,
-    /// Sites hub, routes in flight to a town or city - see
+    /// Site page, routes in flight to a town or city - see
     /// `Game::site_routes`. `S` stops repeating; the last row dispatches.
     SiteRoutes,
-    /// Sites hub, the contracts a town issued - see `Game::town_contracts`.
+    /// Site page, the contracts a town issued - see `Game::town_contracts`.
     SiteJobs,
-    /// Sites hub, a site's recent events, newest first - see
+    /// Site page, a site's recent events, newest first - see
     /// `Game::site_log`. Shared by towns, cities and outposts.
     SiteLog,
-    /// Sites hub, an outpost's first tab - see `Game::outpost_report`.
+    /// Site page, an outpost's first tab - see `Game::outpost_report`.
     OutpostStatus,
-    /// Sites hub, an outpost's crew; `U` recalls, the last row posts.
+    /// Site page, an outpost's crew; `U` recalls, the last row posts.
     OutpostCrew,
-    /// Sites hub, an outpost's stock and routes; `C` takes.
+    /// Site page, an outpost's stock and routes; `C` takes.
     OutpostStock,
-    /// Sites hub, the visiting trader - see `Game::caravan_schedule`.
+    /// Site page, the visiting trader - see `Game::caravan_schedule`.
     CaravanSchedule,
-    /// Sites hub, every route in flight - see `Game::routes_in_flight`.
+    /// Site page, every route in flight - see `Game::routes_in_flight`.
     RoutesInFlight,
     /// Build orders page, first screen: every structure on order - see
     /// `Game::build_order_report`. Scrolls by cursor.
@@ -2535,10 +2521,10 @@ impl Mode {
             | Mode::Build
             | Mode::BuildDirection
             | Mode::BuildProgram
-            // Opened from the Research page, `BuildProgram`'s own reason —
-            // never reachable mid-battle at all.
+            // A Research tab, `BuildProgram`'s own reason — never reachable
+            // mid-battle at all.
             | Mode::PinSubject
-            // Opened from the Research page, `PinSubject`'s own reason.
+            // Opened from a Holding Cell's BESIDE YOU entry, `PinSubject`'s own reason.
             | Mode::PinPrisoner
             // Opened from the map with `P` beside the machine, `RigTool`'s
             // reason — never layers over a fight.
@@ -2574,12 +2560,9 @@ impl Mode {
             | Mode::WorkOrderPick
             | Mode::WorkOrderQuantity
             | Mode::BaseStaff
-            | Mode::WorkStructure
-            | Mode::Remove
             | Mode::RemoveConfirm
             | Mode::RemoveDirection
             | Mode::TrapDirection
-            | Mode::UpgradeDirection
             | Mode::InspectDirection
             | Mode::Manifest
             | Mode::StructureManifest
@@ -2615,6 +2598,7 @@ impl Mode {
             | Mode::DownedPrograms
             | Mode::Tools
             | Mode::Companion
+            | Mode::PartyMember
             | Mode::CompanionEquip
             | Mode::CompanionMemories
             | Mode::Dossier
@@ -2658,7 +2642,7 @@ impl Mode {
             | Mode::StackMarket
             | Mode::Caravan
             // Opened only by a key press from `Mode::Dispatch` itself,
-            // reached from the Trade page — `Mode::SettlementMarket`'s
+            // reached from the Sorties tab — `Mode::SettlementMarket`'s
             // reason exactly.
             | Mode::Dispatch
             | Mode::SortieSquad
@@ -2672,6 +2656,7 @@ impl Mode {
             | Mode::RefitCopy
             | Mode::ModPickAffix
             | Mode::Contracts
+            | Mode::ContractsHeld
             // Opened from the map with `N`, so it never layers over a
             // fight — `Mode::History`'s reason exactly.
             | Mode::Alerts
@@ -2685,10 +2670,6 @@ impl Mode {
             // Opened from the map with `b`, `BaseOutput`'s reason — never
             // layers over a fight.
             | Mode::BaseOverview
-            | Mode::BaseBuild
-            | Mode::BaseResearch
-            | Mode::BaseTrade
-            | Mode::BaseCompile
             // Opened from the map with `p`, the base command pages' reason.
             | Mode::PartyPrograms
             | Mode::PartyRoutines
@@ -2698,7 +2679,7 @@ impl Mode {
             | Mode::BaseMachines
             | Mode::BasePower
             | Mode::BaseStock
-            // Opened from the map with `w`, a hub page: never over a fight.
+            // Opened from `w` or `b`'s site pages, a hub page: never over a fight.
             | Mode::SiteStatus
             | Mode::SiteGoods
             | Mode::SiteRoutes
@@ -2799,7 +2780,7 @@ pub enum PendingBuild {
     /// An existing structure, and the tier its crew would raise it to.
     /// `to_tier` is carried rather than re-derived from the structure's
     /// current `EntityView::tier` at confirm time, because the structure
-    /// aimed at in `Mode::UpgradeDirection` is the only place that tier was
+    /// aimed at by `U` on the Info tab is the only place that tier was
     /// read off — re-reading it here would trust the structure to still
     /// exist and still report the same tier it did when it was pointed at.
     Upgrade { structure: Entity, to_tier: u32 },
@@ -2933,7 +2914,7 @@ pub struct App {
     /// then, so a renderer without this can only draw an anonymous compass.
     pub pending_structure: Option<String>,
     /// The category `Mode::Build` has open, or `None` on its top level.
-    /// Cleared on the way in from the Build page, so the menu never reopens
+    /// Cleared whenever the Deploy tab is entered, so the menu never reopens
     /// inside a category the player left by some other door.
     pub build_category: Option<feral_processes_engine::structures::StructureCategory>,
     /// Which item `Mode::TrapDirection` is about to place — `pending_structure`'s
@@ -2962,6 +2943,9 @@ pub struct App {
     /// The hub that is open and its page's key, checked against `mode` on
     /// every read (ADR 0043). `None` whenever the player is not in a hub.
     hub_place: Option<app::hub::HubPlace>,
+    /// The rail the held page was last shown on, for `settle_hub` to find
+    /// where the hold goes if that page leaves the rail while open.
+    hub_rail_seen: Option<app::hub::RailSeen>,
     /// The Sites page and tab a launched site screen (market, board, post
     /// picker, outpost take, route cargo) was opened from, so its Esc lands
     /// back on that exact tab (`App::leave_site_screen`). Cleared with
@@ -2972,9 +2956,6 @@ pub struct App {
     /// Whether the open game menu was reached from a run (Esc on the map)
     /// rather than the main menu. See `App::open_game_menu`.
     game_menu_in_run: bool,
-    /// The structure hub while it is open: the structures beside the party
-    /// and which one is showing. `None` whenever the player is not in it.
-    pub structure_hub: Option<StructureHub>,
     /// The command-page row that opened the screen the player is on, so Esc
     /// lands back with the highlight on it. Taken when the mode returns to a
     /// command page and cleared with `menu_origin`.
@@ -2987,8 +2968,8 @@ pub struct App {
     /// current screen's rows (`menu_selected`). The renderer draws the
     /// highlight on this half alone, so there is never a second one to read.
     pub hub_on_rail: bool,
-    /// The structure picked in `Mode::Remove`, awaiting confirmation from
-    /// `Mode::RemoveConfirm` if it's the Home (see `Game::remove_structure`).
+    /// The Home picked for demolition, awaiting `Mode::RemoveConfirm` (see
+    /// `Game::remove_structure`).
     pending_remove_structure: Option<Entity>,
     /// Which owned program the map's camera is following, if any — started
     /// with `W` on that program's manifest and handed back by `Esc`, by a
@@ -3134,11 +3115,20 @@ pub struct App {
     /// map's field coordinates. `None` outside
     /// that mode; opening it puts the cursor on the acting body's own cell.
     pub tactical_cursor: Option<(i32, i32)>,
-    /// The map or board cell under the pointer this frame, `None` off the
-    /// pane. Written by the renderer every frame and read by the aim
-    /// cursor's follow rule and the board's hover path; in whichever
-    /// coordinate space the pane is drawing, as `tactical_cursor` is.
-    pub map_hover: Option<(i32, i32)>,
+    /// The pointer target under the pointer, as of the frame just drawn
+    /// (`App::handle_pointer_event`), for a renderer to tint through
+    /// `App::hovered`. On the map it is a `MapTile`, which the aim cursor's
+    /// follow rule and the board's hover path read, in whichever coordinate
+    /// space the pane is drawing, as `tactical_cursor` is.
+    pub pointer_hover: Option<PointerHit>,
+    /// The sprite editor's stroke in progress: the button that opened it
+    /// and the last cell or swatch it reached, so leaving the canvas still
+    /// closes it with a hit to close on (`App::pointer_stroke`).
+    pub(crate) pointer_stroke: Option<(PointerButton, PointerHit)>,
+    /// The picker row the last click selected, so a second click on it
+    /// opens it (`App::forge_pointer_click`). Cleared whenever the picker
+    /// is entered.
+    pub(crate) picker_clicked: Option<usize>,
     /// The hostile a click has picked for a second click to swing at.
     /// Per fight and per turn, never saved: `settle_tactical_end` clears it
     /// and `tactical_target_cell` drops it once its turn has passed.

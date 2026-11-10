@@ -143,11 +143,48 @@ impl App {
             return;
         }
         // The hub's Info page is left by the hub's own keys, not by any key.
-        if self.structure_hub.is_some() {
+        if self.hub_at().is_some() {
+            self.structure_verb(key);
             return;
         }
         self.pending_structure_manifest = None;
         self.close_screen();
+    }
+
+    /// The structure verbs on a BESIDE YOU entry's Info tab: work it, upgrade
+    /// it, demolish it. Each is the door the old Structures launcher called
+    /// (`Game::work_structure`, the upgrade and demolish flows), aimed at
+    /// this entry's structure, so a refusal is that door's own sentence.
+    fn structure_verb(&mut self, key: GameKey) {
+        let GameKey::Char(verb @ ('W' | 'U' | 'X')) = key else {
+            return;
+        };
+        let Some(entity) = self.held_structure() else {
+            return;
+        };
+        let Some(game) = &mut self.game else { return };
+        // The entry's entity, not a re-look by direction: that lookup matches
+        // only a structure's anchor tile, so a wide one touched elsewhere is
+        // "nothing there".
+        let Some(found) = game.structure_view(entity) else {
+            return;
+        };
+        match verb {
+            'W' => {
+                let outcome = game.work_structure(entity);
+                self.report(outcome);
+                self.mode = Mode::Playing;
+            }
+            'U' => self.upgrade_found(found),
+            _ => self.demolish_found(found),
+        }
+        // Every verb ends outside the hub: on the map, or on a picker (the
+        // upgrade's program, a Home's demolish confirmation) that is not one
+        // of this structure's tabs. Holding the entry on would have
+        // `refresh_beside` read the picker's mode as a tab the structure no
+        // longer offers and pull the player back to its first page.
+        self.hub_place = None;
+        self.hub_rail_seen = None;
     }
 
     /// The cell description is read-only and reached only from the corridor
@@ -578,7 +615,7 @@ impl App {
                 if let Some(row) = self.roster_row_of(self.pending_manifest) {
                     self.menu_selected = row;
                 }
-                self.mode = Mode::Companion;
+                self.mode = self.roster_mode();
             }
         }
     }

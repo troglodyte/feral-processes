@@ -5,7 +5,7 @@
 //! is the measuring and painting either side of it, `alt_overlay`'s split.
 
 use super::alt_labels::TileRect;
-use super::base::{MapClickLayout, takes_tile_from};
+use super::base::{MapLayout, takes_tile_from};
 use super::*;
 
 /// Point size of a staff tag: under the Alt room label's 14, since a tag
@@ -20,7 +20,7 @@ const TAG_PAD: f32 = 2.0;
 /// the body a tile actually shows is named — the tile loop's own
 /// `takes_tile_from` — so a staffer under the player's `@`, or a second
 /// body on a shared tile, does not float a name over someone else's glyph.
-pub(super) fn draw_staff_tags(painter: &Painter, view: &MapClickLayout, entities: &[EntityView]) {
+pub(super) fn draw_staff_tags(painter: &Painter, view: &MapLayout, entities: &[EntityView]) {
     let t = view.tile_px;
     let measured: Vec<(&EntityView, f32)> = tagged_bodies(entities)
         .into_iter()

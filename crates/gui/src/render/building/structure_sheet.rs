@@ -78,7 +78,7 @@ pub(crate) fn structures_rows(game: &mut Game, selected: usize) -> Vec<Row> {
         };
         rows.push(colored_item_row(headline, i == selected, color));
         for (line, color) in detail {
-            rows.push(colored_item_row(line, false, color));
+            rows.push(Row::Detail(line, color));
         }
     }
     rows

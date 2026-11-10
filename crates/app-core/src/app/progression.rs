@@ -89,6 +89,12 @@ impl App {
     /// copied one, since the two screens differ only in which tree
     /// `research_nodes`/`research_graph` are asked for.
     pub(crate) fn handle_research_key(&mut self, key: GameKey, tree: ResearchTree) {
+        // The tree view is drawn over everything, so Esc leaves it for the
+        // list before it leaves the screen.
+        if key == GameKey::Esc && self.research_graph_view {
+            self.research_graph_view = false;
+            return;
+        }
         if key == GameKey::Esc {
             self.close_screen();
             return;
@@ -183,8 +189,8 @@ impl App {
 
     /// Takes on research `id`, then opens the study picker when it needs a
     /// body and none is assigned — the block line alone left the player to
-    /// find "Study a program" on another menu. `menu_origin` stays the group
-    /// menu, so the picker backs out exactly as it does when opened there.
+    /// find the Study tab. The picker is that tab, so it backs out to the
+    /// rail like any other.
     fn select_research(&mut self, id: &str) {
         let Some(game) = &mut self.game else { return };
         let outcome = game.select_research(id);

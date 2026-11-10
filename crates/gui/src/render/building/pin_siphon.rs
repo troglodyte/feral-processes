@@ -14,16 +14,7 @@ pub(crate) fn draw_pin_subject(
     painter: &Painter,
     m: &Metrics,
 ) {
-    let pinned = game.pinned_subject().map(|e| game.creature_label(e));
-    let staff: Vec<String> = if pinned.is_some() {
-        Vec::new()
-    } else {
-        game.base_staff()
-            .into_iter()
-            .map(|e| game.creature_label(e))
-            .collect()
-    };
-    let rows = pin_subject_rows(pinned.as_deref(), &staff, selected);
+    let rows = pin_subject_page_rows(game, selected);
     draw_popup(
         "Study a program",
         PopupSize::Large,
@@ -32,6 +23,29 @@ pub(crate) fn draw_pin_subject(
         painter,
         m,
     );
+}
+
+/// What the Study tab says with no station: the handler has no rows to
+/// pick then (`App::handle_pin_subject_key`).
+pub(super) const NO_STUDY_STATION: &str =
+    "No research station stands, so there is no pen to study a program in.";
+
+/// `Mode::PinSubject`'s rows, shared by the popup and the base report's
+/// Study tab.
+pub(crate) fn pin_subject_page_rows(game: &Game, selected: usize) -> Vec<Row> {
+    let pinned = game.pinned_subject().map(|e| game.creature_label(e));
+    if pinned.is_none() && game.study_station().is_none() {
+        return vec![text_row(NO_STUDY_STATION)];
+    }
+    let staff: Vec<String> = if pinned.is_some() {
+        Vec::new()
+    } else {
+        game.base_staff()
+            .into_iter()
+            .map(|e| game.creature_label(e))
+            .collect()
+    };
+    pin_subject_rows(pinned.as_deref(), &staff, selected)
 }
 
 /// The rows of `Mode::PinSubject`, `siphon_rows`' shape. The picker opens
@@ -91,7 +105,7 @@ pub(crate) fn draw_pin_prisoner(
     );
 }
 
-/// Shared by the popup and the structure hub's Hold page.
+/// Shared by the popup and a BESIDE YOU entry's Hold tab.
 pub(crate) fn pin_prisoner_rows(game: &Game, selected: usize) -> Vec<Row> {
     let records = game.downed_program_rows();
     if records.is_empty() {
@@ -159,7 +173,7 @@ pub(crate) fn draw_siphon(
     draw_popup("Power Siphon", PopupSize::Large, &rows, refusal, painter, m);
 }
 
-/// The siphon screen's rows, shared by the popup and the structure hub.
+/// The siphon screen's rows, shared by the popup and the BESIDE YOU tab.
 pub(crate) fn siphon_page_rows(
     game: &mut Game,
     siphon: Option<Entity>,

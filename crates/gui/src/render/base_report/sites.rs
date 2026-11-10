@@ -1,4 +1,4 @@
-//! The Sites hub's pages. Every sentence and figure is an engine view
+//! `b`'s site pages. Every sentence and figure is an engine view
 //! (`Game::town_status`, `town_goods`, `site_routes`, `site_log`, ...); this
 //! only lays them out. No age or wait shows a tick: the views carry the
 //! banded words, and `OutpostReport::route` (which carries ticks) is never

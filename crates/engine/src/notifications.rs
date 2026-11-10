@@ -255,7 +255,7 @@ impl NotificationKind {
                        every structure \
                        you own, and a second one stacks with the first. A Patch Node writes \
                        damaged structures back up across the whole base on its own, while you are \
-                       somewhere else.\n\n[b] for the base report, then Deploy a structure on the Build page.",
+                       somewhere else.\n\n[b] for the base report, then the Deploy tab on the Build page.",
                 sprite: None,
                 // The Shield's own glyph and hue, so the screen and the thing
                 // it is telling you to build agree on what to look for. The

@@ -55,8 +55,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   `Game::message_history`; folding in the renderer opens the screen on a row
   that isn't drawn.
 - **A group menu's rows are hidden dynamically**, so `command_rows`
-  must be the *only* source of them, for the base's pages and the party's.
-- **Every hub — `b`, `i`, `c`, `w` and Esc's game menu — walks one nav rule,
+  must be the *only* source of them, for the party's pages (the base's
+  structure verbs are `W`/`U`/`X` on a BESIDE YOU entry's Info tab).
+- **Every hub — `b`, `i` and Esc's game menu (`c` opens `i` on a BESIDE YOU entry, `w` opens `b`, neither a hub of its own) — walks one nav rule,
   `App::handle_hub_nav` (ADR 0045: arrows move the cursor, `Tab`/`Shift+Tab`
   (`GameKey::ShiftTab`, folded to `Tab` for every other screen) switch the
   highlighted page's `HubTab`s from either half, `[ ]` step the rail, `{ }`
@@ -68,8 +69,9 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   against the `Mode` (`hub_at` is `None` off the held page's screens),
   `App::enter_hub_at` names the page and `settle_hub` is only the default
   for a jump that names none (it adopts a page only when exactly one offers
-  the screen), and the `shared_screens_are_pinned` census forces the
+  the screen, and never a BESIDE YOU structure page), and the `shared_screens_are_pinned` census forces the
   explicit door for any screen several pages share.**
+- **A pointer target is registered by the draw that places it (`Painter::target`), `gui/src/pointer.rs` is the only reader of egui pointer input, and every `PointerHit` ends in a key the keyboard already presses (`App::handle_pointer_event`), so a click can do nothing a key cannot.**
 - **A Broker's board is derived, never stored** — seeded off `(world seed,
   zone, epoch)`.
 - **Reading a Broker's board and signing it are two questions, and

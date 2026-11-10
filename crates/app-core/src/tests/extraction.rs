@@ -310,7 +310,7 @@ fn c_beside_a_rig_opens_the_tool_holder() {
     assert!(app.rig_tool.is_none(), "and drops it on the way out");
 }
 
-/// The hub follows the party: out of the rig's reach it closes.
+/// The hub follows the party: out of the rig's reach its entry goes.
 #[test]
 fn the_tool_holder_closes_when_the_party_leaves_the_rig() {
     let mut app = app_beside_a_rig_holding(1);
@@ -320,9 +320,9 @@ fn the_tool_holder_closes_when_the_party_leaves_the_rig() {
     assert_eq!(app.mode, Mode::RigTool);
 
     stand_in_base_at(&mut app, 9, 9);
-    app.handle_key(GameKey::Up);
+    app.settle_hub();
 
-    assert_eq!(app.mode, Mode::Playing);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("You")));
     assert!(app.rig_tool.is_none());
-    assert!(app.structure_hub.is_none());
+    assert!(app.held_structure().is_none());
 }

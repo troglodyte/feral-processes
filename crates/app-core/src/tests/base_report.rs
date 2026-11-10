@@ -8,6 +8,32 @@ use crate::tests::alerts::{alert, seeded};
 use crate::tests::support::*;
 use crate::*;
 
+/// The first tab of every page on `b`'s rail as it stands now.
+fn rail_modes(app: &App) -> Vec<Mode> {
+    Hub::Base
+        .kind()
+        .pages(app)
+        .iter()
+        .map(|p| p.tabs[0].mode)
+        .collect()
+}
+
+/// The first tab of the last page on `b`'s rail.
+fn last_page_mode(app: &App) -> Mode {
+    *rail_modes(app).last().expect("b has pages")
+}
+
+/// Walks `[` along `b`'s rail until the page whose first tab is `mode`.
+fn back_to(app: &mut App, mode: Mode) {
+    for _ in 0..rail_modes(app).len() {
+        if app.mode == mode {
+            return;
+        }
+        app.handle_key(GameKey::Char('['));
+    }
+    assert_eq!(app.mode, mode, "{mode:?} is on the rail");
+}
+
 fn page_modes() -> Vec<Mode> {
     BASE_REPORT_PAGES
         .iter()
@@ -16,34 +42,27 @@ fn page_modes() -> Vec<Mode> {
 }
 
 #[test]
-fn the_rail_runs_all_fourteen_pages_in_order() {
+fn the_rail_runs_its_pages_in_order() {
     assert_eq!(
         page_modes(),
         vec![
             Mode::BaseOverview,
-            Mode::BaseBuild,
-            Mode::BaseResearch,
-            Mode::BaseTrade,
-            Mode::BaseCompile,
-            Mode::Recipes,
-            Mode::StaffWellbeing,
+            Mode::Build,
             Mode::BaseOutput,
             Mode::BaseStock,
-            Mode::WorkOrders,
-            Mode::BaseStaff,
-            Mode::Structures,
-            Mode::BuildOrders,
-            Mode::Alerts
+            Mode::StaffWellbeing,
+            Mode::Research,
+            Mode::Alerts,
         ]
     );
-    assert_eq!(hub_of(Mode::BaseOutput), Some((Hub::Base, 7, 0)));
-    assert_eq!(hub_of(Mode::BasePower), Some((Hub::Base, 7, 2)));
-    assert_eq!(hub_of(Mode::Structures), Some((Hub::Base, 11, 0)));
-    assert_eq!(hub_of(Mode::FloorOrders), Some((Hub::Base, 12, 2)));
+    assert_eq!(hub_of(Mode::BaseOutput), Some((Hub::Base, 2, 0)));
+    assert_eq!(hub_of(Mode::BasePower), Some((Hub::Base, 2, 2)));
+    assert_eq!(hub_of(Mode::Structures), Some((Hub::Base, 4, 4)));
+    assert_eq!(hub_of(Mode::FloorOrders), Some((Hub::Base, 1, 3)));
     assert_eq!(hub_of(Mode::WorkOrderPick), None);
     assert_eq!(hub_of(Mode::WorkOrderQuantity), None);
     assert_eq!(hub_of(Mode::StructureAssign), None);
-    assert_eq!(hub_of(Mode::StaffDiscontent), Some((Hub::Base, 6, 2)));
+    assert_eq!(hub_of(Mode::StaffDiscontent), Some((Hub::Base, 4, 2)));
     assert_eq!(hub_of(Mode::Playing), None);
 }
 
@@ -61,21 +80,21 @@ fn right_bracket_wraps_last_to_first_and_left_bracket_first_to_last() {
     let mut app = test_app(30002);
     app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::Alerts, "[ wraps first -> last");
+    assert_eq!(app.mode, last_page_mode(&app), "[ wraps first -> last");
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOverview, "] wraps last -> first");
     app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
 }
 
 #[test]
 fn esc_from_a_later_page_leaves_the_hub_rather_than_stepping_back() {
     let mut app = test_app(30003);
     app.handle_key(GameKey::Char('b'));
-    for _ in 0..BASE_REPORT_PAGES.len() - 1 {
+    for _ in 0..rail_modes(&app).len() - 1 {
         app.handle_key(GameKey::Char(']'));
     }
-    assert_eq!(app.mode, Mode::Alerts);
+    assert_eq!(app.mode, last_page_mode(&app));
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 }
@@ -129,7 +148,7 @@ fn b_reopens_the_last_page() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     app.handle_key(GameKey::Char('b'));
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
 }
 
 #[test]
@@ -165,15 +184,14 @@ fn paging_onto_alerts_marks_everything_read() {
     );
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 1);
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::Alerts);
+    back_to(&mut app, Mode::Alerts);
     assert_eq!(app.game.as_ref().unwrap().unread_alerts(), 0);
 }
 
 #[test]
 fn no_command_row_is_called_base_output_or_base_report() {
     let mut app = test_app(30010);
-    let labels = command_labels_all(&mut app);
+    let labels: Vec<_> = party_rows(&mut app).iter().map(|r| r.label).collect();
     assert!(!labels.contains(&"Base output"), "{labels:?}");
     assert!(!labels.contains(&"Base report"), "{labels:?}");
 }
@@ -184,16 +202,16 @@ fn enter_on_an_overview_row_jumps_to_that_pages_first_screen() {
     app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Enter);
-    assert_eq!(
-        app.mode,
-        Mode::BaseBuild,
-        "row 0 is the page after Overview"
-    );
+    assert_eq!(app.mode, Mode::Build, "row 0 is the page after Overview");
 
     let mut app = test_app(30013);
     app.handle_key(GameKey::Char('b'));
     app.handle_key(GameKey::Right);
-    for _ in 0..BASE_REPORT_PAGES.len() - 2 {
+    let alerts = BASE_REPORT_PAGES
+        .iter()
+        .position(|p| p.title == "Alerts")
+        .unwrap();
+    for _ in 1..alerts {
         app.handle_key(GameKey::Down);
     }
     app.handle_key(GameKey::Enter);
@@ -228,11 +246,11 @@ fn the_screens_inside_the_hub_cost_no_game_time() {
 }
 
 #[test]
-fn tab_walks_the_three_staff_tabs_and_left_goes_back_to_the_rail() {
+fn tab_walks_the_five_staff_tabs_and_left_goes_back_to_the_rail() {
     let mut app = test_app(30015);
     open_hub_screen(&mut app, Mode::StaffWellbeing);
     let walk = |app: &mut App, key| -> Vec<Mode> {
-        (0..3)
+        (0..5)
             .map(|_| {
                 app.handle_key(key);
                 app.mode
@@ -244,6 +262,8 @@ fn tab_walks_the_three_staff_tabs_and_left_goes_back_to_the_rail() {
         vec![
             Mode::StaffCoverage,
             Mode::StaffDiscontent,
+            Mode::BaseStaff,
+            Mode::Structures,
             Mode::StaffWellbeing
         ],
         "Tab wraps past the last tab"
@@ -252,6 +272,8 @@ fn tab_walks_the_three_staff_tabs_and_left_goes_back_to_the_rail() {
     assert_eq!(
         walk(&mut app, GameKey::ShiftTab),
         vec![
+            Mode::Structures,
+            Mode::BaseStaff,
             Mode::StaffDiscontent,
             Mode::StaffCoverage,
             Mode::StaffWellbeing
@@ -464,10 +486,10 @@ fn stepping_back_into_the_duty_table_resets_its_column_cursor() {
     );
     assert_eq!(app.mode, Mode::BaseStaff);
     app.handle_key(GameKey::Right);
-    assert_eq!(app.mode, Mode::BaseStaff, "the duty table is its own page");
-    app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::Structures, "the roster is the next page");
-    app.handle_key(GameKey::Char('['));
+    assert_eq!(app.mode, Mode::BaseStaff, "the duty table is its own tab");
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::Structures, "the roster is the next tab");
+    app.handle_key(GameKey::ShiftTab);
 
     assert_eq!(app.mode, Mode::BaseStaff);
     assert_eq!(
@@ -500,29 +522,40 @@ fn the_roster_keeps_its_highlight_across_the_staffing_popup() {
 fn the_full_rail_walks_forward_and_back() {
     let mut app = test_app(30017);
     app.handle_key(GameKey::Char('b'));
+    let rail = rail_modes(&app);
     let mut seen = vec![app.mode];
-    for _ in 1..BASE_REPORT_PAGES.len() {
+    for _ in 1..rail.len() {
         app.handle_key(GameKey::Char(']'));
         seen.push(app.mode);
     }
-    assert_eq!(seen, page_modes());
+    assert_eq!(seen, rail);
     app.handle_key(GameKey::Char(']'));
     assert_eq!(app.mode, Mode::BaseOverview);
-    for page in page_modes().into_iter().rev() {
+    for page in rail.into_iter().rev() {
         app.handle_key(GameKey::Char('['));
         assert_eq!(app.mode, page);
     }
 }
 
 #[test]
-fn tab_walks_production_and_build_orders_tabs() {
-    let mut app = test_app(30018);
-    app.hub_on_rail = false;
+fn tab_walks_production_and_build_tabs() {
     for screens in [
-        [Mode::BaseOutput, Mode::BaseMachines, Mode::BasePower],
-        [Mode::BuildOrders, Mode::DigOrders, Mode::FloorOrders],
+        &[
+            Mode::BaseOutput,
+            Mode::BaseMachines,
+            Mode::BasePower,
+            Mode::Recipes,
+            Mode::Craft,
+        ][..],
+        &[
+            Mode::Build,
+            Mode::BuildOrders,
+            Mode::DigOrders,
+            Mode::FloorOrders,
+        ],
     ] {
-        app.mode = screens[0];
+        let mut app = test_app(30018);
+        open_hub_screen(&mut app, screens[0]);
         for &next in &screens[1..] {
             app.handle_key(GameKey::Tab);
             assert_eq!(app.mode, next);
@@ -597,10 +630,10 @@ fn b_opens_with_the_cursor_on_the_rail_and_down_walks_the_pages() {
     app.handle_key(GameKey::Char('b'));
     assert!(app.hub_on_rail, "b opens on the rail");
     app.handle_key(GameKey::Down);
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
     app.handle_key(GameKey::Up);
     app.handle_key(GameKey::Up);
-    assert_eq!(app.mode, Mode::Alerts, "Up wraps first -> last");
+    assert_eq!(app.mode, last_page_mode(&app), "Up wraps first -> last");
     assert!(app.hub_on_rail, "walking the rail keeps the cursor there");
 }
 
@@ -612,10 +645,10 @@ fn right_moves_the_cursor_into_the_page_and_left_brings_it_back() {
     app.handle_key(GameKey::Right);
     assert!(!app.hub_on_rail);
     app.handle_key(GameKey::Down);
-    assert_eq!(app.mode, Mode::BaseBuild, "Down in the page moves its rows");
+    assert_eq!(app.mode, Mode::Build, "Down in the page moves its rows");
     app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail);
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
 }
 
 #[test]
@@ -669,11 +702,7 @@ fn n_opens_alerts_with_the_cursor_in_the_page() {
 #[test]
 fn left_walks_the_duty_table_columns_before_it_reaches_the_rail() {
     let mut app = test_app(30036);
-    app.handle_key(GameKey::Char('b'));
-    while app.mode != Mode::BaseStaff {
-        app.handle_key(GameKey::Down);
-    }
-    app.handle_key(GameKey::Right);
+    open_hub_screen(&mut app, Mode::BaseStaff);
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Right);
     assert_eq!(app.work_column, 2);
@@ -683,14 +712,6 @@ fn left_walks_the_duty_table_columns_before_it_reaches_the_rail() {
     assert!(!app.hub_on_rail, "a column step is not a trip to the rail");
     app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail);
-}
-
-fn command_labels(app: &mut App, page: Mode) -> Vec<&'static str> {
-    app.command_rows(page)
-        .expect("a command page")
-        .iter()
-        .map(|r| r.label)
-        .collect()
 }
 
 #[test]
@@ -703,7 +724,7 @@ fn b_opens_the_hub_at_overview_then_where_it_was_left() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
     app.handle_key(GameKey::Char('b'));
-    assert_eq!(app.mode, Mode::Alerts, "the last hub screen");
+    assert_eq!(app.mode, last_page_mode(&app), "the last hub screen");
     assert!(app.hub_on_rail);
 }
 
@@ -714,20 +735,16 @@ fn capital_b_no_longer_opens_anything() {
     assert_eq!(app.mode, Mode::Playing);
 }
 
+/// A page is never hidden for where the party stands (hub merge): the
+/// Deploy tab opens underground, and the engine's own refusal is what a
+/// placement there reads.
 #[test]
-fn b_underground_opens_the_hub_and_build_has_no_base_rows() {
+fn b_underground_keeps_the_deploy_tab() {
     let mut app = app_underground(30102);
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.mode, Mode::BaseOverview);
-    let build = command_labels(&mut app, Mode::BaseBuild);
-    for absent in [
-        "Work a structure yourself",
-        "Upgrade a structure",
-        "Demolish a structure",
-        "Deploy a structure",
-    ] {
-        assert!(!build.contains(&absent), "{absent:?} in {build:?}");
-    }
+    app.handle_key(GameKey::Esc);
+    open_hub_screen(&mut app, Mode::Build);
 }
 
 #[test]
@@ -736,10 +753,13 @@ fn no_mode_is_in_two_hubs() {
     let mut seen = Vec::new();
     for hub in Hub::ALL {
         let mut in_hub = Vec::new();
+        // A structure's entries repeat their tabs by design (two depots), and
+        // are entered by their own door.
         for mode in hub
             .kind()
             .pages(&app)
             .iter()
+            .filter(|p| !matches!(p.key, HubPageKey::Structure(_)))
             .flat_map(|p| p.modes().collect::<Vec<_>>())
         {
             assert!(!seen.contains(&mode), "{mode:?} is in two hubs");
@@ -750,68 +770,10 @@ fn no_mode_is_in_two_hubs() {
 }
 
 #[test]
-fn the_command_pages_sit_after_overview_with_their_titles() {
-    let titles: Vec<_> = BASE_REPORT_PAGES.iter().map(|p| p.title).collect();
-    assert_eq!(
-        titles[..5],
-        ["Overview", "Build", "Research", "Trade", "Compile"]
-    );
-    assert_eq!(hub_of(Mode::BaseBuild), Some((Hub::Base, 1, 0)));
-    assert_eq!(hub_of(Mode::BaseCompile), Some((Hub::Base, 4, 0)));
-}
-
-#[test]
-fn each_command_page_lists_its_table_inside_the_base() {
-    let mut app = app_inside_a_small_base_with_programs(30103, false, 1);
-    assert_eq!(
-        command_labels(&mut app, Mode::BaseBuild),
-        [
-            "Deploy a structure",
-            "Work a structure yourself",
-            "Upgrade a structure",
-            "Demolish a structure"
-        ]
-    );
-    assert_eq!(
-        command_labels(&mut app, Mode::BaseResearch),
-        [
-            "Research",
-            "Routine research",
-            "Affix research",
-            "Weapon research"
-        ]
-    );
-    assert_eq!(
-        command_labels(&mut app, Mode::BaseTrade),
-        ["Contracts"],
-        "the onboarding mission is in hand"
-    );
-    assert_eq!(
-        command_labels(&mut app, Mode::BaseCompile),
-        ["Compile an item"]
-    );
-
-    let mut station = app_owning_a_program_and_a_research_station(30104);
-    stand_in_base(&mut station);
-    assert!(command_labels(&mut station, Mode::BaseResearch).contains(&"Study a program"));
-    let mut cell = app_beside_a_holding_cell(30105, Vec::new(), 0);
-    stand_in_base(&mut cell);
-    let research = command_labels(&mut cell, Mode::BaseResearch);
-    assert_eq!(research.last(), Some(&"Hold a program"), "{research:?}");
-
-    let mut broker = app_at_a_contract_broker(30106, false);
-    assert_eq!(command_labels(&mut broker, Mode::BaseTrade), ["Contracts"]);
-}
-
-#[test]
-fn founding_offers_deploy_alone_and_it_opens_the_category_list() {
+fn the_deploy_tab_opens_on_its_category_list() {
     let mut app = test_app(30107);
-    assert_eq!(
-        command_labels(&mut app, Mode::BaseBuild),
-        ["Deploy a structure"]
-    );
     app.build_category = Some(feral_processes_engine::structures::StructureCategory::Utility);
-    open_command(&mut app, "Deploy a structure");
+    open_hub_screen(&mut app, Mode::Build);
     assert_eq!(app.mode, Mode::Build);
     assert_eq!(app.build_category, None);
 }
@@ -823,50 +785,151 @@ fn a_non_command_mode_has_no_command_rows() {
     assert!(app.command_rows(Mode::Playing).is_none());
 }
 
+/// A merged page keeps every mark its old pages had: the engine's flag for
+/// any of its tabs marks it.
 #[test]
-fn esc_from_a_command_returns_to_its_row_and_a_page_turn_forgets_it() {
-    let mut app = app_inside_a_small_base_with_programs(30109, false, 1);
-    open_hub_screen(&mut app, Mode::BaseBuild);
-    let demolish = app
-        .command_rows(Mode::BaseBuild)
+fn a_merged_page_is_marked_by_any_of_its_tabs() {
+    let page = |title: &str| {
+        BASE_REPORT_PAGES
+            .iter()
+            .position(|p| p.title == title)
+            .unwrap()
+    };
+    let flags = feral_processes_engine::BaseReportFlags {
+        work_orders: Some("an order is stalled".into()),
+        staffing: Some("a duty is unstaffed".into()),
+        build_orders: Some("a request is dry".into()),
+        ..Default::default()
+    };
+    assert_eq!(
+        base_page_flag(&flags, page("Stock")),
+        Some("an order is stalled")
+    );
+    assert_eq!(
+        base_page_flag(&flags, page("Staff")),
+        Some("a duty is unstaffed")
+    );
+    assert_eq!(
+        base_page_flag(&flags, page("Build")),
+        Some("a request is dry")
+    );
+    assert_eq!(base_page_flag(&flags, page("Research")), None);
+}
+
+/// Inside the Deploy tab Esc steps out of an open category first; only from
+/// the category list does it go to the rail.
+#[test]
+fn esc_in_a_deploy_category_closes_it_before_the_rail() {
+    let mut app = test_app(30112);
+    stand_in_base(&mut app);
+    open_hub_screen(&mut app, Mode::Build);
+    let category = app
+        .build_menu()
         .unwrap()
+        .rows
         .iter()
-        .position(|r| r.label == "Demolish a structure")
-        .unwrap();
-    assert!(demolish > 0);
-    pick_row(&mut app, demolish);
-    assert_eq!(app.mode, Mode::Remove);
+        .position(|r| matches!(r, crate::app::building::BuildRow::Category(_)))
+        .expect("a category row");
+    pick_row(&mut app, category);
+    assert!(app.build_category.is_some());
     app.handle_key(GameKey::Esc);
-    assert_eq!(app.mode, Mode::BaseBuild);
-    assert!(!app.hub_on_rail, "the highlight is on the row just used");
-    assert_eq!(app.menu_selected, demolish);
-
-    app.handle_key(GameKey::Char(']'));
-    app.handle_key(GameKey::Char('['));
-    assert_eq!(app.mode, Mode::BaseBuild);
-    assert_eq!(app.menu_selected, 0, "a page turn starts at the top");
-}
-
-#[test]
-fn a_row_letter_on_the_rail_of_a_command_page_does_nothing() {
-    let mut app = app_inside_a_small_base_with_programs(30110, false, 1);
-    app.handle_key(GameKey::Char('b'));
-    app.handle_key(GameKey::Char(']'));
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.build_category, None);
+    assert_eq!(app.mode, Mode::Build);
+    assert!(!app.hub_on_rail);
+    app.handle_key(GameKey::Esc);
     assert!(app.hub_on_rail);
-    app.handle_key(GameKey::Char('a'));
-    app.handle_key(GameKey::Char('1'));
-    assert_eq!(app.mode, Mode::BaseBuild);
 }
 
+/// The tree view walks its nodes with every arrow, so Left is the page's.
 #[test]
-fn an_all_hidden_page_is_still_on_the_rail() {
-    let mut app = test_app(30111);
-    skip_tutorial(&mut app);
-    app.handle_key(GameKey::Char('b'));
-    for _ in 0..3 {
-        app.handle_key(GameKey::Char(']'));
+fn left_in_the_research_tree_view_stays_in_the_page() {
+    let mut app = test_app(30113);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
     }
-    assert_eq!(app.mode, Mode::BaseTrade);
-    assert_eq!(app.command_rows(Mode::BaseTrade).map(|r| r.len()), Some(0));
+    assert!(app.research_graph_view);
+    app.handle_key(GameKey::Left);
+    assert!(!app.hub_on_rail, "Left moved the tree cursor");
+    app.handle_key(GameKey::Char('G'));
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail, "the list view's Left goes to the rail");
+}
+
+/// The tree view draws over the whole hub, so with the cursor in it the
+/// page keys do nothing under it, Tab switches trees in the view, and Esc
+/// steps back to the list view before the next one reaches the rail.
+#[test]
+fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
+    let mut app = test_app(30115);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    let page = app.hub_page().cloned();
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::RoutineResearch, "Tab switches trees");
+    assert!(app.research_graph_view, "and the tree view stays shown");
+    assert!(!app.hub_on_rail);
+    app.handle_key(GameKey::ShiftTab);
+    assert_eq!(app.mode, Mode::Research, "Shift+Tab switches back");
+    for key in [
+        GameKey::Char(']'),
+        GameKey::Char('['),
+        GameKey::Char('}'),
+        GameKey::Char('{'),
+    ] {
+        app.handle_key(key);
+        assert_eq!(app.mode, Mode::Research, "{key:?} changed the tab");
+        assert_eq!(app.hub_page().cloned(), page, "{key:?} turned the page");
+        assert!(!app.hub_on_rail, "{key:?} went to the rail");
+        assert!(app.research_graph_view, "{key:?} left the tree view");
+    }
+    app.handle_key(GameKey::Esc);
+    assert!(!app.research_graph_view, "Esc leaves the tree view first");
+    assert_eq!(app.mode, Mode::Research);
+    assert!(!app.hub_on_rail);
+    app.handle_key(GameKey::Esc);
+    assert!(app.hub_on_rail, "the list view's Esc goes to the rail");
+    assert_eq!(app.mode, Mode::Research);
+}
+
+/// From the rail the tree view claims nothing, so `]` walks past the
+/// Research page rather than stopping on it.
+#[test]
+fn the_rail_walks_past_the_research_tree_view() {
+    let mut app = test_app(30116);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.handle_key(GameKey::Left);
+    app.hub_on_rail = true;
+    app.handle_key(GameKey::Char(']'));
+    assert_ne!(app.mode, Mode::Research, "the rail stepped on");
+    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::Tab);
+    assert_eq!(
+        app.mode,
+        Mode::RoutineResearch,
+        "Tab from the rail switches tabs"
+    );
+}
+
+/// The Study tab stands whether or not a station does (a page is never
+/// hidden for the base's state); with no station there is no pen, so the
+/// staff are not rows a key could pin.
+#[test]
+fn the_study_tab_with_no_station_has_no_rows() {
+    let mut app = app_owning_distant_programs(30114, 2);
+    stand_in_base(&mut app);
+    let game = app.game.as_ref().unwrap();
+    assert!(game.study_station().is_none(), "precondition");
+    assert!(game.base_staff().len() >= 2, "precondition");
+    open_hub_screen(&mut app, Mode::PinSubject);
+    app.handle_key(GameKey::Down);
+    assert_eq!(app.menu_selected, 0);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::PinSubject);
+    assert!(app.game.as_ref().unwrap().pinned_subject().is_none());
 }

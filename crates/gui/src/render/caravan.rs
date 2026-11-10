@@ -29,22 +29,6 @@ pub(super) struct CaravanBasket {
     pub(super) purse: u32,
 }
 
-pub(super) fn draw_caravan(
-    game: &mut Game,
-    basket: Option<CaravanBasket>,
-    selected: usize,
-    refusal: Option<&str>,
-    painter: &Painter,
-    m: &Metrics,
-) {
-    let Some(basket) = basket else {
-        return;
-    };
-    let title = basket.view.trader.clone();
-    let rows = caravan_page_rows(game, &basket.view, &basket.cells, basket.purse, selected);
-    draw_popup(&title, PopupSize::Large, &rows, refusal, painter, m);
-}
-
 /// The page's rows, split from the draw for `memory_page_rows`' reason:
 /// **this page has no scroll**, so the two censuses below have to be able to
 /// build the tallest and widest page the game can produce without a trader
@@ -73,12 +57,16 @@ pub(super) fn caravan_page_rows(
     };
     // Wrapped, not trimmed: a trader's own line is prose a modder writes, and
     // nothing clips a row horizontally — an over-wide line is drawn off the
-    // panel in silence. `no_caravan_row_overflows_its_popup` caught the
+    // panel in silence. the width census caught the
     // shipped descriptions running 350px past the body.
-    let mut rows: Vec<Row> = wrap_text(&view.description, DESCRIBE_WRAP_COLUMNS)
-        .into_iter()
-        .map(|line| Row::TextColored(line, TEXT_DIM))
-        .collect();
+    // The trader's name heads the page: the popup's title said it before
+    // the wagon became the Trader tab, and the hub's title is the page's.
+    let mut rows = vec![Row::TextColored(view.trader.clone(), CYAN)];
+    rows.extend(
+        wrap_text(&view.description, DESCRIBE_WRAP_COLUMNS)
+            .into_iter()
+            .map(|line| Row::TextColored(line, TEXT_DIM)),
+    );
     rows.push(text_row(format!(
         "You have: {} {money}  ·  rolling on in {} turns",
         view.credits, view.ticks_left
@@ -231,8 +219,6 @@ pub(super) fn caravan_page_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::paint::with_painter;
-    use crate::text::ui_metrics;
     use feral_processes_engine::items::{GearCopy, ItemId, ids};
     use feral_processes_engine::{CaravanOffer, CaravanOfferKind, CaravanSellRow, DifficultyMode};
 
@@ -355,7 +341,10 @@ mod tests {
         let text = |rows: Vec<Row>| -> Vec<String> {
             rows.into_iter()
                 .map(|row| match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, suffix, .. } => {
                         format!("{text}|{}", suffix.unwrap_or_default())
                     }
@@ -490,10 +479,8 @@ mod tests {
     /// and the list they frame shrinks to `.max(1)` — a wagon shown one row
     /// at a time, with nothing failing anywhere.
     ///
-    /// Swept rather than measured at one window, for the gear page's reason:
-    /// `ui_metrics` clamps the font at both ends, so below the clamp the box
-    /// keeps shrinking while the line height stops and the tightest window is
-    /// the smallest one.
+    /// Measured in the hub's content rect at 1280x720, the smallest window,
+    /// where the Trader tab has the fewest rows.
     #[test]
     fn the_caravan_pages_chrome_leaves_room_for_a_list() {
         /// Enough rows that the list still reads as one at the smallest
@@ -508,7 +495,7 @@ mod tests {
             .expect("the page is a list");
         let last = rows
             .iter()
-            .rposition(|r| matches!(r, Row::Item { .. }))
+            .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(..)))
             .expect("the page is a list");
         // The ends only, and deliberately: unlike the gear page this one
         // *scrolls* — `draw_popup` pages its `Row::Item` span — so a
@@ -518,16 +505,13 @@ mod tests {
         // what sits outside the span, and that is what this counts.
         let chrome = first + (rows.len() - 1 - last);
 
-        for h in (600..=2160).step_by(60) {
-            let m = ui_metrics(h as f32);
-            let cap = popup_max_rows(h as f32, PopupSize::Large, &m);
-            let left = cap.saturating_sub(chrome + REFUSAL_MAX_LINES);
-            assert!(
-                left >= USABLE_ROWS,
-                "the page's {chrome} rows of chrome leave {left} of a \
-                 {cap}-row popup for the wagon itself at {h}px"
-            );
-        }
+        let cap = crate::render::base_report::content_rows_at_720();
+        let left = cap.saturating_sub(chrome + REFUSAL_MAX_LINES);
+        assert!(
+            left >= USABLE_ROWS,
+            "the page's {chrome} rows of chrome leave {left} of a \
+             {cap}-row page for the wagon itself"
+        );
     }
 
     /// The offer list carries the same `WEP`/`ARM`/`MOD` column the sell
@@ -602,77 +586,13 @@ mod tests {
         );
     }
 
-    /// The other axis, and the one nothing clamps at all: `draw_row` clips a
-    /// row vertically and never horizontally, so a line past the right edge
-    /// is simply lost. On this page the tail of a row is the price — the
-    /// figure the row is read for.
-    ///
-    /// Measured with real text metrics through `with_painter`. The UI font is
-    /// DejaVu Sans Mono, not the map's unscii, so a character count would be
-    /// measuring the wrong face.
+    /// The Trader tab draws in the hub's content rect, narrower than the
+    /// popup it was: the widest page the assets can build still fits it.
     #[test]
-    fn no_caravan_row_overflows_its_popup() {
-        let rows = tallest_caravan_page(&mut census_game());
-        with_painter(|p| {
-            let m = ui_metrics(900.0);
-            // 0.88 is `PopupSize::Large`'s width fraction, against the
-            // 1440x900 geometry `ui_metrics` is calibrated for.
-            let room = 1440.0 * 0.88 - m.pad * 2.0;
-            for row in &rows {
-                let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
-                        t.clone()
-                    }
-                    // An `Item` row draws as three pieces and `suffix_x` lays
-                    // its suffix on the joined form, so it has to be measured
-                    // joined — measuring the head alone budgets for a row
-                    // narrower than the one that is drawn.
-                    Row::Item {
-                        text, tag, suffix, ..
-                    } => {
-                        let joined = item_text(text, tag.as_ref());
-                        match suffix {
-                            Some(s) => format!("{joined} {s}"),
-                            None => joined,
-                        }
-                    }
-                };
-                let drawn = p.measure_ui_advance(&line, m.font_size);
-                assert!(
-                    drawn <= room,
-                    "a caravan row overflows the page by {:.0}px \
-                     ({drawn:.0} drawn into {room:.0} of room):\n{line}",
-                    drawn - room
-                );
-            }
-        });
-    }
-
-    /// The refusal census in `mod.rs` can only say a caravan screen draws
-    /// *no* refusal, because a fresh run has no trader standing at the
-    /// counter. This is the other half: with a page to draw, it says it once.
-    #[test]
-    fn a_caravan_page_says_a_refusal_exactly_once() {
-        let mut game = census_game();
-        let rows = tallest_caravan_page(&mut game);
-        let (_, shapes) = with_painter(|p| {
-            let m = ui_metrics(900.0);
-            draw_popup(
-                "A wagon",
-                PopupSize::Large,
-                &rows,
-                Some("Requires Zone 3 first."),
-                p,
-                &m,
-            );
-        });
-        let said = crate::paint::painted_text(&shapes)
-            .iter()
-            .filter(|t| t.contains("Requires Zone 3 first."))
-            .count();
-        assert_eq!(
-            said, 1,
-            "the page painted the refusal {said} times, not once"
+    fn no_caravan_row_overflows_the_trader_tab() {
+        crate::render::base_report::assert_rows_fit(
+            &tallest_caravan_page(&mut census_game()),
+            "caravan",
         );
     }
 }

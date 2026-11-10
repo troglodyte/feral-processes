@@ -1,4 +1,4 @@
-//! The command pages (Build, Research, Trade, Compile): one row per thing
+//! The command pages (the party's Programs and Routines): one row per thing
 //! that can be done from where the party stands. The rows come from
 //! `App::command_rows`, the table the handler dispatches, so a label here can
 //! never name a different action from the one under the highlight.
@@ -48,24 +48,15 @@ mod tests {
         assert!(!selected(&out[0]) && selected(&out[1]) && !selected(&out[2]));
     }
 
-    /// Every label in `group_menu.rs`'s BUILD/RESEARCH/TRADE/COMPILE tables;
-    /// gui cannot build a `Game` to read them. Update with the tables.
+    /// Every label in `group_menu.rs`'s PROGRAM and ROUTINE tables; gui
+    /// cannot build a `Game` to read them. Update with the tables.
     const LABELS: &[&str] = &[
-        "Deploy a structure",
-        "Work a structure yourself",
-        "Upgrade a structure",
-        "Demolish a structure",
-        "Research",
-        "Routine research",
-        "Affix research",
-        "Weapon research",
-        "Study a program",
-        "Hold a program",
-        "Contracts",
-        "Caravan",
-        "Dispatch",
-        "Compile an item",
-        "Recipes",
+        "Read a manifest",
+        "Fuse two programs",
+        "Refactor a program",
+        "Develop a program",
+        "Install a routine",
+        "Extract a routine",
     ];
 
     #[test]

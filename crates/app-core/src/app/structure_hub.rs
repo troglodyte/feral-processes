@@ -1,16 +1,11 @@
-//! The structure hub: `[c]` beside a structure opens one frame for it, a rail
-//! of that structure's pages and the page on the right.
-//!
-//! `App::structure_hub` holds the cycle the engine reported
-//! (`Game::adjacent_structures`) and which structure is showing; each page is
-//! one existing screen, opened for that structure by its `_for` opener. An
-//! opener that finds its structure gone closes the hub rather than leaving the
-//! previous page up.
-//! Opening, cycling and turning pages spend no turn.
+//! `i`'s BESIDE YOU section: one entry per structure beside the party
+//! (`Game::adjacent_structures`), its tabs that structure's pages. Each tab
+//! is one existing screen, opened for that structure by its `_for` opener
+//! (`App::enter_structure_page`). Opening and turning spend no turn.
 
 use crate::*;
 
-/// The structure hub's page table: a rail title and the one screen each
+/// The BESIDE YOU page table: a rail title and the one screen each
 /// `StructurePage` is. Which pages a structure shows, and in what order, is
 /// the engine's answer (`AdjacentStructure::pages`).
 pub fn structure_page(page: StructurePage) -> &'static FixedPage {
@@ -130,154 +125,127 @@ pub fn structure_page(page: StructurePage) -> &'static FixedPage {
     }
 }
 
-/// The structures beside the party that the structure hub cycles through,
-/// and which one is showing. Re-read from the engine after every key and
-/// tick (`App::refresh_structure_hub`), so a structure that goes or a step
-/// that takes the party away is noticed.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StructureHub {
-    pub cycle: Vec<AdjacentStructure>,
-    pub at: usize,
+/// Every page a structure can show, in rail order: the set `refresh_beside`
+/// tests a stranded screen against.
+const STRUCTURE_PAGES: [StructurePage; 16] = [
+    StructurePage::Inventory,
+    StructurePage::Filter,
+    StructurePage::Recipe,
+    StructurePage::Tool,
+    StructurePage::Siphon,
+    StructurePage::Splice,
+    StructurePage::Grow,
+    StructurePage::Rebuild,
+    StructurePage::Build,
+    StructurePage::Built,
+    StructurePage::Weapon,
+    StructurePage::Salvage,
+    StructurePage::Compile,
+    StructurePage::Breed,
+    StructurePage::Hold,
+    StructurePage::Info,
+];
+
+/// The compass word for the side `structure` is first beside.
+fn side(structure: &AdjacentStructure) -> &'static str {
+    match structure.dir {
+        (0, -1) => "north",
+        (1, 0) => "east",
+        (0, 1) => "south",
+        _ => "west",
+    }
 }
 
-impl StructureHub {
-    /// The structure on show. `at` is kept inside `cycle` by every writer.
-    pub fn current(&self) -> &AdjacentStructure {
-        &self.cycle[self.at]
-    }
-
-    /// The compass word for the side the current structure is first beside.
-    pub fn side(&self) -> &'static str {
-        match self.current().dir {
-            (0, -1) => "north",
-            (1, 0) => "east",
-            (0, 1) => "south",
-            _ => "west",
-        }
-    }
-}
-
-/// The structure hub as a hub: its rail is the current structure's pages,
-/// opened fresh each time, and `Tab` steps the cycle.
-pub(crate) struct StructureHubKind;
-
-impl HubKind for StructureHubKind {
-    fn title(&self) -> &'static str {
-        "STRUCTURE"
-    }
-
-    /// The structure's name, then where it is in the cycle — the part that
-    /// must survive when a long name is elided.
-    fn heading(&self, app: &App) -> (String, String) {
-        match &app.structure_hub {
-            Some(open) => (
-                open.current().name.clone(),
-                format!(
-                    " — {} ({} of {})",
-                    open.side(),
-                    open.at + 1,
-                    open.cycle.len()
-                ),
-            ),
-            None => (self.title().to_string(), String::new()),
-        }
-    }
-
-    fn pages(&self, app: &App) -> Vec<HubPage> {
-        app.structure_hub
-            .as_ref()
-            .map(|h| {
-                h.current()
-                    .pages
-                    .iter()
-                    .map(|&p| structure_page(p).page())
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    fn remembers(&self) -> bool {
-        false
-    }
-
-    fn turn(&self, app: &mut App, page: usize) {
-        app.enter_structure_page(page);
-    }
-
-    fn leave(&self, app: &mut App) {
-        app.close_structure_hub();
-    }
-
-    fn key(&self, app: &mut App, key: GameKey) -> bool {
-        let by = match key {
-            GameKey::Tab => 1,
-            GameKey::ShiftTab => -1,
-            _ => return false,
-        };
-        app.step_structure(by);
-        true
-    }
-
-    /// `Tab` only when there is another structure to step to.
-    fn extra_keys(&self, app: &App) -> Vec<(&'static str, &'static str)> {
-        match &app.structure_hub {
-            Some(open) if open.cycle.len() > 1 => {
-                vec![("Tab", "next structure"), ("Shift+Tab", "previous")]
-            }
-            _ => Vec::new(),
-        }
-    }
+/// `i`'s BESIDE YOU entries: one per structure beside the party, in the
+/// engine's clockwise order, its tabs the structure's pages. Two of a name
+/// say which side they are on.
+pub(crate) fn beside_pages(app: &App, section: &'static str) -> Vec<HubPage> {
+    let Some(game) = &app.game else {
+        return Vec::new();
+    };
+    let beside = game.adjacent_structures();
+    let named = |name: &str| beside.iter().filter(|s| s.name == name).count();
+    beside
+        .iter()
+        .enumerate()
+        .map(|(i, s)| HubPage {
+            key: HubPageKey::Structure(s.entity),
+            title: if named(&s.name) > 1 {
+                format!("{} ({})", s.name, side(s))
+            } else {
+                s.name.clone()
+            },
+            glyph: None,
+            section: (i == 0).then_some(section),
+            tabs: s.pages.iter().map(|&p| structure_page(p).tabs[0]).collect(),
+            marked: false,
+            name_cut_at_end: true,
+        })
+        .collect()
 }
 
 impl App {
-    /// `[c]`: the hub for the structures beside the party, on the first
-    /// clockwise from north, opened by `App::open_hub` like any other. With
-    /// no structure beside, the pack's downed programs alone open the
-    /// transfer screen; the caller has already refused when there is nothing
-    /// at all.
-    pub(crate) fn open_structure_hub(&mut self) {
-        let Some(game) = &self.game else { return };
-        let cycle = game.adjacent_structures();
-        if cycle.is_empty() {
-            self.open_transfer_for(TransferAt::PackOnly);
-            return;
+    /// `[i]`: opened on the first structure beside the party (clockwise from
+    /// north) if there is one, else where the player left it.
+    pub(crate) fn open_inventory(&mut self) {
+        if !self.open_on_first_beside() {
+            self.open_hub(Hub::Inventory);
         }
-        self.structure_hub = Some(StructureHub { cycle, at: 0 });
-        self.open_hub(Hub::Structure);
     }
 
-    /// Opens the current structure's `page`th page: the screen's own opener,
-    /// leaving the cursor on whichever half it was. Whatever the previous
-    /// page held is dropped first, so a basket left by a page turn or `Tab`
-    /// is discarded.
-    pub(crate) fn enter_structure_page(&mut self, page: usize) {
+    /// `[c]`: `i`, opened on the first structure beside. With no structure
+    /// beside, the pack's downed programs alone open the transfer screen;
+    /// the caller has already refused when there is nothing at all.
+    pub(crate) fn open_beside(&mut self) {
+        if !self.open_on_first_beside() {
+            self.open_transfer_for(TransferAt::PackOnly);
+        }
+    }
+
+    /// Opens `i` on the first BESIDE YOU entry, cursor on the rail. Answers
+    /// whether there was one.
+    fn open_on_first_beside(&mut self) -> bool {
+        let Some(game) = &self.game else {
+            return false;
+        };
+        let Some(first) = game.adjacent_structures().first().map(|s| s.entity) else {
+            return false;
+        };
+        self.turn_hub_to(Hub::Inventory, &HubPageKey::Structure(first));
+        self.hub_on_rail = true;
+        true
+    }
+
+    /// The structure the held page names, `None` on any other page.
+    pub(crate) fn held_structure(&self) -> Option<Entity> {
+        match self.hub_place.as_ref()?.key {
+            HubPageKey::Structure(entity) => Some(entity),
+            _ => None,
+        }
+    }
+
+    /// Opens `entity`'s `page` through the screen's own opener, leaving the
+    /// cursor on whichever half it was. Whatever the previous page held is
+    /// dropped first, so a basket left by a page turn is discarded. An
+    /// opener that finds its structure gone leaves for the first page of
+    /// `i` rather than leaving the previous page up.
+    pub(crate) fn enter_structure_page(&mut self, entity: Entity, page: StructurePage) {
         self.drop_page_state();
-        let Some(hub) = &self.structure_hub else {
-            return;
-        };
-        let current = hub.current();
-        let entity = current.entity;
-        let Some(&page) = current.pages.get(page) else {
-            return;
-        };
         match page {
             StructurePage::Inventory => self.open_transfer_for(TransferAt::Structure(entity)),
             StructurePage::Filter => {
                 if !self.open_depot_filter_for(entity) {
-                    self.close_structure_hub();
-                    return;
+                    return self.leave_beside();
                 }
             }
             StructurePage::Recipe => {
                 if !self.open_machine_recipe_for(entity) {
-                    self.close_structure_hub();
-                    return;
+                    return self.leave_beside();
                 }
             }
             StructurePage::Tool => {
                 if !self.open_rig_tool_for(entity) {
-                    self.close_structure_hub();
-                    return;
+                    return self.leave_beside();
                 }
             }
             StructurePage::Siphon => self.open_siphon_for(entity),
@@ -312,70 +280,68 @@ impl App {
         };
     }
 
-    /// `Tab`: the next structure clockwise, wrapping, on its first page, the
-    /// cursor staying on whichever half it was.
-    pub(crate) fn step_structure(&mut self, by: isize) {
-        let Some(hub) = &mut self.structure_hub else {
-            return;
-        };
-        let count = hub.cycle.len() as isize;
-        hub.at = (hub.at as isize + by).rem_euclid(count) as usize;
-        self.enter_structure_page(0);
+    /// The `tab`th page of the structure `entity`, if it is still beside
+    /// the party and still offers that many.
+    pub(crate) fn beside_page(&self, entity: Entity, tab: usize) -> Option<StructurePage> {
+        self.game
+            .as_ref()?
+            .adjacent_structures()
+            .into_iter()
+            .find(|s| s.entity == entity)?
+            .pages
+            .get(tab)
+            .copied()
     }
 
-    /// Leaves the hub for the map.
-    pub(crate) fn close_structure_hub(&mut self) {
+    /// Leaves a structure that is gone or no longer offers its page: drops
+    /// what the page held and shows `i`'s first entry.
+    pub(crate) fn leave_beside(&mut self) {
         self.drop_page_state();
-        self.structure_hub = None;
-        self.mode = Mode::Playing;
+        self.turn_hub_to(Hub::Inventory, &HubPageKey::Named("You"));
     }
 
-    /// Re-reads the cycle from the engine, run after every key and tick. A
-    /// structure that is gone or no longer beside the party hands the hub to
-    /// the next one (the hub closes with none); a page the structure no
-    /// longer offers falls back to its first.
-    pub(crate) fn refresh_structure_hub(&mut self) {
-        let Some(hub) = &self.structure_hub else {
+    /// Run after every tick. A structure that goes or that the party walks
+    /// away from takes its entry with it and `settle_hub` moves the hold;
+    /// what its page held is dropped here, and a batch armed on it is
+    /// called off, since the hold moving would strand the `HandCraft` and
+    /// lose the unit in flight. A structure that stays but no longer offers
+    /// the tab on show falls back to its first.
+    pub(crate) fn refresh_beside(&mut self) {
+        let Some(held) = self.held_structure() else {
             return;
         };
-        let (was, old_at) = (hub.current().entity, hub.at);
-        let page = self.hub_at().map(|(_, p, _)| p);
-        let cycle = self
-            .game
-            .as_ref()
-            .map(|g| g.adjacent_structures())
-            .unwrap_or_default();
-        if cycle.is_empty() {
-            self.abort_compile_if_compiling();
-            self.close_structure_hub();
+        let shown = base_popup_parent(self.mode).unwrap_or(self.mode);
+        let Some(game) = &self.game else { return };
+        let here = game
+            .adjacent_structures()
+            .into_iter()
+            .find(|s| s.entity == held);
+        let Some(here) = here else {
+            if self.mode == Mode::Compiling {
+                self.abort_compile();
+            }
+            self.drop_page_state();
+            // Now, not at the next key: a tick can take the structure while
+            // no key is pressed, and the screen would draw its stale page.
+            self.settle_hub();
             return;
-        }
-        let kept = cycle.iter().position(|s| s.entity == was);
-        // The vanished structure's successor slides into its slot; past the
-        // end the cycle wraps to its first.
-        let at = kept.unwrap_or(if old_at < cycle.len() { old_at } else { 0 });
-        let page_kept =
-            |hub: &StructureHub, p: usize| hub.current().pages.get(p) == cycle[at].pages.get(p);
-        let keep = kept.is_some()
-            && page.is_none_or(|p| self.structure_hub.as_ref().is_some_and(|h| page_kept(h, p)));
-        self.structure_hub = Some(StructureHub { cycle, at });
-        if !keep {
-            self.abort_compile_if_compiling();
-            self.enter_structure_page(0);
-        }
-    }
-
-    /// A hub that closes or re-pages under a running batch would strand the
-    /// armed `HandCraft`, losing the unit in flight.
-    fn abort_compile_if_compiling(&mut self) {
-        if self.mode == Mode::Compiling {
-            self.abort_compile();
+        };
+        let stranded = STRUCTURE_PAGES
+            .iter()
+            .any(|&p| structure_page(p).tabs[0].mode == shown)
+            && !here
+                .pages
+                .iter()
+                .any(|&p| structure_page(p).tabs[0].mode == shown);
+        if stranded {
+            let first = here.pages[0];
+            self.enter_structure_page(held, first);
         }
     }
 
     /// Clears what the open page keeps on `App`, so a reopened page never
     /// shows the last structure's rows.
-    fn drop_page_state(&mut self) {
+    pub(crate) fn drop_page_state(&mut self) {
         self.clear_basket();
         self.depot_filter = None;
         self.machine_recipe = None;

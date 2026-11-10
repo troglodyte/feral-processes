@@ -4,7 +4,7 @@ use super::support::*;
 use crate::*;
 
 /// A base at zone 2 with a Mk1 Shield one tile east of the party.
-fn app_beside_a_shield(seed: u32) -> App {
+pub(crate) fn app_beside_a_shield(seed: u32) -> App {
     let mut app = app_in_base_with_programs(seed, 2);
     let game = app.game.as_mut().unwrap();
     game.dev_unlock_research(&"fortification".into())
@@ -29,7 +29,7 @@ fn hovering_a_shield_returns_its_circle() {
     let mut app = app_beside_a_shield(6101);
     let anchor = shield_anchor(&mut app);
 
-    app.set_map_hover(Some(anchor));
+    hover_tile(&mut app, Some(anchor));
     assert_eq!(
         app.reach_circles(),
         vec![ReachCircle {
@@ -40,7 +40,7 @@ fn hovering_a_shield_returns_its_circle() {
         }]
     );
 
-    app.set_map_hover(Some((anchor.0 + 1, anchor.1)));
+    hover_tile(&mut app, Some((anchor.0 + 1, anchor.1)));
     assert!(app.reach_circles().is_empty());
 }
 
@@ -68,29 +68,63 @@ fn deploying_a_shield_previews_four_circles() {
     assert!(app.reach_circles().is_empty(), "a depot has no circle");
 }
 
-#[test]
-fn upgrading_previews_the_next_radius() {
-    let mut app = app_beside_a_shield(6103);
-    let anchor = shield_anchor(&mut app);
-    app.mode = Mode::UpgradeDirection;
-
+/// The Info tab of a Shield's or Patch Node's BESIDE YOU entry draws the
+/// circle it has now and, faint beside it, the one the next tier would.
+fn assert_info_tab_shows(app: &mut App, anchor: (i32, i32), kind: ReachKind, now: u32, next: u32) {
+    assert_eq!(app.mode, Mode::StructureManifest);
+    let circle = |radius, style| ReachCircle {
+        anchor,
+        radius,
+        style,
+        kind,
+    };
     assert_eq!(
         app.reach_circles(),
-        vec![ReachCircle {
-            anchor,
-            radius: 6,
-            style: ReachCircleStyle::Preview,
-            kind: ReachKind::Shield
-        }]
+        vec![
+            circle(now, ReachCircleStyle::Hover),
+            circle(next, ReachCircleStyle::Preview)
+        ]
     );
+}
+
+#[test]
+fn a_shields_info_tab_previews_the_next_radius() {
+    let mut app = app_beside_a_shield(6103);
+    let anchor = shield_anchor(&mut app);
+    assert!(app.reach_circles().is_empty(), "nothing on the plain map");
+    on_the_info_tab_of(&mut app, "Shield");
+    assert_info_tab_shows(&mut app, anchor, ReachKind::Shield, 4, 6);
+}
+
+#[test]
+fn a_tier_1_patch_nodes_info_tab_previews_radius_6() {
+    let mut app = app_beside_a_patch_node(6113);
+    let anchor = app.game.as_mut().unwrap().view_patch_nodes()[0].anchor;
+    on_the_info_tab_of(&mut app, "Patch Node");
+    assert_info_tab_shows(&mut app, anchor, ReachKind::Patch, 4, 6);
+}
+
+#[test]
+fn another_structures_info_tab_draws_no_circle() {
+    // A Shield stands in reach of the party, so a circle that was not
+    // filtered to the held entry would be drawn for the Depot's tab.
+    let mut app = app_beside_a_shield(6115);
+    let game = app.game.as_mut().unwrap();
+    game.dev_set_free_build(true);
+    game.place_structure("depot", -1, 0, None)
+        .expect("a Depot deploys on the party's other side");
+    game.dev_set_free_build(false);
+    assert_eq!(app.game.as_mut().unwrap().view_shields().len(), 1);
+    on_the_info_tab_of(&mut app, "Depot");
+    assert!(app.reach_circles().is_empty());
 }
 
 #[test]
 fn a_shield_upgrade_skips_the_program_picker() {
     let mut app = app_beside_a_shield(6104);
-    app.mode = Mode::UpgradeDirection;
+    on_the_info_tab_of(&mut app, "Shield");
 
-    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('U'));
 
     assert_ne!(app.mode, Mode::BuildProgram);
     assert!(
@@ -99,7 +133,7 @@ fn a_shield_upgrade_skips_the_program_picker() {
             .unwrap()
             .adjacent_build_site(1, 0)
             .is_some(),
-        "the upgrade is filed by the direction press alone"
+        "the upgrade is filed by the key alone"
     );
 }
 
@@ -114,7 +148,7 @@ fn board_hover_circle_is_in_board_cells() {
     app.mode = Mode::TacticalBattle;
     let cell = (anchor.0 - origin.0, anchor.1 - origin.1);
 
-    app.set_map_hover(Some(cell));
+    hover_tile(&mut app, Some(cell));
     let circles = app.reach_circles();
 
     assert_eq!(circles.len(), 1);
@@ -123,7 +157,7 @@ fn board_hover_circle_is_in_board_cells() {
 }
 
 /// A base at zone 2 with a Patch Node one tile east of the party.
-fn app_beside_a_patch_node(seed: u32) -> App {
+pub(crate) fn app_beside_a_patch_node(seed: u32) -> App {
     let mut app = app_in_base_with_programs(seed, 2);
     let game = app.game.as_mut().unwrap();
     game.dev_unlock_research(&"fortification".into())
@@ -142,7 +176,7 @@ fn hovering_a_patch_node_shows_a_patch_circle() {
     let mut app = app_beside_a_patch_node(6111);
     let anchor = app.game.as_mut().unwrap().view_patch_nodes()[0].anchor;
 
-    app.set_map_hover(Some(anchor));
+    hover_tile(&mut app, Some(anchor));
 
     assert_eq!(
         app.reach_circles(),
@@ -170,27 +204,10 @@ fn deploy_preview_of_a_patch_node_shows_radius_4() {
 }
 
 #[test]
-fn upgrade_preview_of_a_tier_1_patch_node_shows_radius_6() {
-    let mut app = app_beside_a_patch_node(6113);
-    let anchor = app.game.as_mut().unwrap().view_patch_nodes()[0].anchor;
-    app.mode = Mode::UpgradeDirection;
-
-    assert_eq!(
-        app.reach_circles(),
-        vec![ReachCircle {
-            anchor,
-            radius: 6,
-            style: ReachCircleStyle::Preview,
-            kind: ReachKind::Patch
-        }]
-    );
-}
-
-#[test]
 fn a_shield_circle_is_still_kind_shield() {
     let mut app = app_beside_a_shield(6114);
     let anchor = shield_anchor(&mut app);
-    app.set_map_hover(Some(anchor));
+    hover_tile(&mut app, Some(anchor));
 
     assert_eq!(app.reach_circles()[0].kind, ReachKind::Shield);
 }

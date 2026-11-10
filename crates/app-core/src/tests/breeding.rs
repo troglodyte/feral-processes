@@ -149,7 +149,12 @@ fn the_base_report_offers_breeding_only_once_a_bay_stands() {
 /// and Right moves the cursor into it.
 fn open_breeding_in_the_base_report(app: &mut App) {
     app.handle_key(GameKey::Char('b'));
-    app.handle_key(GameKey::Char('['));
+    for _ in 0..BASE_REPORT_PAGES.len() + 1 {
+        if app.mode == Mode::Breed {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
     app.handle_key(GameKey::Right);
 }
 
@@ -182,7 +187,7 @@ fn breeding_from_the_base_report_stays_on_its_page() {
 fn the_c_hub_keeps_its_own_breed_page_with_a_bay_standing() {
     let mut app = app_with_a_breeding_bay(8115, 1, false);
     open_the_bay_in_the_hub(&mut app);
-    assert!(matches!(app.hub_at(), Some((Hub::Structure, ..))));
+    assert!(matches!(app.hub_at(), Some((Hub::Inventory, ..))));
 }
 
 #[test]
@@ -211,18 +216,15 @@ fn a_full_bay_offers_no_breeding() {
     assert_eq!(app.mode, Mode::Playing, "no free slot, so B only closes");
 }
 
-/// `[c]` beside the fixture's bay, `Tab` past the Extractor east of the
+/// `[c]` beside the fixture's bay, `]` past the Extractor east of the
 /// player (east comes before west), then into the page.
 fn open_the_bay_in_the_hub(app: &mut App) -> Entity {
     let bay = open_the_bay_sheet(app);
     app.pending_structure_manifest = None;
     app.mode = Mode::Playing;
     app.handle_key(GameKey::Char('c'));
-    app.handle_key(GameKey::Tab);
-    assert_eq!(
-        app.structure_hub.as_ref().map(|h| h.current().entity),
-        Some(bay)
-    );
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.held_structure(), Some(bay));
     app.handle_key(GameKey::Right);
     bay
 }
@@ -247,7 +249,7 @@ fn breeding_from_the_hub_lands_on_the_bays_info_page() {
     assert_eq!(app.status_line, None);
     assert_eq!(app.mode, Mode::StructureManifest);
     assert_eq!(app.pending_structure_manifest, Some(bay));
-    assert!(app.structure_hub.is_some(), "still in the hub");
+    assert!(app.held_structure().is_some(), "still in the hub");
     assert_eq!(seeds(&mut app), 0);
 }
 
@@ -268,7 +270,7 @@ fn a_full_bays_breed_page_refuses_a_pick() {
     pick_row(&mut app, 0);
     pick_row(&mut app, 0);
     app.handle_key(GameKey::Enter);
-    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::ShiftTab);
     assert_eq!(app.mode, Mode::Breed);
     pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::Breed, "nothing is picked");

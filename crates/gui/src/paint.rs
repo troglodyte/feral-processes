@@ -21,9 +21,10 @@
 //! `baseline_offset`.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use bevy_egui::egui;
+use feral_processes_app_core::PointerHit;
 
 /// Straight RGBA, each channel 0.0–1.0, non-premultiplied.
 ///
@@ -292,6 +293,10 @@ impl SpriteTable {
 /// through a screen and tear its layout.
 pub struct Painter {
     painter: egui::Painter,
+    /// Where `target` records this frame's pointer targets. Owned by the
+    /// pointer reader and lent for the frame; a painter nobody lent one to
+    /// records into a list of its own that nothing reads.
+    targets: Targets,
     width: f32,
     height: f32,
     delta: f32,
@@ -306,7 +311,27 @@ pub struct Painter {
     anim_now: Option<f64>,
 }
 
+/// One frame's pointer targets, in draw order: later entries are on top.
+/// Shared by handle because `clipped` hands its closure a second `Painter`.
+pub type Targets = Arc<Mutex<Vec<(Rect, PointerHit)>>>;
+
 impl Painter {
+    /// Records `rect` as the place `hit` is on screen this frame. The draw
+    /// that places a thing is the only code that knows its rect, so this is
+    /// how a pointer finds it (ADR 0046); nothing here is graphics.
+    pub fn target(&self, rect: Rect, hit: PointerHit) {
+        self.targets
+            .lock()
+            .expect("the target list is never held across a panic")
+            .push((rect, hit));
+    }
+
+    /// Records this painter's targets into `targets`, the reader's list.
+    pub fn recording_into(mut self, targets: &Targets) -> Self {
+        self.targets = Arc::clone(targets);
+        self
+    }
+
     pub fn for_frame(ctx: &egui::Context, delta: f32, sprites: Arc<SpriteTable>) -> Self {
         // The background layer, so the game draws beneath any egui window —
         // there are none today, but a debug overlay shouldn't have to fight
@@ -317,6 +342,7 @@ impl Painter {
         let screen = painter.clip_rect();
         Self {
             painter,
+            targets: Targets::default(),
             width: screen.width(),
             height: screen.height(),
             delta,
@@ -433,6 +459,7 @@ impl Painter {
     pub fn clipped(&self, x: f32, y: f32, w: f32, h: f32, f: impl FnOnce(&Painter)) {
         f(&Painter {
             painter: self.painter.with_clip_rect(rect_of(x, y, w, h)),
+            targets: Arc::clone(&self.targets),
             width: self.width,
             height: self.height,
             delta: self.delta,
@@ -693,6 +720,28 @@ pub(crate) fn with_painter<R>(
     let out = f(&Painter::for_frame(&ctx, 1.0 / 60.0, Arc::default()));
     let shapes = ctx.end_pass().shapes;
     (out, shapes)
+}
+
+/// `with_painter` for a draw that registers pointer targets: what `f`
+/// recorded, in draw order.
+#[cfg(test)]
+pub(crate) fn with_targets(f: impl FnOnce(&Painter)) -> Vec<(Rect, PointerHit)> {
+    let ctx = egui::Context::default();
+    install_fonts(&ctx);
+    ctx.begin_pass(egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1440.0, 900.0),
+        )),
+        ..Default::default()
+    });
+    let targets = Targets::default();
+    f(&Painter::for_frame(&ctx, 1.0 / 60.0, Arc::default()).recording_into(&targets));
+    let _ = ctx.end_pass();
+    Arc::try_unwrap(targets)
+        .expect("the painter that recorded into it is gone")
+        .into_inner()
+        .expect("no panic held the list")
 }
 
 /// `with_painter`, with sprites loaded — for the one operation that has a

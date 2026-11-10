@@ -11,7 +11,7 @@ use feral_processes_engine::CraftRecipe;
 const CRAFT_QUANTITY_MAX: u32 = 9999;
 
 /// The recipes the Compile list offers: everything `Game::craft_recipes`
-/// holds at a bench (the structure hub's Compile page), and only the
+/// holds at a bench (a BESIDE YOU entry's Compile tab), and only the
 /// field recipes — those naming no bench — anywhere else. **Every reader of
 /// the list goes through this**, so the row a key picks is the row the
 /// screen draws and the count the filter reports.
@@ -35,20 +35,21 @@ pub fn craft_visible(at_bench: bool, game: &Game, filter: &str) -> Vec<usize> {
 }
 
 impl App {
-    /// Where the compile flow lands when it ends or is refused: the bench
-    /// page it was opened from, else the map.
+    /// Where the compile flow lands when it ends or is refused: the hub
+    /// page it was opened from (the bench's, or the base report's Compile
+    /// tab), else the map.
     pub(crate) fn compile_exit_mode(&self) -> Mode {
-        if self.structure_hub.is_some() {
+        if self.hub_for(Mode::Craft).is_some() {
             Mode::Craft
         } else {
             Mode::Playing
         }
     }
 
-    /// Whether the Compile list is the Workbench page's: the structure hub
-    /// is the only way to stand at a bench.
+    /// Whether the Compile list is a Workbench entry's: a BESIDE YOU entry
+    /// in `i` is the only way to stand at a bench.
     pub fn craft_at_bench(&self) -> bool {
-        self.structure_hub.is_some()
+        self.held_structure().is_some() && self.hub_at().is_some()
     }
 
     pub(crate) fn handle_craft_key(&mut self, key: GameKey) {

@@ -2,7 +2,7 @@
 //! gear or disk family and one per remaining item.
 //!
 //! The table reads `item | denied | allowed | held`; `-` denies a row and
-//! `+` allows it, the transfer page's keys, because the structure hub
+//! `+` allows it, the transfer page's keys, because `i`'s hub
 //! spends the bare arrows on its own navigation.
 
 use super::popup::*;
@@ -44,7 +44,7 @@ pub(super) fn draw_depot_filter(
     draw_popup("Depot filter", PopupSize::Large, &body, refusal, painter, m);
 }
 
-/// The screen's rows, shared by the popup and the structure hub's page.
+/// The screen's rows, shared by the popup and the BESIDE YOU tab.
 pub(super) fn page_rows(screen: Option<&DepotFilterScreen>, selected: usize) -> Vec<Row> {
     match screen {
         Some(screen) => body_rows(screen, selected),

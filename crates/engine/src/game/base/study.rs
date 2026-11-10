@@ -294,6 +294,8 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
+        // The Study tab is open from the Stack too; the pen is on the field.
+        self.require_field()?;
         let player = self.player_entity();
         let owner = self
             .world
@@ -387,6 +389,8 @@ impl Game {
         if self.is_game_over().is_some() || self.has_active_battle() {
             return Err("Can't do that right now.".into());
         }
+        // The Study tab is open from the Stack too; the pen is on the field.
+        self.require_field()?;
         if self.world.get::<components::UnderStudy>(program).is_none() {
             return Err("That program isn't pinned for study.".into());
         }

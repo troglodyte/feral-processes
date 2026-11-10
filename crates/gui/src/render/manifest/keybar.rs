@@ -2,6 +2,7 @@
 //! groups, dropped whole from the end when the line is too narrow.
 
 use super::*;
+use feral_processes_app_core::GameKey;
 use hud::log_frame::keycap;
 use hud::strip::{Piece, fitting_joined, sep};
 
@@ -100,6 +101,79 @@ pub(super) fn draw_keybar(rect: Rect, k: &KeybarState, painter: &Painter, m: &Me
 /// The dossier's bar, in the same place and drawn the same way.
 pub(super) fn draw_dossier_keybar(rect: Rect, cyclable: bool, painter: &Painter, m: &Metrics) {
     draw_groups(rect, &dossier_groups(cyclable), painter, m);
+}
+
+/// The key a keybar label names: what it spells is the key the handler
+/// takes, so a click can press it.
+fn key_named(name: &str) -> Option<GameKey> {
+    Some(match name {
+        "↑" => GameKey::Up,
+        "↓" => GameKey::Down,
+        "←" => GameKey::Left,
+        "→" => GameKey::Right,
+        "Tab" => GameKey::Tab,
+        "Esc" => GameKey::Esc,
+        "Enter" => GameKey::Enter,
+        "Bksp" => GameKey::Backspace,
+        _ => {
+            let mut chars = name.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) => GameKey::Char(c),
+                _ => return None,
+            }
+        }
+    })
+}
+
+/// The keys a keycap's label stands for, one per part of `↑/↓`, `[ ]` or
+/// `x/d`; empty when any part is not a key (`1–9`), so a range is never
+/// half clickable.
+fn keys_of(label: &str) -> Vec<GameKey> {
+    let parts: Vec<&str> = label
+        .split(|c: char| c == '/' || c.is_whitespace())
+        .filter(|p| !p.is_empty())
+        .collect();
+    parts
+        .iter()
+        .map(|p| key_named(p))
+        .collect::<Option<_>>()
+        .unwrap_or_default()
+}
+
+/// Where each clickable keycap of `groups` lands in a bar drawn into `rect`,
+/// by the same fit and advance `draw_groups` lays the line out with. A
+/// one-key cap takes its verb too; a cap of several keys takes its own text,
+/// split evenly between them.
+pub(in crate::render) fn keycap_targets(
+    rect: Rect,
+    groups: &[Vec<Piece>],
+    painter: &Painter,
+    m: &Metrics,
+) -> Vec<(Rect, GameKey)> {
+    let pieces = fitted_groups(groups, rect.w, painter, m);
+    let advance = |text: &str| painter.measure_ui_advance(text, m.small());
+    let mut out = Vec::new();
+    let mut x = rect.x;
+    for (i, (text, _, bold)) in pieces.iter().enumerate() {
+        let key_w = advance(text);
+        let verb_w = match pieces.get(i + 1) {
+            Some((verb, _, false)) => advance(verb),
+            _ => 0.0,
+        };
+        let keys = if *bold { keys_of(text) } else { Vec::new() };
+        match keys.as_slice() {
+            [] => {}
+            [only] => out.push((Rect::new(x, rect.y, key_w + verb_w, rect.h), *only)),
+            many => {
+                let each = key_w / many.len() as f32;
+                for (n, key) in many.iter().enumerate() {
+                    out.push((Rect::new(x + each * n as f32, rect.y, each, rect.h), *key));
+                }
+            }
+        }
+        x += key_w;
+    }
+    out
 }
 
 pub(in crate::render) fn draw_groups(

@@ -1,7 +1,7 @@
 //! The recipe menu: what the Extractor, Factory, Assembler or Printer
 //! beside the party makes.
 //!
-//! A page of the structure hub (`app/structure_hub.rs`) on a machine, re-read
+//! A tab of a BESIDE YOU entry in `i` (`app/structure_hub.rs`) on a machine, re-read
 //! on every key; the hub closes it the moment the machine stops being one
 //! the player is standing at.
 //!

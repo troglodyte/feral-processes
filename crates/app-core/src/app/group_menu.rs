@@ -1,6 +1,7 @@
-//! The hub command pages — the base's four (`b`, then Build / Research /
-//! Trade / Compile) and the party's two (`p`, then Programs / Routines) —
-//! and the rule that decides which of their rows are on screen right now.
+//! The party's two hub command pages (Programs / Routines on `i`) and the
+//! rule that decides which of their rows are on screen right now. The base's
+//! launchers became the tabs they opened, and its structure verbs keys on a
+//! structure's Info tab (hub merge, ADR 0045).
 //!
 //! These exist because the map screen bound 27 keys. A row here is the
 //! *only* way to reach the screen behind it: the old direct keys were
@@ -24,219 +25,13 @@ pub struct GroupMenuRow {
 struct GroupEntry {
     label: &'static str,
     target: Mode,
-    /// Where this row's action is legal. A field rather than an
-    /// `is_underground()` check folded into each `available` closure, because
-    /// it has to be kept in step with the engine's `require_field` callers
-    /// and a table is what makes that checkable.
-    locality: Locality,
     available: fn(&mut App) -> bool,
 }
-
-/// Where a group-menu row's action is legal.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Locality {
-    /// Legal wherever the party is standing.
-    Anywhere,
-    /// Anywhere on the field — one of `Game::require_field`'s callers.
-    Field,
-}
-
-impl Locality {
-    /// Whether a row with this locality belongs on screen right now.
-    fn permits(self, app: &App) -> bool {
-        let Some(game) = app.game.as_ref() else {
-            return self == Locality::Anywhere;
-        };
-        match self {
-            Locality::Anywhere => true,
-            Locality::Field => !game.is_underground(),
-        }
-    }
-}
-
-const BUILD_ROWS: &[GroupEntry] = &[
-    GroupEntry {
-        label: "Deploy a structure",
-        target: Mode::Build,
-        locality: Locality::Field,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| !g.buildable_structure_defs().is_empty())
-        },
-    },
-    GroupEntry {
-        label: "Work a structure yourself",
-        target: Mode::WorkStructure,
-        locality: Locality::Field,
-        available: |app| !app.workable_structures().is_empty(),
-    },
-    GroupEntry {
-        label: "Upgrade a structure",
-        target: Mode::UpgradeDirection,
-        locality: Locality::Field,
-        // The *scan radius*, where the screen it opens reaches one tile.
-        // Deliberately the wider question, `Mode::Remove`'s own row's shape:
-        // a row that appeared only while you were already standing beside a
-        // machine would leave a player who has never stood beside one
-        // unable to learn the verb exists. Aiming at a tile with nothing on
-        // it is a sentence, not a dead end.
-        available: |app| !app.upgradeable_structures().is_empty(),
-    },
-    GroupEntry {
-        label: "Demolish a structure",
-        target: Mode::Remove,
-        locality: Locality::Field,
-        available: |app| !app.nearby_structures().is_empty(),
-    },
-];
-
-const RESEARCH_ROWS: &[GroupEntry] = &[
-    GroupEntry {
-        label: "Research",
-        target: Mode::Research,
-        locality: Locality::Anywhere,
-        available: |app| {
-            // `has_research_tree`, not `research_nodes`: this closure runs
-            // every frame, and the full derivation counts every node's bill
-            // against every shelf and walks every material chain.
-            app.game
-                .as_ref()
-                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Base))
-        },
-    },
-    GroupEntry {
-        label: "Routine research",
-        target: Mode::RoutineResearch,
-        locality: Locality::Anywhere,
-        // `has_research_tree`, not "is anything listed": the row must stay
-        // reachable while the tree is closed or nothing is discovered yet,
-        // because the screen behind it is what tells the player that.
-        available: |app| {
-            app.game.as_ref().is_some_and(|g| {
-                g.has_research_tree(feral_processes_engine::ResearchTree::Routines)
-            })
-        },
-    },
-    GroupEntry {
-        label: "Affix research",
-        target: Mode::AffixResearch,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Affixes))
-        },
-    },
-    GroupEntry {
-        label: "Weapon research",
-        target: Mode::WeaponResearch,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| g.has_research_tree(feral_processes_engine::ResearchTree::Weapons))
-        },
-    },
-    GroupEntry {
-        // **One row, not two.** It reads as unpin when a subject is already
-        // pinned — `render::draw_pin_subject` is what decides that, off
-        // `Game::pinned_subject` — because "at most one subject per
-        // station" is the rule and a second row would be a second place to
-        // state it.
-        label: "Study a program",
-        target: Mode::PinSubject,
-        locality: Locality::Field,
-        available: |app| {
-            app.game
-                .as_ref()
-                .is_some_and(|g| g.study_station().is_some())
-        },
-    },
-    GroupEntry {
-        // Listed whenever a Holding Cell stands, adjacent or not: the
-        // picker's rows say `NoFreeCell` when the party is not beside one,
-        // so the screen is what tells the player where to stand.
-        label: "Hold a program",
-        target: Mode::PinPrisoner,
-        locality: Locality::Field,
-        available: |app| app.game.as_ref().is_some_and(|g| g.has_holding_cell()),
-    },
-];
-
-const TRADE_ROWS: &[GroupEntry] = &[
-    GroupEntry {
-        // Not base-only, and deliberately so: mission status is the
-        // question worth answering four frames down, and the board itself is
-        // a property of the sector rather than of where the party is
-        // standing. Off the base the screen opens read-only — see
-        // `Game::broker_reach`.
-        //
-        // `broker_reach` rather than `contract_board`, which is what this row
-        // used to ask: this closure runs every frame the menu is open, and a
-        // board that no longer refuses on distance rolls every template and
-        // samples the habitat ring before it can answer. The proximity check
-        // used to short-circuit all of that.
-        label: "Contracts",
-        target: Mode::Contracts,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game.as_mut().is_some_and(|g| {
-                g.broker_reach() != BrokerReach::NoBroker || !g.active_contracts().is_empty()
-            })
-        },
-    },
-    GroupEntry {
-        // Not `Locality::Field`, and the row is not `surface_only` either:
-        // `caravan_reach` already measures reach, so a second locality
-        // clause here would be the same fact read twice and the redundant
-        // half is the one that rots.
-        //
-        // `caravan_reach` rather than `caravan_view`, which is the trap the
-        // Contracts row above records: this closure runs every frame the menu
-        // is open, and the view rolls a whole shelf — gear copies, affixes
-        // and all — before it can answer a question about where the player is
-        // standing.
-        label: "Caravan",
-        target: Mode::Caravan,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| g.caravan_reach() == CaravanReach::AtCaravan)
-        },
-    },
-    GroupEntry {
-        // Not `Locality::Field`, and for the Caravan row's reason directly
-        // above: `dispatch_reach` already measures reach, so a second
-        // locality clause here would be the same fact read twice.
-        label: "Dispatch",
-        target: Mode::Dispatch,
-        locality: Locality::Anywhere,
-        available: |app| {
-            app.game
-                .as_mut()
-                .is_some_and(|g| g.dispatch_reach() != DispatchReach::NoRelay)
-        },
-    },
-];
-
-const COMPILE_ROWS: &[GroupEntry] = &[GroupEntry {
-    label: "Compile an item",
-    target: Mode::Craft,
-    locality: Locality::Anywhere,
-    available: |app| {
-        app.game
-            .as_ref()
-            .is_some_and(|g| !craft_list(false, g).is_empty())
-    },
-}];
 
 const PROGRAM_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Read a manifest",
         target: Mode::Manifest,
-        locality: Locality::Anywhere,
         available: |app| !app.manifest_subjects().is_empty(),
     },
     GroupEntry {
@@ -244,7 +39,6 @@ const PROGRAM_ROWS: &[GroupEntry] = &[
         // has nothing to fuse with and the second picker would be empty.
         label: "Fuse two programs",
         target: Mode::Fuse,
-        locality: Locality::Anywhere,
         // Fusion is a researched capability (Task 10, `Game::fusion_unlocked`)
         // — the research alone, no structure and no locality change, so this
         // is a second term on the same closure rather than a new row.
@@ -261,7 +55,6 @@ const PROGRAM_ROWS: &[GroupEntry] = &[
         // `Position`, so it works four frames down.
         label: "Refactor a program",
         target: Mode::Refactor,
-        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -275,7 +68,6 @@ const PROGRAM_ROWS: &[GroupEntry] = &[
         // spend. Not `base_only`, like the refactor row above it.
         label: "Develop a program",
         target: Mode::Develop,
-        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -288,7 +80,6 @@ const ROUTINE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Install a routine",
         target: Mode::RoutineTarget,
-        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -298,7 +89,6 @@ const ROUTINE_ROWS: &[GroupEntry] = &[
     GroupEntry {
         label: "Extract a routine",
         target: Mode::Extract,
-        locality: Locality::Anywhere,
         available: |app| {
             app.game
                 .as_mut()
@@ -310,10 +100,6 @@ const ROUTINE_ROWS: &[GroupEntry] = &[
 /// The static table behind a command page, or `None` for any other mode.
 fn command_table(page: Mode) -> Option<&'static [GroupEntry]> {
     match page {
-        Mode::BaseBuild => Some(BUILD_ROWS),
-        Mode::BaseResearch => Some(RESEARCH_ROWS),
-        Mode::BaseTrade => Some(TRADE_ROWS),
-        Mode::BaseCompile => Some(COMPILE_ROWS),
         Mode::PartyPrograms => Some(PROGRAM_ROWS),
         Mode::PartyRoutines => Some(ROUTINE_ROWS),
         _ => None,
@@ -337,8 +123,8 @@ impl App {
         Some(self.group_rows(table))
     }
 
-    /// A row survives when the party is standing where its action is legal,
-    /// and when the screen it opens would have at least one row of its own.
+    /// A row survives when the screen it opens would have at least one row
+    /// of its own.
     ///
     /// That second clause deliberately asks only the *first* screen a row
     /// opens. A row can therefore open on a screen whose own next step is
@@ -347,14 +133,8 @@ impl App {
     /// need a bespoke predicate per row, which is the duplication this table
     /// exists to avoid.
     fn group_rows(&mut self, entries: &'static [GroupEntry]) -> Vec<GroupMenuRow> {
-        // The locality pass is resolved up front rather than chained into
-        // the same iterator as `available`: both read `self`, and only the
-        // second one needs it mutably.
-        let here: Vec<&GroupEntry> = entries
+        entries
             .iter()
-            .filter(|e| e.locality.permits(self))
-            .collect();
-        here.into_iter()
             .filter(|e| (e.available)(self))
             .map(|e| GroupMenuRow {
                 label: e.label,
@@ -368,10 +148,6 @@ impl App {
     pub(crate) fn open_row_target(&mut self, target: Mode) {
         match target {
             Mode::Manifest => self.open_menu_manifest(),
-            Mode::Build => {
-                self.build_category = None;
-                self.mode = Mode::Build;
-            }
             target => self.mode = target,
         }
     }

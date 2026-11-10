@@ -56,11 +56,6 @@ fn a_wide_structure_touching_two_sides_appears_once_at_the_first() {
     // the north and the east neighbour (it overlaps the party's own tile,
     // the only way a 2x2 can touch two orthogonal sides).
     let node = with_shelf(&mut game, "research_node", 0, -1);
-    game.world
-        .get_mut::<Stock>(node)
-        .unwrap()
-        .output
-        .insert(ItemId::from(ids::CORE_FRAGMENT), 1);
     assert_eq!(game.structure_footprint(&"research_node".to_string()), 2);
     let found = game.adjacent_structures();
     assert_eq!(found.len(), 1);
@@ -69,10 +64,36 @@ fn a_wide_structure_touching_two_sides_appears_once_at_the_first() {
 }
 
 #[test]
-fn a_wall_beside_you_is_not_in_the_cycle() {
+fn a_wall_or_a_door_beside_you_is_not_in_the_cycle() {
     let mut game = fresh();
     spawn_structure_at(&mut game, "wall", 1, 0);
+    spawn_structure_at(&mut game, "door", -1, 0);
     assert!(game.adjacent_structures().is_empty());
+}
+
+#[test]
+fn the_home_a_broker_a_market_and_a_turret_are_not_beside_you() {
+    for kind in ["home", "contract_broker", "black_market", "turret"] {
+        let mut game = fresh();
+        spawn_structure_at(&mut game, kind, 1, 0);
+        assert!(game.adjacent_structures().is_empty(), "{kind} is no entry");
+    }
+}
+
+#[test]
+fn an_info_only_structure_is_beside_you_when_a_verb_acts_on_it() {
+    for (kind, x, y) in [
+        ("patch_node", 1, 0),
+        ("shield", 1, 0),
+        ("research_node", 0, -1),
+    ] {
+        let mut game = fresh();
+        let e = spawn_structure_at(&mut game, kind, x, y);
+        let found = game.adjacent_structures();
+        assert_eq!(found.len(), 1, "{kind} has an entry");
+        assert_eq!(found[0].entity, e);
+        assert_eq!(found[0].pages, vec![Info], "{kind} is Info-only");
+    }
 }
 
 #[test]

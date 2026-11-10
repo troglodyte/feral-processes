@@ -64,14 +64,14 @@ pub(super) fn perks_menu_rows(
 }
 
 /// A section heading, and the blank line that sets it off from the section
-/// above it. `Row::Item` rather than `Row::TextColored` for
+/// above it. `Row::Detail` rather than `Row::TextColored` for
 /// `description_rows`' reason — `popup_layout` cuts the scrollable body at
-/// the last `Row::Item`, so a heading drawn as text would be torn off its
-/// perks and pinned to the foot of the box, where it scrolls with nothing.
+/// the last `Row::Item` or `Detail`, so a heading drawn as text would be
+/// torn off its perks and pinned.
 ///
-/// Nothing ever selects one: `App` tracks an index into the *perks*, and
-/// `perks_menu_rows` only ever marks a perk row `selected`. So a heading is
-/// an item row that is never an option, which is exactly what a heading is.
+/// **Not a `Row::Item`**: `App` tracks an index into the *perks*, and a
+/// heading numbered as an item would shift every perk's click ordinal by the
+/// headings above it (`as_detail`).
 ///
 /// An empty name draws nothing at all, not a blank heading. That is the
 /// trailing bucket `PerkDb::grouped` puts an ungrouped perk in, and with no
@@ -83,9 +83,9 @@ fn heading_rows(name: &str, gap_above: bool) -> Vec<Row> {
     }
     let mut rows = Vec::new();
     if gap_above {
-        rows.push(item_row("", false));
+        rows.push(Row::Detail(String::new(), TEXT_DIM));
     }
-    rows.push(colored_item_row(name.to_string(), false, CYAN));
+    rows.push(Row::Detail(name.to_string(), CYAN));
     rows
 }
 
@@ -286,9 +286,8 @@ pub(super) fn material_rows(materials: &[ResearchMaterial], columns: usize) -> V
     wrap_text(&line, columns)
         .into_iter()
         .map(|l| {
-            colored_item_row(
+            Row::Detail(
                 format!("{DESCRIPTION_INDENT}{l}"),
-                false,
                 if short { LOCKED_BY_PREREQ } else { TEXT_DIM },
             )
         })
@@ -304,14 +303,14 @@ pub(super) fn material_rows(materials: &[ResearchMaterial], columns: usize) -> V
 /// (the Research Data header), which is exactly what a conversion is about.
 /// It is not a state colour, so it cannot collide with `row_color`'s five.
 ///
-/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
-/// the last item row to the foot of the box, where it would be torn off the
+/// `Row::Detail`s, `material_rows`' reason: `popup_layout` pins anything
+/// after the body to the foot of the box, where it would be torn off the
 /// node it belongs to.
 pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row> {
     conversions
         .iter()
         .flat_map(|line| wrap_text(line, columns))
-        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, CYAN))
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), CYAN))
         .collect()
 }
 
@@ -324,13 +323,13 @@ pub(super) fn conversion_rows(conversions: &[String], columns: usize) -> Vec<Row
 /// Cyan for `conversion_rows`' reason and the same meaning: it names the
 /// concrete thing the node buys, against the dim prose around it.
 ///
-/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
-/// the last item row to the foot of the box.
+/// `Row::Detail`s, `material_rows`' reason: `popup_layout` pins anything
+/// after the body to the foot of the box.
 pub(super) fn unlock_rows(unlocks: Option<&String>, columns: usize) -> Vec<Row> {
     unlocks
         .into_iter()
         .flat_map(|line| wrap_text(line, columns))
-        .map(|line| colored_item_row(format!("{DESCRIPTION_INDENT}{line}"), false, CYAN))
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), CYAN))
         .collect()
 }
 
@@ -387,19 +386,13 @@ pub(super) fn research_header(active: Option<&(String, u32, u32)>) -> String {
 /// wrapped, so this is the only place it fits. Amber, `row_color`'s reason: it
 /// is a wall the player clears by building what it names.
 ///
-/// `Row::Item`s, `material_rows`' reason: `popup_layout` pins anything after
-/// the last item row to the foot of the box.
+/// `Row::Detail`s, `material_rows`' reason: `popup_layout` pins anything
+/// after the body to the foot of the box.
 pub(super) fn block_rows(blocked_by: Option<&String>, columns: usize) -> Vec<Row> {
     blocked_by
         .into_iter()
         .flat_map(|line| wrap_text(line, columns))
-        .map(|line| {
-            colored_item_row(
-                format!("{DESCRIPTION_INDENT}{line}"),
-                false,
-                LOCKED_BY_PREREQ,
-            )
-        })
+        .map(|line| Row::Detail(format!("{DESCRIPTION_INDENT}{line}"), LOCKED_BY_PREREQ))
         .collect()
 }
 
@@ -505,13 +498,25 @@ pub(super) fn draw_research_menu(
     m: &Metrics,
     dev_unlock: bool,
 ) {
+    let (title, rows) = research_page_rows(game, tree, selected, dev_unlock);
+    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// A research tree's list view as `(title, rows)`, shared by the popup and
+/// the base report's Research tabs so the two cannot list different nodes.
+pub(super) fn research_page_rows(
+    game: &Game,
+    tree: ResearchTree,
+    selected: usize,
+    dev_unlock: bool,
+) -> (&'static str, Vec<Row>) {
     let currency = game.item_name(&game.research_currency()).to_string();
     let nodes = game.research_nodes(tree);
     let active = game.active_research_progress();
     let train = game
         .base_ai_view()
         .filter(|view| view.training_available && tree == ResearchTree::Base);
-    let (title, rows) = match tree {
+    match tree {
         ResearchTree::Base => {
             let mut rows = research_menu_rows(
                 &nodes,
@@ -583,8 +588,7 @@ pub(super) fn draw_research_menu(
                 dev_unlock,
             ),
         ),
-    };
-    draw_popup(title, PopupSize::Large, &rows, refusal, painter, m);
+    }
 }
 
 /// The Weapons tree's rows, or the line saying the tree is closed.
@@ -601,7 +605,15 @@ fn weapon_research_rows(
     }
     // An open tree always lists its first frames, so an empty list is the
     // closed tree.
-    vec![text_row(game.weapon_tree_hint().unwrap_or_default())]
+    // Wrapped, as the Compile list wraps the same hint: one line of it is
+    // wider than the hub's content rect at 1280x720.
+    wrap_text(
+        &game.weapon_tree_hint().unwrap_or_default(),
+        DESCRIBE_WRAP_COLUMNS,
+    )
+    .into_iter()
+    .map(text_row)
+    .collect()
 }
 
 /// The one confirm page both respecs draw, so the perk wipe and the talent
@@ -823,7 +835,7 @@ mod tests {
         let rows = research_menu_rows(&[node], 0, "Research Data", None, false, None);
         let at = |needle: &str| {
             rows.iter()
-                .position(|r| matches!(r, Row::Item { text, .. } if text.contains(needle)))
+                .position(|r| matches!(r, Row::Item { text, .. } | Row::Detail(text, _) if text.contains(needle)))
                 .unwrap_or_else(|| panic!("{needle:?} must reach the screen as a row"))
         };
 
@@ -833,7 +845,7 @@ mod tests {
             "the unlocks line leads both the prose and the conversions"
         );
         assert!(
-            matches!(&rows[unlocks], Row::Item { color, .. } if *color == CYAN),
+            matches!(&rows[unlocks], Row::Detail(_, color) if *color == CYAN),
             "cyan, the colour this screen already spends on what a node buys"
         );
     }
@@ -864,20 +876,20 @@ mod tests {
 
         let conversion = rows
             .iter()
-            .find(|r| matches!(r, Row::Item { text, .. } if text.contains("into Blank Substrate")))
+            .find(|r| matches!(r, Row::Detail(text, _) if text.contains("into Blank Substrate")))
             .expect("the conversion must reach the screen as a row of its own");
         assert!(
-            matches!(conversion, Row::Item { color, .. } if *color == CYAN),
+            matches!(conversion, Row::Detail(_, color) if *color == CYAN),
             "a conversion takes cyan so it is findable against the dim description"
         );
         let description = rows
             .iter()
-            .position(|r| matches!(r, Row::Item { text, .. } if text.contains("Blank media")))
+            .position(|r| matches!(r, Row::Detail(text, _) if text.contains("Blank media")))
             .expect("the description is still drawn");
         let position = rows
             .iter()
             .position(
-                |r| matches!(r, Row::Item { text, .. } if text.contains("into Blank Substrate")),
+                |r| matches!(r, Row::Detail(text, _) if text.contains("into Blank Substrate")),
             )
             .expect("found above");
         assert!(
@@ -1040,10 +1052,18 @@ mod tests {
             .iter()
             .filter(|r| !is_description_row(r))
             .filter_map(|r| match r {
-                Row::Item { text, .. } if !text.is_empty() => Some(text.clone()),
+                Row::Item { text, .. } | Row::Detail(text, _) if !text.is_empty() => {
+                    Some(text.clone())
+                }
                 _ => None,
             })
             .collect();
+        // Only a perk is an `Item`: a click's ordinal is the perk's index.
+        let items = rows
+            .iter()
+            .filter(|r| matches!(r, Row::Item { .. }))
+            .count();
+        assert_eq!(items, flat.len(), "headings are not selectable rows");
 
         let mut expected = Vec::new();
         for (name, defs) in &groups {
@@ -1091,8 +1111,8 @@ mod tests {
             let m = ui_metrics(900.0);
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for row in &rows {
-                let Row::Item { text, .. } = row else {
-                    panic!("a block row is a Row::Item, popup_layout's reason");
+                let Row::Detail(text, _) = row else {
+                    panic!("a block row is a Row::Detail, popup_layout's reason");
                 };
                 // `draw_row`'s own two columns for the selection caret.
                 let drawn = p.measure_ui_advance(format!("  {text}"), m.font_size);
@@ -1167,7 +1187,9 @@ mod tests {
                     // of the drawn line as the text is.
                     let drawn_text = match row {
                         Row::Text(text) => text.clone(),
-                        Row::TextColored(text, _) | Row::TextEntry { text, .. } => text.clone(),
+                        Row::TextColored(text, _)
+                        | Row::Detail(text, _)
+                        | Row::TextEntry { text, .. } => text.clone(),
                         Row::Item { text, .. } => format!("  {text}"),
                     };
                     measured += 1;
@@ -1248,9 +1270,10 @@ mod tests {
         let texts: Vec<&str> = rows
             .iter()
             .map(|r| match r {
-                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
-                    t.as_str()
-                }
+                Row::Text(t)
+                | Row::TextColored(t, _)
+                | Row::Detail(t, _)
+                | Row::TextEntry { text: t, .. } => t.as_str(),
                 Row::Item { text, .. } => text.as_str(),
             })
             .collect();

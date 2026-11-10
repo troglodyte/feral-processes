@@ -433,7 +433,7 @@ fn hit_at(
 }
 
 /// The world map's click target under `pos`, or `None` off that screen —
-/// `sprite_forge::sprite_hits`' shape, so the pointer system needs no mode
+/// Answers `None` on any other screen, so the pointer system needs no mode
 /// check of its own.
 pub(crate) fn world_map_hit(
     app: &mut App,

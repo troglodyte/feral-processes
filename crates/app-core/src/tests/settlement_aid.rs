@@ -1,5 +1,5 @@
 //! The two aid verbs and the keys that reach them — `[G]` and `[T]` on the
-//! town page, `[T]` on the Sites hub's Status tab.
+//! town page, `[T]` on the site pages' Status tab.
 //!
 //! The fixtures are `tests/dispatch.rs`'s, reused rather than rebuilt: both
 //! verbs need a Relay standing, and the engine exposes no way to hand-place

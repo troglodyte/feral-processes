@@ -49,8 +49,7 @@ fn type_text(app: &mut App, text: &str) {
 fn a_workbench_hub_has_the_routine_pages() {
     let mut app = app_at_a_workbench(80_001);
     app.handle_key(GameKey::Char('c'));
-    let hub = app.structure_hub.as_ref().expect("the hub opens");
-    let pages = &hub.current().pages;
+    let pages = &held_beside(&app).pages;
     for page in [StructurePage::Build, StructurePage::Built] {
         assert!(pages.contains(&page), "{page:?} in {pages:?}");
     }
@@ -237,14 +236,17 @@ fn the_part_list_and_name_field_keep_the_workbench_hub_open() {
     open_page(&mut app, Mode::RoutineBuild);
     pick_row(&mut app, 0);
     assert_eq!(app.mode, Mode::RoutineBuildPick);
-    assert!(app.structure_hub.is_some(), "the list keeps the hub");
+    assert!(app.held_structure().is_some(), "the list keeps the hub");
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::RoutineBuild);
     assert!(app.hub_at().is_some(), "back on a live hub page");
 
     pick_row(&mut app, NAME_ROW);
     assert_eq!(app.mode, Mode::RoutineBuildName);
-    assert!(app.structure_hub.is_some(), "the name field keeps the hub");
+    assert!(
+        app.held_structure().is_some(),
+        "the name field keeps the hub"
+    );
     app.handle_key(GameKey::Enter);
     assert!(app.hub_at().is_some(), "back on a live hub page");
 }

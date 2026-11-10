@@ -1,6 +1,6 @@
 //! The Splice Rig's screen: build an implant into the player, or cut one out.
 //!
-//! A page of the structure hub (`app/structure_hub.rs`) on a Splice Rig. One list, the installed implants
+//! A tab of a BESIDE YOU entry in `i` (`app/structure_hub.rs`) on a Splice Rig. One list, the installed implants
 //! first and then the implant items in the pack, so a single highlight
 //! covers either; the verbs are uppercase (`[I]` install, `[R]` remove).
 //!

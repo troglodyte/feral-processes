@@ -394,7 +394,7 @@ pub(super) fn companion_rows(
     // row's name, and the popup's scroll anchor is the first selected
     // `Item`, so these cannot disturb it.
     for line in lines {
-        rows.push(colored(line, false));
+        rows.push(as_detail(colored(line, false)));
     }
     rows
 }
@@ -422,6 +422,24 @@ pub(super) fn roster_rows(game: &mut Game, selected: usize) -> Vec<Row> {
     }
     rows.extend(companion_page_rows(&pets, selected, HUB_WRAP_COLUMNS));
     rows
+}
+
+/// A member's page: their roster row and its continuation lines as plain
+/// text, since nothing on the page is picked (the member is the page's key,
+/// not a highlight, so an `Item` here would claim an ordinal the cursor
+/// never has).
+pub(super) fn member_rows(game: &mut Game, member: Option<Entity>) -> Vec<Row> {
+    let pets = game.owned_pets();
+    let Some(pet) = pets.iter().find(|p| Some(p.entity) == member) else {
+        return vec![text_row("That program is gone.")];
+    };
+    companion_rows(pet, false, &[], HUB_WRAP_COLUMNS)
+        .into_iter()
+        .map(|row| match row {
+            Row::Item { text, color, .. } => Row::TextColored(text, color),
+            other => other,
+        })
+        .collect()
 }
 
 /// Formats one fuse-candidate row with the full stat line a fusion
@@ -1372,7 +1390,10 @@ mod tests {
     fn joined(rows: &[Row]) -> String {
         rows.iter()
             .map(|r| match r {
-                Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t.clone(),
+                Row::Text(t)
+                | Row::TextColored(t, _)
+                | Row::Detail(t, _)
+                | Row::TextEntry { text: t, .. } => t.clone(),
                 Row::Item { text, .. } => text.clone(),
             })
             .collect::<Vec<_>>()
@@ -1676,7 +1697,10 @@ mod tests {
             let room = 1440.0 * 0.88 - m.pad * 2.0;
             for row in &rows {
                 let line = match row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t,
                     Row::Item { text, .. } => text,
                 };
                 let drawn = p.measure_ui_advance(line, m.font_size);

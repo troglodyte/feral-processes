@@ -7,14 +7,6 @@ use feral_processes_engine::save;
 use super::support::*;
 use crate::*;
 
-const RAIL: [Mode; 5] = [
-    Mode::Companion,
-    Mode::ManifestIntro,
-    Mode::PartyPrograms,
-    Mode::PartyRoutines,
-    Mode::Perks,
-];
-
 fn press(app: &mut App, keys: &[GameKey]) {
     for key in keys {
         app.handle_key(*key);
@@ -62,9 +54,15 @@ fn app_with_points(seed: u32, stat_points: u32, perk_points: u32) -> App {
 }
 
 #[test]
-fn the_party_pages_follow_tools_on_the_inventory_rail() {
-    for (page, mode) in RAIL.into_iter().enumerate() {
-        assert_eq!(hub_of(mode), Some((Hub::Inventory, 4 + page, 0)));
+fn the_party_screens_are_tabs_of_you_and_the_roster() {
+    for (mode, place) in [
+        (Mode::Companion, (1, 0)),
+        (Mode::PartyPrograms, (1, 1)),
+        (Mode::PartyRoutines, (0, 3)),
+        (Mode::Perks, (0, 4)),
+        (Mode::ManifestIntro, (0, 5)),
+    ] {
+        assert_eq!(hub_of(mode), Some((Hub::Inventory, place.0, place.1)));
     }
 }
 
@@ -93,14 +91,14 @@ fn right_and_enter_go_into_the_page_and_esc_climbs_back_out() {
 #[test]
 fn i_reopens_on_a_party_page_and_the_base_keeps_its_own_slot() {
     let mut app = test_app(31004);
-    open_companions(&mut app);
-    press(&mut app, &[GameKey::Down, GameKey::Down, GameKey::Down]);
+    app.handle_key(GameKey::Char('i'));
+    press(&mut app, &[GameKey::Tab, GameKey::Tab, GameKey::Tab]);
     assert_eq!(app.mode, Mode::PartyRoutines);
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::Playing);
 
     press(&mut app, &[GameKey::Char('b'), GameKey::Char(']')]);
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
     press(&mut app, &[GameKey::Esc]);
 
     app.handle_key(GameKey::Char('i'));
@@ -108,7 +106,7 @@ fn i_reopens_on_a_party_page_and_the_base_keeps_its_own_slot() {
     assert!(app.hub_on_rail);
     press(&mut app, &[GameKey::Esc]);
     app.handle_key(GameKey::Char('b'));
-    assert_eq!(app.mode, Mode::BaseBuild);
+    assert_eq!(app.mode, Mode::Build);
 }
 
 #[test]
@@ -121,15 +119,16 @@ fn a_command_page_with_every_row_hidden_still_turns_and_escapes() {
         "premise: one companion and no fusion research hides Fuse"
     );
     open_companions(&mut app);
-    press(&mut app, &[GameKey::Char(']'), GameKey::Char(']')]);
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::PartyPrograms);
     // Rows are selected by key, not by walking onto a hidden one.
     app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Char('z'));
     assert_eq!(app.mode, Mode::PartyPrograms, "no row answers to z");
-    press(&mut app, &[GameKey::Esc, GameKey::Char(']')]);
-    assert_eq!(app.mode, Mode::PartyRoutines);
-    press(&mut app, &[GameKey::Esc]);
+    press(&mut app, &[GameKey::Esc, GameKey::Esc]);
+    assert_eq!(app.mode, Mode::Playing);
+    open_hub_screen(&mut app, Mode::PartyRoutines);
+    press(&mut app, &[GameKey::Esc, GameKey::Esc]);
     assert_eq!(app.mode, Mode::Playing);
 }
 
@@ -327,7 +326,7 @@ fn perk_previews_are_fresh_after_a_rail_turn() {
     let stale = app.perk_previews.clone();
     // Turn away, change the perks under the page, turn back.
     app.handle_key(GameKey::Esc);
-    app.handle_key(GameKey::Char('['));
+    app.handle_key(GameKey::ShiftTab);
     assert_eq!(app.mode, Mode::PartyRoutines);
     let id = app.game.as_mut().unwrap().perk_defs()[0].id;
     app.game
@@ -335,7 +334,7 @@ fn perk_previews_are_fresh_after_a_rail_turn() {
         .unwrap()
         .buy_perk(id)
         .expect("a point to spend");
-    app.handle_key(GameKey::Char(']'));
+    app.handle_key(GameKey::Tab);
     assert_eq!(app.mode, Mode::Perks);
 
     let game = app.game.as_mut().unwrap();
@@ -368,4 +367,82 @@ fn i_reopening_on_perks_refreshes_the_previews() {
         .map(|def| game.preview_perk(def.id))
         .collect();
     assert_eq!(app.perk_previews, fresh);
+}
+
+// ----- PARTY: one entry per member -----
+
+/// A run owning `count` programs, every one of them stood in the party.
+fn app_with_a_party(seed: u32, count: i32) -> App {
+    let mut app = app_owning_distant_programs(seed, count);
+    let game = app.game.as_mut().unwrap();
+    for pet in game.owned_pets() {
+        game.add_companion(pet.entity).expect("room in the party");
+    }
+    app
+}
+
+fn member_entities(app: &mut App) -> Vec<Entity> {
+    let mut pets = app.game.as_mut().unwrap().owned_pets();
+    pets.retain(|p| p.party_slot.is_some());
+    pets.sort_by_key(|p| p.party_slot);
+    pets.into_iter().map(|p| p.entity).collect()
+}
+
+#[test]
+fn party_has_one_entry_per_member_between_you_and_programs() {
+    let mut app = app_with_a_party(31030, 2);
+    let members = member_entities(&mut app);
+    assert_eq!(members.len(), 2);
+    let pages = Hub::Inventory.kind().pages(&app);
+    let titles: Vec<_> = pages.iter().map(|p| p.title.as_str()).collect();
+    assert_eq!(titles[0], "You");
+    assert_eq!(&titles[3..], ["Roster", "Downed"]);
+    assert_eq!(pages[1].section, Some("PARTY"));
+    assert_eq!(pages[2].section, None);
+    assert_eq!(pages[3].section, Some("PROGRAMS"));
+    for (page, member) in pages[1..3].iter().zip(&members) {
+        assert_eq!(page.key, HubPageKey::Member(*member));
+        assert_eq!(page.modes().collect::<Vec<_>>(), [Mode::PartyMember]);
+    }
+}
+
+#[test]
+fn a_member_page_acts_on_its_own_member_whatever_the_roster_row_was() {
+    let mut app = app_with_a_party(31031, 2);
+    let members = member_entities(&mut app);
+    app.handle_key(GameKey::Char('i'));
+    press(&mut app, &[GameKey::Char(']'), GameKey::Char(']')]);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Member(members[1])));
+    app.handle_key(GameKey::Right);
+    assert_in_page(&app, Mode::PartyMember);
+    app.handle_key(GameKey::Down);
+    app.handle_key(GameKey::Char('E'));
+    assert_eq!(app.mode, Mode::CompanionEquip);
+    assert_eq!(app.pending_equip_program, Some(members[1]));
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::PartyMember);
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Member(members[1])));
+}
+
+#[test]
+fn a_member_who_leaves_the_party_takes_their_entry_with_them() {
+    let mut app = app_with_a_party(31032, 2);
+    let members = member_entities(&mut app);
+    app.handle_key(GameKey::Char('i'));
+    app.handle_key(GameKey::Char(']'));
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Member(members[0])));
+    app.handle_key(GameKey::Right);
+    app.handle_key(GameKey::Char('P'));
+    let pages = Hub::Inventory.kind().pages(&app);
+    assert!(
+        pages
+            .iter()
+            .all(|p| p.key != HubPageKey::Member(members[0]))
+    );
+    assert_eq!(
+        app.hub_page(),
+        Some(&HubPageKey::Member(members[1])),
+        "the hold moves to the next member"
+    );
+    assert_eq!(app.mode, Mode::PartyMember);
 }

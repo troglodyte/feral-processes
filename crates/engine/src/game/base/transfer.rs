@@ -223,7 +223,7 @@ impl Game {
     }
 
     /// Whether this structure racks downed programs — the per-entity test
-    /// the structure hub's Inventory page uses.
+    /// a BESIDE YOU entry's Inventory tab uses.
     pub(crate) fn is_rack(&self, structure: Entity) -> bool {
         self.structure_def_of(structure)
             .is_some_and(|d| d.racks.is_some())

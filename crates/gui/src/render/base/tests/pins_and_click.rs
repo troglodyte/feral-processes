@@ -327,7 +327,7 @@ fn tile_at_px_inverts_tile_origin_px_at_the_corner_and_inside_the_cell() {
     ];
     for (pane, tile_px, half, off) in cases {
         let center = (5, -3);
-        let layout = MapClickLayout {
+        let layout = MapLayout {
             pane,
             center,
             half,
@@ -353,6 +353,61 @@ fn tile_at_px_inverts_tile_origin_px_at_the_corner_and_inside_the_cell() {
                     "the middle of {t:?}, at ({ix}, {iy}), inverted to the wrong tile"
                 );
             }
+        }
+    }
+}
+
+/// The tiles a map draw registers are the tiles it drew: every one lies
+/// inside the pane, each names the tile `tile_at_px` gives its middle, and
+/// no pixel of the pane is left without one — so the pointer always lands on
+/// the tile the player is looking at, camera offset and all.
+#[test]
+fn register_tiles_covers_the_pane_with_the_tiles_it_drew() {
+    use crate::paint::with_targets;
+    use feral_processes_app_core::PointerHit;
+    let pane = Rect::new(10.0, 32.0, 300.0, 200.0);
+    let layout = MapLayout {
+        pane,
+        center: (5, -3),
+        half: (7, 5),
+        off: (0.35, -0.6),
+        tile_px: 20.0,
+    };
+    let targets = with_targets(|p| layout.register_tiles(p));
+    assert!(!targets.is_empty());
+    for (rect, hit) in &targets {
+        let PointerHit::MapTile(x, y) = *hit else {
+            panic!("{hit:?} is not a tile");
+        };
+        assert!(
+            rect.x >= pane.x && rect.y >= pane.y,
+            "{rect:?} leaves the pane"
+        );
+        assert!(
+            rect.x + rect.w <= pane.x + pane.w + 0.01 && rect.y + rect.h <= pane.y + pane.h + 0.01,
+            "{rect:?} leaves the pane"
+        );
+        let middle = (rect.x + rect.w / 2.0, rect.y + rect.h / 2.0);
+        assert_eq!(tile_at_px(middle.0, middle.1, &layout), (x, y));
+    }
+    let on = |px: f32, py: f32| {
+        targets
+            .iter()
+            .filter(|(r, _)| px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h)
+            .count()
+    };
+    for ix in 0..60 {
+        for iy in 0..40 {
+            let (px, py) = (
+                pane.x + 2.5 + ix as f32 * 5.0,
+                pane.y + 2.5 + iy as f32 * 5.0,
+            );
+            assert_eq!(
+                on(px, py),
+                1,
+                "({px}, {py}) is covered {} times",
+                on(px, py)
+            );
         }
     }
 }

@@ -124,7 +124,7 @@ fn the_roster_header_reports_the_grid() {
         Row::TextColored(_, color) => {
             assert_eq!(color, RED, "a grid short of supply should read red")
         }
-        Row::Text(_) | Row::Item { .. } | Row::TextEntry { .. } => {
+        Row::Text(_) | Row::Item { .. } | Row::Detail(_, _) | Row::TextEntry { .. } => {
             panic!("a grid short of supply should read red")
         }
     }

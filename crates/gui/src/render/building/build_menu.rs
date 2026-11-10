@@ -114,7 +114,7 @@ pub(crate) fn build_menu_rows(
         // does not run into the next one's name; a heading brings its own.
         rows.push(blank_row());
         if let Some(heading) = heading {
-            rows.push(colored_item_row(heading, false, TEXT_DIM));
+            rows.push(Row::Detail(heading.to_string(), TEXT_DIM));
         }
         push_entry_rows(&mut rows, entry, i == selected, shortfall);
     }
@@ -122,10 +122,10 @@ pub(crate) fn build_menu_rows(
     rows
 }
 
-/// A `Row::Item` rather than `Row::Text`, for the reason `build_menu_rows`
-/// gives.
+/// A `Row::Detail` rather than `Row::Text`, for the reason `build_menu_rows`
+/// gives, and not a `Row::Item`, which would be a row the cursor counts.
 pub(super) fn blank_row() -> Row {
-    colored_item_row("", false, TEXT_DIM)
+    Row::Detail(String::new(), TEXT_DIM)
 }
 
 /// What both levels of the deploy menu open with.
@@ -160,8 +160,8 @@ pub(super) fn push_entry_rows(
     });
     // Through `description_rows` rather than one indented `format!`: the
     // shipped descriptions run to 300 characters against a body of about
-    // 114, and the wrapped lines have to stay `Row::Item` for the reason
-    // `build_menu_rows` gives.
+    // 114, and the wrapped lines are `Row::Detail` so they scroll with the
+    // entry and the cursor never counts them.
     rows.extend(description_rows(&entry.description));
     if let Some(makes) = &entry.makes {
         rows.extend(description_rows(&makes_line(makes)));
@@ -229,6 +229,17 @@ pub(crate) fn draw_build_menu(
     painter: &Painter,
     m: &Metrics,
 ) {
+    let rows = build_menu_page_rows(game, open, selected);
+    draw_popup("Deploy", PopupSize::Large, &rows, refusal, painter, m);
+}
+
+/// The deploy menu's rows, shared by the popup and the base report's
+/// Deploy tab so the two cannot list different structures.
+pub(crate) fn build_menu_page_rows(
+    game: &mut Game,
+    open: Option<StructureCategory>,
+    selected: usize,
+) -> Vec<Row> {
     let status = game.player_status();
     let stock = game.base_stock();
     // `Game::programs_for_build` and not `owned_pets`, because it is the one
@@ -262,7 +273,7 @@ pub(crate) fn draw_build_menu(
             makes: def.machine.is_some().then(|| game.machine_products(def)),
         }
     };
-    let rows = match open {
+    match open {
         Some(_) => {
             let entries: Vec<BuildEntry> = menu
                 .rows
@@ -288,8 +299,7 @@ pub(crate) fn draw_build_menu(
                 .collect();
             build_top_rows(&lines, selected, shortfall)
         }
-    };
-    draw_popup("Deploy", PopupSize::Large, &rows, refusal, painter, m);
+    }
 }
 
 /// The deploy prompt's rows: what is about to be placed, before the compass

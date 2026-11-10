@@ -76,22 +76,27 @@ pub(super) fn items_rows(game: &mut Game, selected: usize, filter: &str) -> Vec<
         text_row("Equipped (Enter to swap or unequip):"),
         // A wielded program and a worn weapon are mutually exclusive, so the
         // weapon line renders one or the other and never both. It takes the
-        // column through `tagged_text` rather than `with_tag` because it is
-        // not a row you can pick and there is no copy to have a quality: the
-        // column is here so the block reads straight down, not to say
-        // anything about the program standing in the slot.
+        // column through `tagged_text` rather than `with_tag` because there
+        // is no copy to have a quality: the column is here so the block reads
+        // straight down, not to say anything about the program standing in
+        // the slot. Still an `Item`, since the cursor has a slot here and an
+        // ordinal missing would shift every row below it by one.
         match &status.wielded {
-            Some(w) => text_row(tagged_text(
-                &row_lead(None),
-                EquipmentSlot::Weapon.short_label(),
-                // A program in the weapon slot is not a copy of gear, so
-                // there is nothing to rate — blank, not an em dash.
-                PowerCell::Blank,
-                &format!(
-                    "{} Lv{} (+{} ATK, +{} DEF)",
-                    w.name, w.level, w.bonus.0, w.bonus.1
+            Some(w) => colored_item_row(
+                tagged_text(
+                    &row_lead(None),
+                    EquipmentSlot::Weapon.short_label(),
+                    // A program in the weapon slot is not a copy of gear, so
+                    // there is nothing to rate — blank, not an em dash.
+                    PowerCell::Blank,
+                    &format!(
+                        "{} Lv{} (+{} ATK, +{} DEF)",
+                        w.name, w.level, w.bonus.0, w.bonus.1
+                    ),
                 ),
-            )),
+                selected == 0,
+                TEXT_DIM,
+            ),
             None => equipped_row(
                 EquipmentSlot::Weapon,
                 status.weapon.clone(),
@@ -145,7 +150,12 @@ pub(super) fn items_rows(game: &mut Game, selected: usize, filter: &str) -> Vec<
         // `selected`: the highlight belongs on the line carrying the row key,
         // and `popup_layout`'s scroll anchor is the first selected `Item`.
         for line in lines {
-            rows.push(tier_row(line, false, row.copy.tier, row.copy.rarity));
+            rows.push(as_detail(tier_row(
+                line,
+                false,
+                row.copy.tier,
+                row.copy.rarity,
+            )));
         }
     }
     rows
@@ -1704,7 +1714,10 @@ mod tests {
                 let rows = super::phase_key_rows(&view, selected);
                 for row in &rows {
                     let text = match row {
-                        Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+                        Row::Text(t)
+                        | Row::TextColored(t, _)
+                        | Row::Detail(t, _)
+                        | Row::TextEntry { text: t, .. } => t,
                         Row::Item { text, .. } => text,
                     };
                     let width = p.measure_ui_advance(format!("  {text}"), m.font_size);

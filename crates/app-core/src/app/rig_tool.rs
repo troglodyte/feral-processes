@@ -1,6 +1,6 @@
 //! The Teardown Rig's tool holder: which tool the base's extractor runs on.
 //!
-//! A page of the structure hub (`app/structure_hub.rs`) on a rig.
+//! A tab of a BESIDE YOU entry in `i` (`app/structure_hub.rs`) on a rig.
 //! `Mode::DepotFilter`'s shape rung for rung — a screen that acts on one
 //! machine, re-read after every edit.
 //!

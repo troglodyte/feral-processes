@@ -2,8 +2,8 @@
 //! paces the wild side.
 
 use super::support::{
-    app_with_companions_in_the_party, install_player_routines, learn_image, pick_row, test_app,
-    walk,
+    app_with_companions_in_the_party, click_tile, hover_tile, install_player_routines, learn_image,
+    pick_row, test_app, walk,
 };
 use crate::{
     App, GameKey, Mode, PointerButton, SoundEvent, TACTICAL_HANDOVER_SECONDS,
@@ -1822,11 +1822,11 @@ fn a_click_on_a_hostile_marks_it_and_a_second_click_swings_or_refuses() {
     let from = acting_cell(&mut app);
     let (hostile, cell) = hostile_body(&mut app);
 
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     assert_eq!(marked(&app), Some(hostile));
     assert!(!acted(&mut app), "marking spent the action");
 
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     if reach::distance(from, cell) <= 1 {
         assert!(
             acted(&mut app) || !app.tactical_player_turn(),
@@ -1848,11 +1848,11 @@ fn a_click_elsewhere_clears_the_mark_and_walks() {
     let mut app = fighting(9141);
     wait_for_the_player(&mut app);
     let (hostile, cell) = hostile_body(&mut app);
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     assert_eq!(marked(&app), Some(hostile));
     let to = reachable_cell_two_away(&mut app);
 
-    app.map_click(to, PointerButton::Primary);
+    click_tile(&mut app, to, PointerButton::Primary);
 
     assert_eq!(marked(&app), None);
     assert!(
@@ -1866,10 +1866,10 @@ fn a_secondary_click_clears_the_mark() {
     let mut app = fighting(9142);
     wait_for_the_player(&mut app);
     let (hostile, cell) = hostile_body(&mut app);
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     assert_eq!(marked(&app), Some(hostile));
 
-    app.map_click(cell, PointerButton::Secondary);
+    click_tile(&mut app, cell, PointerButton::Secondary);
 
     assert_eq!(marked(&app), None);
     assert!(!acted(&mut app), "a secondary click spent the action");
@@ -1880,7 +1880,7 @@ fn esc_clears_the_mark() {
     let mut app = fighting(9143);
     wait_for_the_player(&mut app);
     let (hostile, cell) = hostile_body(&mut app);
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     assert_eq!(marked(&app), Some(hostile));
 
     app.handle_key(GameKey::Esc);
@@ -1898,7 +1898,7 @@ fn the_mark_is_dropped_when_its_body_is_gone() {
     let mut app = fighting(9144);
     wait_for_the_player(&mut app);
     let (hostile, cell) = hostile_body(&mut app);
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     assert_eq!(marked(&app), Some(hostile));
     let mark = app.tactical_target.unwrap();
     app.tactical_target = Some(TargetMark {
@@ -1915,7 +1915,7 @@ fn a_mark_does_not_outlive_the_turn() {
     let mut app = fighting(9145);
     wait_for_the_player(&mut app);
     let (hostile, cell) = hostile_body(&mut app);
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     assert_eq!(marked(&app), Some(hostile));
 
     app.handle_key(GameKey::Char('E'));
@@ -1933,8 +1933,8 @@ fn a_click_on_the_wild_sides_turn_does_nothing() {
     let (_, cell) = hostile_body(&mut app);
     let to = reachable_cell_two_away(&mut app);
 
-    app.map_click(cell, PointerButton::Primary);
-    app.map_click(to, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
+    click_tile(&mut app, to, PointerButton::Primary);
 
     assert_eq!(acting_cell(&mut app), from);
     assert_eq!(marked(&app), None);
@@ -1949,16 +1949,16 @@ fn hovering_a_reachable_cell_answers_the_path_and_nothing_else_does() {
     let from = acting_cell(&mut app);
     let to = reachable_cell_two_away(&mut app);
 
-    app.set_map_hover(Some(to));
+    hover_tile(&mut app, Some(to));
     let path = app.tactical_hover_path();
     assert_eq!(path.last(), Some(&to));
     assert!(path.len() >= 2);
 
-    app.set_map_hover(Some(from));
+    hover_tile(&mut app, Some(from));
     assert!(app.tactical_hover_path().is_empty());
-    app.set_map_hover(None);
+    hover_tile(&mut app, None);
     assert!(app.tactical_hover_path().is_empty());
-    assert_eq!(app.map_hover, None);
+    assert_eq!(app.pointer_hover, None);
 }
 
 #[test]
@@ -1972,7 +1972,7 @@ fn in_aim_mode_the_cursor_follows_a_cell_change_and_a_click_commits() {
     assert_eq!(app.tactical_cursor, Some(from));
 
     let c1 = (0, 0);
-    app.set_map_hover(Some(c1));
+    hover_tile(&mut app, Some(c1));
     assert_eq!(
         app.tactical_cursor,
         Some(c1),
@@ -1981,7 +1981,7 @@ fn in_aim_mode_the_cursor_follows_a_cell_change_and_a_click_commits() {
 
     app.handle_key(GameKey::Right);
     assert_eq!(app.tactical_cursor, Some((1, 0)));
-    app.set_map_hover(Some(c1));
+    hover_tile(&mut app, Some(c1));
     assert_eq!(
         app.tactical_cursor,
         Some((1, 0)),
@@ -1989,10 +1989,10 @@ fn in_aim_mode_the_cursor_follows_a_cell_change_and_a_click_commits() {
     );
 
     let c2 = (2, 2);
-    app.set_map_hover(Some(c2));
+    hover_tile(&mut app, Some(c2));
     assert_eq!(app.tactical_cursor, Some(c2));
 
-    app.map_click(hostile_cell, PointerButton::Primary);
+    click_tile(&mut app, hostile_cell, PointerButton::Primary);
     assert_eq!(app.mode, Mode::TacticalBattle);
     if reach::distance(from, hostile_cell) <= 1 {
         assert!(
@@ -2011,7 +2011,7 @@ fn in_aim_mode_a_secondary_click_is_esc() {
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::TacticalAim);
 
-    app.map_click((0, 0), PointerButton::Secondary);
+    click_tile(&mut app, (0, 0), PointerButton::Secondary);
 
     assert_eq!(app.mode, Mode::TacticalBattle);
     assert_eq!(app.tactical_cursor, None);
@@ -2057,7 +2057,7 @@ fn a_click_during_auto_attack_stops_the_body_where_it_stands() {
     advance_until_a_party_body_walks(&mut app);
     let stood = acting_cell(&mut app);
 
-    app.map_click(stood, PointerButton::Primary);
+    click_tile(&mut app, stood, PointerButton::Primary);
 
     assert!(!app.tactical_auto);
     assert!(!walking(&app), "the click left the robot's walk live");
@@ -2070,7 +2070,7 @@ fn a_click_during_the_walk_stops_it_and_is_swallowed() {
     let mut app = fighting(9152);
     wait_for_the_player(&mut app);
     let (hostile, cell) = hostile_body(&mut app);
-    app.map_click(cell, PointerButton::Primary);
+    click_tile(&mut app, cell, PointerButton::Primary);
     assert_eq!(marked(&app), Some(hostile));
     let to = reachable_cell_two_away(&mut app);
     app.tactical_walk_to(to);
@@ -2078,7 +2078,7 @@ fn a_click_during_the_walk_stops_it_and_is_swallowed() {
     let stood = acting_cell(&mut app);
     assert!(walking(&app), "the walk ended before the click");
 
-    app.map_click(to, PointerButton::Primary);
+    click_tile(&mut app, to, PointerButton::Primary);
 
     assert!(!walking(&app), "the click did not stop the walk");
     assert_eq!(marked(&app), Some(hostile), "the click was not swallowed");
@@ -2102,13 +2102,13 @@ fn in_aim_mode_an_off_board_hover_leaves_the_cursor_where_it_was() {
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.tactical_cursor, Some(from));
 
-    app.set_map_hover(Some((-1, 0)));
+    hover_tile(&mut app, Some((-1, 0)));
     assert_eq!(
         app.tactical_cursor,
         Some(from),
         "a cell past the edge moved the cursor"
     );
-    app.set_map_hover(Some((side, side)));
+    hover_tile(&mut app, Some((side, side)));
     assert_eq!(
         app.tactical_cursor,
         Some(from),
@@ -2123,7 +2123,7 @@ fn in_aim_mode_an_off_board_click_is_ignored() {
     app.handle_key(GameKey::Char('a'));
     assert_eq!(app.mode, Mode::TacticalAim);
 
-    app.map_click((-1, -1), PointerButton::Primary);
+    click_tile(&mut app, (-1, -1), PointerButton::Primary);
 
     assert_eq!(
         app.mode,

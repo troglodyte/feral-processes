@@ -66,7 +66,8 @@ impl App {
         if key == GameKey::Esc {
             if self.excavate_anchor.take().is_none() {
                 self.excavate_cursor = None;
-                self.mode = Mode::Playing;
+                // Back to the Deploy tab when the box was picked there.
+                self.close_screen();
             }
             return BoxKey::Done;
         }

@@ -2,7 +2,7 @@
 //! is the measuring and painting either side of it.
 
 use super::alt_labels::{LabelKind, LabelRequest, LayoutInput, Placement, TileRect, layout};
-use super::base::{MapClickLayout, RINGS};
+use super::base::{MapLayout, RINGS};
 use super::*;
 use feral_processes_engine::views::{FarmTileView, RoomView};
 
@@ -22,7 +22,7 @@ const ALT_LEADER: Color = Color { a: 0.45, ..TEXT };
 /// placed by `alt_labels::layout` so that none covers another.
 pub(super) fn draw_alt_labels(
     painter: &Painter,
-    view: &MapClickLayout,
+    view: &MapLayout,
     rooms: &[RoomView],
     entities: &[EntityView],
     farm_tiles: &[FarmTileView],

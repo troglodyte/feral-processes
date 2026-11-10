@@ -7,7 +7,10 @@ use crate::render::test_pet;
 
 fn row_text(row: &Row) -> &str {
     match row {
-        Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => t,
+        Row::Text(t)
+        | Row::TextColored(t, _)
+        | Row::Detail(t, _)
+        | Row::TextEntry { text: t, .. } => t,
         Row::Item { text, .. } => text,
     }
 }
@@ -307,8 +310,7 @@ fn no_picker_row_overflows_its_popup_in_pixels() {
         upgrade("Recompiled Kernel Substrate Assembly Bay", 9),
         // With a bill on it: three materials and their two figures each
         // is the longest line this screen can be handed, and it arrived
-        // with `Mode::UpgradeDirection` — the list it replaced wrapped
-        // its own rows and this one has to wrap too.
+        // with the upgrade's bill moving onto the picker.
         upgrade_costing(
             "Recompiled Kernel Substrate Assembly Bay",
             9,
@@ -327,9 +329,10 @@ fn no_picker_row_overflows_its_popup_in_pixels() {
         for commit in &commits {
             for row in build_program_rows(Some(commit), &candidates, 0) {
                 let text = match &row {
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
-                        t.clone()
-                    }
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => t.clone(),
                     // `draw_row`'s own prefix on an item row.
                     Row::Item { text, .. } => format!("     {text}"),
                 };
@@ -402,7 +405,7 @@ fn an_empty_picker_says_why_and_a_deploy_never_blames_depth() {
 /// they are the same refusal.
 ///
 /// **Two lines where there were three.** The upgrade menu had one of its
-/// own; `Mode::UpgradeDirection` has no list to head, and the floor now
+/// own; an upgrade has no list to head, and the floor now
 /// reaches an upgrading player at the picker like every other refusal.
 #[test]
 fn the_last_program_lines_share_the_engines_clause() {
@@ -422,8 +425,8 @@ fn the_last_program_lines_share_the_engines_clause() {
 }
 
 /// The bill the crew will fetch is on this screen, because
-/// `Mode::UpgradeDirection` is the first screen that knows which machine
-/// the order is for and so cannot carry it.
+/// an upgrade's key is aimed at a tile and does not know the machine
+/// yet, so it cannot carry the bill.
 ///
 /// Priced against the pack **and** the shelves — `build_cost_display`'s
 /// form, which `build_commit` reaches through `Game::upgrade_cost`, the
@@ -464,7 +467,7 @@ fn no_program_picker_row_runs_past_the_popup_body() {
     let commits = [
         deploy("Recompiled Kernel Substrate Assembly Bay"),
         upgrade("Recompiled Kernel Substrate Assembly Bay", 9),
-        // The bill `Mode::UpgradeDirection` pushed onto this screen —
+        // The bill an upgrade pushed onto this screen —
         // unwrapped it is 118 columns, so this case is what holds the
         // wrap in place.
         upgrade_costing(
@@ -489,8 +492,8 @@ fn no_program_picker_row_runs_past_the_popup_body() {
     }
 }
 
-/// `popup_layout` ends the scrollable body at the *last* `Row::Item` and
-/// pins whatever follows as a footer, so a continuation line under the
+/// `popup_layout` ends the scrollable body at the *last* `Row::Item` or
+/// `Row::Detail` and pins whatever follows as a footer, so a text line under the
 /// final program would be torn off it and drawn at the bottom of the
 /// box. Nothing may follow the last item row.
 #[test]
@@ -500,7 +503,7 @@ fn every_picker_row_stays_inside_the_scrollable_body() {
         let rows = build_program_rows(Some(&deploy("Fabricator")), &pets, selected);
         let last = rows
             .iter()
-            .rposition(|r| matches!(r, Row::Item { .. }))
+            .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(..)))
             .expect("a candidate is an item row");
         assert_eq!(
             last,

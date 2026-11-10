@@ -7,7 +7,8 @@ use super::*;
 /// Returns the entities it drew — `draw_map_frame`'s threat readout counts
 /// hostiles among them, and hoisting them out here is what keeps that a
 /// second look at a Vec already built rather than a second call to
-/// `Game::view_entities`.
+/// `Game::view_entities` — and the pane's layout, for what the caller draws
+/// over the map.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn draw_surface_map(
     game: &mut Game,
@@ -21,7 +22,7 @@ pub(super) fn draw_surface_map(
     travel: Option<TravelGoal>,
     center: (i32, i32),
     reveal: bool,
-) -> Vec<EntityView> {
+) -> (Vec<EntityView>, MapLayout) {
     // Two rings wider than the pane can show. The first is the tile the
     // camera's sub-tile offset slides in from, without which the trailing
     // edge goes blank; the second exists so *that* tile has neighbours of its
@@ -130,18 +131,17 @@ pub(super) fn draw_surface_map(
     }
     let shield_outline = fx.shield_outline(game.raid_defense_active());
 
-    // Stashed for the pointer system, `MapClickLayout`'s own doc: these are
-    // exactly `tile_origin_px`'s arguments for this frame, including
-    // `off_x`/`off_y` after they have already eased toward their target —
-    // a click has to invert the frame it was actually drawn against.
-    let layout = MapClickLayout {
+    // `MapLayout`'s own doc: these are exactly `tile_origin_px`'s arguments
+    // for this frame, including `off_x`/`off_y` after they have already
+    // eased toward their target — the tiles registered are the ones drawn.
+    let layout = MapLayout {
         pane,
         center,
         half: (half_w, half_h),
         off: (off_x, off_y),
         tile_px,
     };
-    fx.set_map_click(Some(layout));
+    layout.register_tiles(painter);
 
     painter.rect(
         pane.x,
@@ -1127,7 +1127,7 @@ pub(super) fn draw_surface_map(
         }
     }
     painter.rect_lines(pane.x, pane.y, pane.w, pane.h, 2.0, BORDER);
-    entities
+    (entities, layout)
 }
 
 /// Whether the next body on a tile takes its glyph from `current`, the body

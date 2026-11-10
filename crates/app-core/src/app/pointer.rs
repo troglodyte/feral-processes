@@ -1,31 +1,214 @@
-//! The mouse's one entry into app-core for anything drawn in the map pane.
+//! The mouse's one entry into app-core, and what a click on a map tile means.
 //!
-//! The renderer resolves a pixel to a cell through the layout the draw pass
-//! published and hands the cell here with the button; what the cell *means*
-//! is decided from `App::mode`, the way `handle_key` decides a key. `crates/
-//! gui` has no `match app.mode` of its own, so a gesture can never do on the
-//! screen what it would not do here.
+//! The renderer registers each tile of the map pane while it draws
+//! (`PointerHit::MapTile`); the reader resolves the pointer to one and hands
+//! it here with the button. What the tile *means* is decided from
+//! `App::mode`, the way `handle_key` decides a key. `crates/gui` has no
+//! `match app.mode` of its own, so a gesture can never do on the screen what
+//! it would not do here.
 //!
 //! Every gesture ends in a call the keyboard already makes — a walk is
 //! `Game::tactical_step` a cell a beat, a swing is `Game::tactical_attack`,
 //! an aim is `commit_tactical_aim` — so there is no second spelling of any
 //! of them, and a refusal says what the key's would.
 
-use crate::{App, GameKey, Mode, PointerButton, TargetMark};
+use crate::{
+    App, EditorButton, GameKey, HubPageKey, Mode, PointerButton, PointerPhase, TargetMark,
+};
+
+/// Which way a scroll marker or the wheel moves the list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Up,
+    Down,
+}
+
+/// A hub's two halves, as a pointer target the wheel and a click on bare
+/// background can resolve to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Region {
+    Rail,
+    Page,
+}
+
+/// What the pointer is over, resolved by the renderer to an identity and
+/// never a pixel. **Every arm ends in a call the keyboard already makes**
+/// (`handle_pointer_event`), so a click can do nothing a key cannot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerHit {
+    /// The sprite editor's canvas cell.
+    Cell(u8, u8),
+    Swatch(u8),
+    Button(EditorButton),
+    Subject(usize),
+    /// A rail entry.
+    Page(HubPageKey),
+    /// A tab of the held page, by position.
+    Tab(usize),
+    /// A selectable row of the shown screen, by its ordinal among the
+    /// screen's `Row::Item`s — the index its handler selects by.
+    Row(usize),
+    /// A keycap: the key it names.
+    Key(GameKey),
+    /// A "↑/↓ n more" marker on the page's list.
+    More(Direction),
+    MapTile(i32, i32),
+    Region(Region),
+}
+
+/// One frame of pointer input, resolved against the frame just drawn. The
+/// reader in gui builds it; nothing in it is a pixel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PointerEvent {
+    /// The topmost target under the pointer.
+    pub hover: Option<PointerHit>,
+    /// A button went down this frame, over `hover`.
+    pub press: bool,
+    /// A button is held and the pointer moved.
+    pub drag: bool,
+    /// A button was released this frame.
+    pub up: bool,
+    /// A press and its release landed on one target without a drag between:
+    /// a click on `hover`. **A hub acts on this**, never on the press, so a
+    /// drag that starts on a row clicks nothing. There is no double-click
+    /// flag: a click on the row the cursor is already on is `Enter`, so two
+    /// clicks are select then `Enter` once, however slowly they come.
+    pub click: bool,
+    pub button: PointerButton,
+    /// Whole wheel notches this frame, positive up.
+    pub wheel: i32,
+}
 
 impl App {
-    /// Records the cell under the pointer this frame, `None` off the pane.
-    ///
+    /// The one entry for the pointer layer: records what is hovered and
+    /// turns a press or the wheel into the keys it stands for.
+    pub fn handle_pointer_event(&mut self, event: PointerEvent) {
+        let entered = self.hover_entered(event.hover);
+        self.pointer_hover = event.hover;
+        self.aim_follows(entered);
+        self.pointer_stroke(&event);
+        let Some(hit) = event.hover else { return };
+        if event.wheel != 0 {
+            self.hub_pointer_wheel(hit, event.wheel);
+        }
+        if event.click {
+            match hit {
+                PointerHit::MapTile(x, y) => self.tile_click((x, y), event.button),
+                _ if event.button == PointerButton::Primary => self.pointer_click(hit),
+                _ => {}
+            }
+        }
+    }
+
+    /// The map cell under the pointer, `None` off the pane or over anything
+    /// that is not a tile.
+    pub fn hovered_tile(&self) -> Option<(i32, i32)> {
+        match self.pointer_hover {
+            Some(PointerHit::MapTile(x, y)) => Some((x, y)),
+            _ => None,
+        }
+    }
+
+    /// The tile the pointer has just moved onto, `None` when it is on the
+    /// one it was on or on no tile.
+    fn hover_entered(&self, hover: Option<PointerHit>) -> Option<(i32, i32)> {
+        match hover {
+            Some(PointerHit::MapTile(x, y)) if self.hovered_tile() != Some((x, y)) => Some((x, y)),
+            _ => None,
+        }
+    }
+
+    /// Whether `hit` is what the pointer is over, for a renderer to tint.
+    pub fn hovered(&self, hit: &PointerHit) -> bool {
+        self.pointer_hover.as_ref() == Some(hit)
+    }
+
+    fn pointer_click(&mut self, hit: PointerHit) {
+        match hit {
+            PointerHit::Key(key) => self.handle_key(key),
+            PointerHit::Page(_)
+            | PointerHit::Tab(_)
+            | PointerHit::Row(_)
+            | PointerHit::More(_)
+            | PointerHit::Region(_) => self.hub_pointer_click(hit),
+            PointerHit::Button(_) | PointerHit::Subject(_) => self.forge_pointer_click(hit),
+            // Strokes are read on press, drag and release
+            // (`pointer_stroke`), not on a click; a tile click takes any
+            // button (`handle_pointer_event`).
+            PointerHit::Cell(..) | PointerHit::Swatch(_) | PointerHit::MapTile(..) => {}
+        }
+    }
+
+    /// A button is a key press and a picker row a select-then-open, both on
+    /// the click like a hub's.
+    fn forge_pointer_click(&mut self, hit: PointerHit) {
+        let phase = match hit {
+            PointerHit::Subject(row) if self.picker_clicked == Some(row) => {
+                PointerPhase::DoubleClick
+            }
+            _ => PointerPhase::Down,
+        };
+        if let PointerHit::Subject(row) = hit {
+            self.picker_clicked = Some(row);
+        }
+        self.handle_pointer(hit, PointerButton::Primary, phase);
+    }
+
+    /// The sprite editor's strokes. **A whole drag is one stroke**: a press
+    /// on a cell or swatch opens it, a move onto another cell paints it, and
+    /// the release closes it — and so does leaving the canvas and palette
+    /// while held, so the next press cannot join it into one undo entry.
+    /// Only a press that began on a cell or swatch opens a stroke.
+    fn pointer_stroke(&mut self, event: &PointerEvent) {
+        if !matches!(self.mode, Mode::SpriteEditor | Mode::CreateCharacter) {
+            self.pointer_stroke = None;
+            return;
+        }
+        let paints = |hit: Option<PointerHit>| {
+            hit.filter(|h| matches!(h, PointerHit::Cell(..) | PointerHit::Swatch(_)))
+        };
+        if event.press {
+            self.end_stroke_at(None);
+            if let Some(hit) = paints(event.hover) {
+                self.handle_pointer(hit, event.button, PointerPhase::Down);
+                self.pointer_stroke = Some((event.button, hit));
+            }
+        }
+        if event.drag
+            && let Some((button, last)) = self.pointer_stroke
+        {
+            match event.hover {
+                Some(hit) if paints(Some(hit)).is_some() => {
+                    self.handle_pointer(hit, button, PointerPhase::Drag);
+                    self.pointer_stroke = Some((button, hit));
+                }
+                // Over a button, the pointer is still inside the editor.
+                Some(_) => {}
+                None => self.end_stroke_at(Some(last)),
+            }
+        }
+        if event.up {
+            self.end_stroke_at(paints(event.hover));
+        }
+    }
+
+    /// Closes the stroke in progress on `at`, or on where it last was.
+    fn end_stroke_at(&mut self, at: Option<PointerHit>) {
+        if let Some((button, last)) = self.pointer_stroke.take() {
+            self.handle_pointer(at.unwrap_or(last), button, PointerPhase::Up);
+        }
+    }
+}
+
+impl App {
     /// In `Mode::TacticalAim` the cell cursor follows the pointer — but
-    /// only when the pointer **enters a different cell**, never every
-    /// frame, or a pointer parked over the board would snap the cursor back
-    /// after every arrow key. Off the board the cursor stays where it was:
-    /// the pane shows cells past the edge whenever the camera sits near
+    /// only when the pointer **enters a different cell** (`entered`), never
+    /// every frame, or a pointer parked over the board would snap the cursor
+    /// back after every arrow key. Off the board the cursor stays where it
+    /// was: the pane shows cells past the edge whenever the camera sits near
     /// one, and a cursor dragged to the edge by every pointer twitch out
     /// there would fight the arrows exactly as a parked pointer would.
-    pub fn set_map_hover(&mut self, cell: Option<(i32, i32)>) {
-        let entered = cell.filter(|&c| Some(c) != self.map_hover);
-        self.map_hover = cell;
+    fn aim_follows(&mut self, entered: Option<(i32, i32)>) {
         if self.mode != Mode::TacticalAim {
             return;
         }
@@ -37,7 +220,7 @@ impl App {
     }
 
     /// Whether `cell` is one of the board's own — the pane can name cells
-    /// past the edge, and `tile_at_px` does not know where the edge is.
+    /// past the edge, and a tile target does not know where the edge is.
     fn on_board(&mut self, cell: (i32, i32)) -> bool {
         self.game
             .as_mut()
@@ -54,7 +237,7 @@ impl App {
     /// (primary) or backs out of it (secondary). Every other screen the
     /// pane draws under — the Stack corridor, the base grid, a popup —
     /// takes nothing from the pointer.
-    pub fn map_click(&mut self, cell: (i32, i32), button: PointerButton) {
+    fn tile_click(&mut self, cell: (i32, i32), button: PointerButton) {
         match self.mode {
             Mode::Playing if button == PointerButton::Primary => self.travel_to(cell.0, cell.1),
             Mode::TacticalBattle => self.tactical_board_click(cell, button),
@@ -178,7 +361,7 @@ impl App {
         if self.mode != Mode::TacticalBattle || !self.tactical_player_turn() {
             return Vec::new();
         }
-        let Some(cell) = self.map_hover else {
+        let Some(cell) = self.hovered_tile() else {
             return Vec::new();
         };
         let Some(game) = &mut self.game else {

@@ -31,7 +31,7 @@ pub(super) fn draw_rig_tool(
     draw_popup("Rig tool", PopupSize::Large, &body, refusal, painter, m);
 }
 
-/// The screen's rows, shared by the popup and the structure hub's page.
+/// The screen's rows, shared by the popup and the BESIDE YOU tab.
 pub(super) fn page_rows(screen: Option<&RigToolScreen>, selected: usize) -> Vec<Row> {
     match screen {
         Some(screen) => body_rows(screen, selected),

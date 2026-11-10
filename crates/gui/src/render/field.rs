@@ -157,7 +157,7 @@ fn buff_panel_width(rows: &[Row], title: &str, painter: &Painter, m: &Metrics) -
                 }
                 w
             }
-            Row::Text(_) | Row::TextColored(..) | Row::TextEntry { .. } => {
+            Row::Text(_) | Row::TextColored(..) | Row::Detail(_, _) | Row::TextEntry { .. } => {
                 painter.measure_ui(row_label_text(row), m.font_size).width
             }
         };
@@ -722,7 +722,10 @@ mod tests {
                         }
                         (w, text.clone())
                     }
-                    Row::Text(t) | Row::TextColored(t, _) | Row::TextEntry { text: t, .. } => {
+                    Row::Text(t)
+                    | Row::TextColored(t, _)
+                    | Row::Detail(t, _)
+                    | Row::TextEntry { text: t, .. } => {
                         (p.measure_ui(t, m.font_size).width, t.clone())
                     }
                 };

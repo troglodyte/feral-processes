@@ -72,10 +72,10 @@ impl App {
             menu_origin: None,
             hub_last: [const { None }; Hub::ALL.len()],
             hub_place: None,
+            hub_rail_seen: None,
             site_return: None,
             quit_unsaved_pending: false,
             game_menu_in_run: false,
-            structure_hub: None,
             command_return_row: None,
             dev_console_row: 0,
             hub_on_rail: true,
@@ -114,7 +114,9 @@ impl App {
             pending_field_routine: None,
             field_cursor: None,
             tactical_cursor: None,
-            map_hover: None,
+            pointer_hover: None,
+            pointer_stroke: None,
+            picker_clicked: None,
             tactical_target: None,
             pending_tactical: None,
             pending_tactical_emulate: None,
@@ -511,7 +513,7 @@ impl App {
         // most wanted. `an_arena_fight_still_writes_telemetry` is what stops
         // this being folded back inside for tidiness.
         self.flush_battle_telemetry();
-        self.refresh_structure_hub();
+        self.refresh_beside();
         if self.in_arena() {
             return;
         }

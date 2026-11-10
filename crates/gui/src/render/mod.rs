@@ -9,9 +9,10 @@ use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
-    App, ArenaRow, BattlePane, GearInspect, MENU_SCAN_RADIUS, Mode, Staffing, SwapChoice, SwapRow,
-    TradeChoice, TransferEntry, base_popup_parent, equip_preview_tag, equip_swap_rows,
-    inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
+    App, ArenaRow, BattlePane, Direction, GearInspect, MENU_SCAN_RADIUS, Mode, PointerHit,
+    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, base_popup_parent,
+    equip_preview_tag, equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut,
+    qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};
@@ -94,11 +95,7 @@ mod splice_rig;
 mod staff_tags;
 mod world_map;
 pub(crate) use world_map::{WorldMapHit, world_map_hit};
-// `pub(crate)` rather than private: `lib.rs::handle_sprite_pointer` needs
-// `sprite_forge::SpriteHits` to name the type `sprite_forge::sprite_hits`
-// hands back — every other module here stays private because nothing
-// outside `render/` ever needed one of its types before the mouse did.
-pub(crate) mod sprite_forge;
+mod sprite_forge;
 mod stack;
 mod stack_light;
 mod stack_market;
@@ -123,10 +120,11 @@ use base::draw_playing_base;
 // space lives beside `App`.
 #[cfg(test)]
 pub(crate) use base::CUTTING_OUTLINE;
-// The click-to-travel geometry: `fx.rs` stores the frame's `MapClickLayout`
-// and `lib.rs`'s pointer system inverts a click through `tile_at_px` — both
-// outside `render`, so both need the path out.
-pub(crate) use base::{MapClickLayout, tile_at_px, tile_origin_px};
+// The map pane's geometry, which `tile_origin_px` places and `tile_at_px`
+// inverts; the notice anchors to a tile through it.
+#[cfg(test)]
+pub(crate) use base::tile_at_px;
+pub(crate) use base::{MapLayout, tile_origin_px};
 use battle::{
     draw_battle, draw_battle_ally_menu, draw_battle_emulate_menu, draw_battle_item_menu,
     draw_battle_special_menu, draw_battle_target_menu,
@@ -134,14 +132,13 @@ use battle::{
 use breeding::{draw_breed_confirm_menu, draw_breed_menu, draw_breed_second_menu};
 use building::{
     build_commit, draw_build_direction, draw_build_menu, draw_build_program, draw_pin_prisoner,
-    draw_pin_subject, draw_remove_confirm, draw_remove_menu, draw_siphon, draw_staffing_menu,
-    draw_structure_menu, draw_work_order_pick, draw_work_order_quantity,
+    draw_pin_subject, draw_remove_confirm, draw_siphon, draw_staffing_menu, draw_work_order_pick,
+    draw_work_order_quantity,
 };
-use caravan::{CaravanBasket, draw_caravan};
-use contracts::draw_contracts;
+use caravan::CaravanBasket;
 use crafting::{draw_compiling, draw_craft_menu, draw_craft_quantity};
 use depot_filter::draw_depot_filter;
-use dispatch::{draw_dispatch, draw_route_cargo, draw_sortie_squad};
+use dispatch::{draw_route_cargo, draw_sortie_squad};
 use excavate_brush::draw_excavate_brush;
 use extraction::draw_extraction_options;
 use farm_recipe::draw_farm_recipe;
@@ -679,17 +676,13 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool, shortcu
         // — `needs_status_banner` names it, so a refusal raised underneath
         // still reaches the strip along the bottom.
         Mode::Notification => {
-            draw_playing_base(app, fx, None, painter, &m, reveal);
+            let layout = draw_playing_base(app, fx, None, painter, &m, reveal);
             let shown = notify::Shown {
                 dock: fx.notice_dock(),
-                cell: app
-                    .notification_focus()
-                    .zip(fx.map_click())
-                    .map(|(tile, l)| {
-                        let (x, y) =
-                            tile_origin_px(tile, l.center, l.half, l.off, l.tile_px, l.pane);
-                        crate::paint::Rect::new(x, y, l.tile_px, l.tile_px)
-                    }),
+                cell: app.notification_focus().zip(layout).map(|(tile, l)| {
+                    let (x, y) = tile_origin_px(tile, l.center, l.half, l.off, l.tile_px, l.pane);
+                    crate::paint::Rect::new(x, y, l.tile_px, l.tile_px)
+                }),
                 watch: app.notification_watchable(),
             };
             match &app.pending_notification {
@@ -1008,7 +1001,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // against these two lists, so a renderer with its own copy would act on a
     // different contract from the one under the highlight.
     let (contract_active, contract_offers, contract_reach) = match app.mode {
-        Mode::Contracts => {
+        Mode::Contracts | Mode::ContractsHeld => {
             let (active, offers) = app.contract_sections();
             (active, offers, app.broker_reach())
         }
@@ -1018,11 +1011,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     let (town_active, town_offers) = match app.mode {
         Mode::SettlementBoard => app.settlement_board_sections(),
         _ => (Vec::new(), Vec::new()),
-    };
-    let scanned = match app.mode {
-        Mode::WorkStructure => app.workable_structures(),
-        Mode::Remove => app.nearby_structures(),
-        _ => Vec::new(),
     };
     // Row counts are app-core's and rows are gui's, the way the history
     // screen and the structure roster already work: a renderer that rebuilt
@@ -1043,19 +1031,13 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // `command_rows` reads the party's surroundings, so like the lists above
     // it is taken before `game` borrows the app.
     let commands = app.command_rows(app.mode);
-    let command_counts: Vec<(usize, usize)> = match app.mode {
-        Mode::BaseOverview => base_report::command_pages()
-            .filter_map(|(page, mode)| Some((page, app.command_rows(mode)?.len())))
-            .collect(),
-        _ => Vec::new(),
-    };
     let list_filter = app.filter_text().to_owned();
     let site = app.held_site();
     let app_screens = base_report::AppScreens {
         site,
+        member: app.held_member(),
         list_filter: &list_filter,
         commands: commands.as_deref(),
-        command_counts: &command_counts,
         work_orders: &work_orders,
         base_staff: base_staff.as_ref(),
         work_column: app.work_column,
@@ -1138,6 +1120,10 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
     // it cannot run once `game` below holds `&mut app.game` — and computed
     // through app-core rather than here, so the figure the screen draws is
     // the figure the keys clamp against.
+    let trader_absence = match app.mode {
+        Mode::Caravan => app.trader_absence(),
+        _ => None,
+    };
     let caravan = match app.mode {
         Mode::Caravan => app
             .game
@@ -1208,10 +1194,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         Mode::RouteCargo => app.route_cargo_basket(),
         _ => None,
     };
-    // What the program picker is about to spend a program on. Read here for
-    // `scanned`'s reason — an upgrade's structure is named off
-    // `App::upgradeable_structures`, which takes `&mut self` and so cannot
-    // run once `game` below holds `&mut app.game`.
+    // What the program picker is about to spend a program on. An upgrade's
+    // structure is named off `App::upgradeable_structures`, which takes
+    // `&mut self` and so cannot run once `game` below holds `&mut app.game`.
     let build_commit = match app.mode {
         Mode::BuildProgram => build_commit(app),
         _ => None,
@@ -1320,6 +1305,60 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             None,
         )),
         Mode::PinPrisoner => Some((building::pin_prisoner_rows(game, selected), None)),
+        Mode::Build => Some((
+            building::build_menu_page_rows(game, build_category, selected),
+            None,
+        )),
+        Mode::PinSubject => Some((building::pin_subject_page_rows(game, selected), None)),
+        Mode::ContractsHeld => Some((contracts::held_rows(&contract_active, selected), None)),
+        Mode::Caravan => Some((
+            match &caravan {
+                Some(basket) => caravan::caravan_page_rows(
+                    game,
+                    &basket.view,
+                    &basket.cells,
+                    basket.purse,
+                    selected,
+                ),
+                None => vec![text_row(trader_absence.unwrap_or_default())],
+            },
+            None,
+        )),
+        Mode::Dispatch => Some((
+            match dispatch_sections.as_deref() {
+                Some(sites) => dispatch::dispatch_hub_rows(
+                    sites,
+                    &dispatch_trips.0,
+                    &dispatch_trips.1,
+                    selected,
+                ),
+                None => vec![text_row("No Relay stands yet.")],
+            },
+            None,
+        )),
+        Mode::Contracts => Some((
+            contracts::board_rows(
+                &contract_offers,
+                contract_active.iter().any(|row| row.tutorial),
+                contract_reach,
+                selected,
+            ),
+            None,
+        )),
+        // The list view is a tab; the tree view draws over the hub, as
+        // it does anywhere, and claims every arrow (`App::screen_claims`).
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch
+            if !graph_view =>
+        {
+            let tree = match app.mode {
+                Mode::Research => ResearchTree::Base,
+                Mode::RoutineResearch => ResearchTree::Routines,
+                Mode::AffixResearch => ResearchTree::Affixes,
+                _ => ResearchTree::Weapons,
+            };
+            let (_, rows) = progression::research_page_rows(game, tree, selected, dev_console);
+            Some((rows, None))
+        }
         _ => None,
     });
     if let (Some(frame), Some((rows, nothing_qualifies))) = (&hub_frame, page_rows) {
@@ -1451,28 +1490,7 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 m,
             )
         }
-        Mode::WorkStructure => draw_structure_menu(
-            &scanned,
-            "Work",
-            "Work which structure yourself?",
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
-        Mode::Remove => draw_remove_menu(&scanned, selected, refusal, painter, m),
         Mode::RemoveConfirm => draw_remove_confirm(selected, refusal, painter, m),
-        // Says the crew does the work, because the direction prompt is now
-        // the whole of the screen the player decides on: the list this
-        // replaced carried that sentence above its rows.
-        Mode::UpgradeDirection => draw_direction_prompt(
-            "Upgrade direction",
-            "Upgrade which neighbour? Your crew fetches the parts and does \
-             the work.",
-            refusal,
-            painter,
-            m,
-        ),
         Mode::InspectDirection => draw_direction_prompt(
             "Inspect direction",
             "Choose a direction to inspect",
@@ -1708,16 +1726,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
         ),
         Mode::StackMarket => draw_stack_market(game, &list_filter, selected, refusal, painter, m),
-        Mode::Caravan => draw_caravan(game, caravan, selected, refusal, painter, m),
-        Mode::Dispatch => draw_dispatch(
-            dispatch_sections.as_deref(),
-            &dispatch_trips.0,
-            &dispatch_trips.1,
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
         Mode::SortieSquad => draw_sortie_squad(
             sortie_squad_site.as_ref(),
             &sortie_squad_candidates,
@@ -1848,15 +1856,6 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             draw_mod_pick_affix(game, mod_copy.clone(), selected, refusal, painter, m)
         }
         Mode::RefitCopy => draw_refit_copy(game, refit_copy.clone(), refusal, painter, m),
-        Mode::Contracts => draw_contracts(
-            &contract_active,
-            &contract_offers,
-            contract_reach,
-            selected,
-            refusal,
-            painter,
-            m,
-        ),
         _ if hub_frame.is_some() => {
             if let Some(frame) = &hub_frame {
                 base_report::draw_base_report(

@@ -1,4 +1,4 @@
-//! The Sites hub's pages: row counts against app-core, widths at the smallest
+//! `b`'s site pages: row counts against app-core, widths at the smallest
 //! window, and no tick figure on any tab.
 
 use super::*;
@@ -463,4 +463,85 @@ fn every_site_page_draws_a_refusal_once() {
         super::refusals::SITE_PAGES.len(),
         "the walk reached only {seen:?}"
     );
+}
+
+/// `b`'s rail with every section populated, at 1280x720: each section header
+/// and the heading's tail fit the rail whole, and every title, long site
+/// names included, fits once elided for the caret, glyph and `!` it shares
+/// the row with.
+#[test]
+fn b_rail_titles_and_sections_fit_at_1280_by_720() {
+    use crate::render::base_report::frame::RAIL_CELLS;
+    use crate::render::manifest::elided_to_fit;
+    use feral_processes_app_core::Hub;
+
+    let app = sites_app();
+    let kind = Hub::Base.kind();
+    let pages = kind.pages(&app);
+    let (_, tail) = kind.heading(&app);
+    assert!(
+        pages.iter().any(|p| p.section == Some("TOWNS")),
+        "the census needs the sites sections on the rail"
+    );
+    let m = crate::text::ui_metrics(720.0);
+    crate::paint::with_painter(|p| {
+        let char_w = p.measure_ui_advance("M", m.font_size);
+        let rail_w = RAIL_CELLS as f32 * char_w;
+        assert!(p.measure_ui_advance(&tail, m.small()) <= rail_w, "{tail:?}");
+        for page in &pages {
+            if let Some(section) = page.section {
+                assert!(
+                    p.measure_ui_advance(section, m.small()) <= rail_w,
+                    "section {section:?} runs past the rail"
+                );
+            }
+            let cells = 4.0 + if page.glyph.is_some() { 2.0 } else { 0.0 };
+            let room = rail_w - char_w * cells;
+            let shown = elided_to_fit(p, &page.title, m.font_size, room);
+            assert!(
+                p.measure_ui_advance(&shown, m.font_size) <= room + 0.5,
+                "{:?} runs past the rail",
+                page.title
+            );
+        }
+    });
+}
+
+/// `i`'s rail at 1280x720: every section header fits the rail whole, and a
+/// member's or structure's name, a long modded one included, fits once
+/// elided for the caret and `!` it shares the row with.
+#[test]
+fn i_rail_titles_and_sections_fit_at_1280_by_720() {
+    use crate::render::base_report::frame::RAIL_CELLS;
+    use crate::render::manifest::elided_to_fit;
+    use feral_processes_app_core::{
+        BESIDE_SECTION, Hub, PARTY_SECTION, PROGRAMS_SECTION, YOU_SECTION,
+    };
+
+    let app = sites_app();
+    let kind = Hub::Inventory.kind();
+    let (_, tail) = kind.heading(&app);
+    let long = format!("{} (north)", "W".repeat(40));
+    let mut titles: Vec<String> = kind.pages(&app).into_iter().map(|p| p.title).collect();
+    titles.push(long);
+    let m = crate::text::ui_metrics(720.0);
+    crate::paint::with_painter(|p| {
+        let char_w = p.measure_ui_advance("M", m.font_size);
+        let rail_w = RAIL_CELLS as f32 * char_w;
+        for section in [YOU_SECTION, PARTY_SECTION, PROGRAMS_SECTION, BESIDE_SECTION] {
+            assert!(
+                p.measure_ui_advance(section, m.small()) <= rail_w,
+                "section {section:?} runs past the rail"
+            );
+        }
+        assert!(p.measure_ui_advance(&tail, m.small()) <= rail_w, "{tail:?}");
+        let room = rail_w - char_w * 4.0;
+        for title in &titles {
+            let shown = elided_to_fit(p, title, m.font_size, room);
+            assert!(
+                p.measure_ui_advance(&shown, m.font_size) <= room + 0.5,
+                "{title:?} runs past the rail"
+            );
+        }
+    });
 }

@@ -20,10 +20,10 @@ use feral_processes_engine::structures::StructureDb;
 use feral_processes_engine::tactical::props::PropDb;
 
 use crate::app::sprite_editor::{
-    DEFAULT_SPRITE_FRAME_MS, EditorChrome, FORGE_BUTTONS, PointerButton, PointerHit, PointerPhase,
+    DEFAULT_SPRITE_FRAME_MS, EditorChrome, FORGE_BUTTONS, PointerButton, PointerPhase,
     SpriteEditor, SpriteEditorView, SubjectTint,
 };
-use crate::{App, GameKey, Mode};
+use crate::{App, GameKey, Mode, PointerHit};
 
 /// The name `assets/sprites/anchor.png` is looked up under — the one place
 /// this string is authored beside `crates/gui/src/render/base/`'s
@@ -261,6 +261,7 @@ impl App {
         self.menu_origin = Some(Mode::SpriteOptions);
         self.menu_selected = 0;
         self.pending_sprite_revert = None;
+        self.picker_clicked = None;
         self.mode = Mode::SpritePicker;
     }
 
@@ -555,6 +556,7 @@ impl App {
         match key {
             GameKey::Esc => {
                 self.sprite_editor = None;
+                self.picker_clicked = None;
                 self.mode = Mode::SpritePicker;
             }
             GameKey::Char('s') => {
@@ -579,13 +581,19 @@ impl App {
         }
     }
 
-    /// The mouse's one entry point — routed only while `Mode::SpriteEditor`
-    /// or `Mode::SpritePicker` is open, or while the creation wizard's editor
-    /// is, every other mode drops it silently, since nothing else in
-    /// the game reads a pointer at all. `phase` governs the stroke
+    /// What one pointer phase does on a Sprite Forge screen — routed only
+    /// while `Mode::SpriteEditor` or `Mode::SpritePicker` is open, or while
+    /// the creation wizard's editor is, every other mode drops it silently.
+    /// `handle_pointer_event` is the caller, turning the reader's frame into
+    /// phases. `phase` governs the stroke
     /// (`PointerPhase`'s own doc comment); what a `hit` does to the canvas is
     /// `SpriteEditor::handle_pointer`'s.
-    pub fn handle_pointer(&mut self, hit: PointerHit, button: PointerButton, phase: PointerPhase) {
+    pub(crate) fn handle_pointer(
+        &mut self,
+        hit: PointerHit,
+        button: PointerButton,
+        phase: PointerPhase,
+    ) {
         match self.mode {
             Mode::SpriteEditor => self.handle_editor_pointer(hit, button, phase),
             Mode::SpritePicker => self.handle_picker_pointer(hit, button, phase),

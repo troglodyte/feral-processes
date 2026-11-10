@@ -197,9 +197,17 @@
   behind a popup child (`keybar_mode == None`) registers nothing, or a click
   would land under the popup, and `hub_at` is `None` there so app-core
   ignores a stale hub hit anyway; (5) `pointer.rs` reading **before** the
-  draw swaps last frame's list in, so hover runs one frame behind and a
-  button already held when a screen opens is unarmed until a frame with none
-  held; (6) `App::handle_pointer(hit, button, phase)` is still the sprite
+  draw swaps last frame's list in, so hover runs one frame behind, a button
+  already held when a screen opens is unarmed until a frame with none held,
+  and the list is dropped when `Reader::drawn`'s screen stamp (mode and held
+  page) is no longer the app's; **a hub acts on the click (release over the
+  press's target, no drag), never the press**, and while that gesture is live
+  `Reader::owns_gesture` keeps the map, world-map and sprite paths from
+  reading the same press or release again (a keycap that closes a hub must
+  not also travel; egui's double-click flag spans screens, so the picker
+  takes it only if `double_click_on_one_screen`); there is no double-click
+  flag in `PointerEvent`, since a click on the row already under the cursor
+  is `Enter`; (6) `App::handle_pointer(hit, button, phase)` is still the sprite
   editor's until phase 5 — the hub's door is `handle_pointer_event`; (7)
   keycap labels *are* the keys (`keys_of`): `↑/↓` is two targets, `1–9` is
   none, so a hint spelled differently from its handler is also unclickable.

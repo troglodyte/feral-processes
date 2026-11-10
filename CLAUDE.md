@@ -25,7 +25,8 @@ reason (`crates/gui/src/lib.rs`). A graphical display is required; no text
 mode, no headless play.
 
 **The drawing seam:** `crates/gui/src/paint.rs` is the only file that names a
-graphics library; `render/` draws only through its `Painter`. Full rule:
+graphics library (bar `crates/gui/src/pointer.rs`, which names egui only to
+read pointer input); `render/` draws only through its `Painter`. Full rule:
 `.claude/rules/drawing-seam.md`.
 
 ## Load-bearing seams

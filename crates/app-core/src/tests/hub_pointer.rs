@@ -14,7 +14,7 @@ fn place(app: &App) -> Place {
 fn click(app: &mut App, hit: PointerHit) {
     app.handle_pointer_event(PointerEvent {
         hover: Some(hit),
-        press: true,
+        click: true,
         ..Default::default()
     });
 }
@@ -93,21 +93,44 @@ fn a_row_click_selects_it_and_a_second_click_is_enter() {
 }
 
 #[test]
-fn a_double_click_on_an_unselected_row_is_select_then_enter() {
+fn two_clicks_on_an_unselected_row_are_select_then_enter_once() {
     use GameKey::*;
     let (mut mouse, mut kb) = on_the_options_list(41204);
-    mouse.handle_pointer_event(PointerEvent {
-        hover: Some(PointerHit::Row(1)),
-        press: true,
-        double: true,
-        ..Default::default()
-    });
+    click(&mut mouse, PointerHit::Row(1));
+    click(&mut mouse, PointerHit::Row(1));
     keys(&mut kb, &[Down, Enter]);
     assert_eq!(place(&mouse), place(&kb));
     assert_eq!(
         format!("{:?}", mouse.profile()),
         format!("{:?}", kb.profile())
     );
+}
+
+/// A press that never completes into a click (a drag began on the row) is
+/// not a click: only `click` acts.
+#[test]
+fn a_press_or_a_release_alone_is_not_a_click() {
+    let (mut mouse, kb) = on_the_options_list(41216);
+    for ev in [
+        PointerEvent {
+            hover: Some(PointerHit::Row(2)),
+            press: true,
+            ..Default::default()
+        },
+        PointerEvent {
+            hover: Some(PointerHit::Row(2)),
+            up: true,
+            ..Default::default()
+        },
+        PointerEvent {
+            hover: Some(PointerHit::Key(GameKey::Down)),
+            drag: true,
+            ..Default::default()
+        },
+    ] {
+        mouse.handle_pointer_event(ev);
+    }
+    assert_eq!(place(&mouse), place(&kb));
 }
 
 #[test]
@@ -202,7 +225,7 @@ fn only_a_primary_press_acts_and_hover_is_recorded_always() {
     let (mut app, kb) = on_the_options_list(41212);
     app.handle_pointer_event(PointerEvent {
         hover: Some(PointerHit::Row(3)),
-        press: true,
+        click: true,
         button: PointerButton::Secondary,
         ..Default::default()
     });

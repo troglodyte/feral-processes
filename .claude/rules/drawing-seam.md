@@ -59,8 +59,11 @@ handle rides through `clipped`), so there is no global or static state, and
 `target` names no graphics type. `crates/gui/src/pointer.rs` is the one
 reader: it resolves hover and presses against the **previous** frame's list
 (the last target drawn wins, so a row over a region's background is the row),
-owns "armed" and the wheel remainder, and hands `App::handle_pointer_event`
-one `PointerEvent`. **`pointer.rs` is the one exception to "only `paint.rs`
+owns "armed", the wheel remainder and the click (a press and release on one
+target with no drag between, which is when a hub acts), drops targets drawn
+for a screen the app has since left, and hands `App::handle_pointer_event`
+one `PointerEvent`; while a gesture that began on a target is live the older
+per-screen paths stand down (`Reader::owns_gesture`). **`pointer.rs` is the one exception to "only `paint.rs`
 names a graphics library"**: it names `egui` to read pointer input and
 nothing else — it draws nothing and `render/` still never names egui. It
 has no `match app.mode` and names no hub; what a hit means is app-core's, and

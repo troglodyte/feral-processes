@@ -265,6 +265,7 @@ fn handle_sprite_pointer(
     ctx: &egui::Context,
     painter: &Painter,
     tracker: &mut SpritePointer,
+    double_ok: bool,
 ) {
     let Some(rects) = render::sprite_forge::sprite_hits(app, painter) else {
         *tracker = SpritePointer::default();
@@ -287,8 +288,11 @@ fn handle_sprite_pointer(
         let (pressed, double) = ctx.input(|i| {
             (
                 i.pointer.primary_pressed(),
-                i.pointer
-                    .button_double_clicked(egui::PointerButton::Primary),
+                // egui counts clicks across screens; a second click on the
+                // picker after one that opened it is not a double.
+                double_ok
+                    && i.pointer
+                        .button_double_clicked(egui::PointerButton::Primary),
             )
         });
         let hit = hover.and_then(|pos| rects.resolve((pos.x, pos.y)));
@@ -355,6 +359,46 @@ fn handle_sprite_pointer(
         }
         (None, None) => {}
     }
+}
+
+/// The sprite editor's pointer path, for a frame the pointer layer's reader
+/// does not own: a press or release that began on one of its targets was
+/// already read there, and a second read would act twice (a keycap that
+/// closes a hub, then a map click on the screen it lands on).
+fn sprite_pointer_path(
+    app: &mut App,
+    ctx: &egui::Context,
+    reader: &pointer::Reader,
+    painter: &Painter,
+    tracker: &mut SpritePointer,
+) {
+    if !reader.owns_gesture() {
+        handle_sprite_pointer(
+            app,
+            ctx,
+            painter,
+            tracker,
+            reader.double_click_on_one_screen(),
+        );
+    }
+}
+
+/// The map's and the world map's pointer paths, under the same rule as
+/// `sprite_pointer_path`. Answers the hover label due, if any.
+fn map_pointer_paths(
+    app: &mut App,
+    ctx: &egui::Context,
+    reader: &pointer::Reader,
+    fx: &Fx,
+    painter: &Painter,
+    tracker: &mut MapPointer,
+) -> Option<(egui::Pos2, (i32, i32))> {
+    if reader.owns_gesture() {
+        return None;
+    }
+    let hover = handle_map_pointer(app, ctx, fx, tracker);
+    handle_world_map_pointer(app, ctx, painter);
+    hover
 }
 
 /// Frame-to-frame pointer state for click-to-travel: the pane-space pixel a
@@ -931,9 +975,16 @@ fn frame(
     // doc comment for why no separate mode check is needed here.
     {
         let ctx = contexts.ctx_mut()?;
-        handle_sprite_pointer(&mut fe.app, ctx, &painter, &mut fe.sprite_pointer);
-        // Before the draw, which refills the target list this swaps out.
+        // Before the draw, which refills the target list this swaps out,
+        // and before the older paths, which stand down on a gesture it owns.
         fe.pointer.frame(ctx, &mut fe.app);
+        sprite_pointer_path(
+            &mut fe.app,
+            ctx,
+            &fe.pointer,
+            &painter,
+            &mut fe.sprite_pointer,
+        );
     }
     // The settings live in the profile, which the game menu writes; the
     // frame only reads them.
@@ -1004,13 +1055,20 @@ fn frame(
         f64::from(input.time.delta_secs()),
         started.elapsed().as_secs_f64(),
     );
+    fe.pointer.drawn(&fe.app);
     // After `render::draw`, which is what stashes `fe.fx`'s `MapClickLayout`
     // for this frame — see `handle_map_pointer`'s own doc for why reading it
     // any earlier would find last frame's layout instead.
     {
         let ctx = contexts.ctx_mut()?;
-        let hover = handle_map_pointer(&mut fe.app, ctx, &fe.fx, &mut fe.map_pointer);
-        handle_world_map_pointer(&mut fe.app, ctx, &painter);
+        let hover = map_pointer_paths(
+            &mut fe.app,
+            ctx,
+            &fe.pointer,
+            &fe.fx,
+            &painter,
+            &mut fe.map_pointer,
+        );
         if let Some((cursor, tile)) = hover {
             let lines = fe.app.hover_lines(tile.0, tile.1);
             if !lines.is_empty() {

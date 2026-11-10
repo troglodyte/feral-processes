@@ -65,8 +65,12 @@ pub struct PointerEvent {
     pub drag: bool,
     /// A button was released this frame.
     pub up: bool,
-    /// The press is the second of a double-click.
-    pub double: bool,
+    /// A press and its release landed on one target without a drag between:
+    /// a click on `hover`. **A hub acts on this**, never on the press, so a
+    /// drag that starts on a row clicks nothing. There is no double-click
+    /// flag: a click on the row the cursor is already on is `Enter`, so two
+    /// clicks are select then `Enter` once, however slowly they come.
+    pub click: bool,
     pub button: PointerButton,
     /// Whole wheel notches this frame, positive up.
     pub wheel: i32,
@@ -81,8 +85,8 @@ impl App {
         if event.wheel != 0 {
             self.hub_pointer_wheel(hit, event.wheel);
         }
-        if event.press && event.button == PointerButton::Primary {
-            self.pointer_press(hit, event.double);
+        if event.click && event.button == PointerButton::Primary {
+            self.pointer_click(hit);
         }
     }
 
@@ -91,14 +95,14 @@ impl App {
         self.pointer_hover.as_ref() == Some(hit)
     }
 
-    fn pointer_press(&mut self, hit: PointerHit, double: bool) {
+    fn pointer_click(&mut self, hit: PointerHit) {
         match hit {
             PointerHit::Key(key) => self.handle_key(key),
             PointerHit::Page(_)
             | PointerHit::Tab(_)
             | PointerHit::Row(_)
             | PointerHit::More(_)
-            | PointerHit::Region(_) => self.hub_pointer_press(hit, double),
+            | PointerHit::Region(_) => self.hub_pointer_click(hit),
             // The sprite editor and the map have their own pointer paths
             // until they move onto this one.
             PointerHit::Cell(..)

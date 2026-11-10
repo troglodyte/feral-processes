@@ -11,11 +11,11 @@ use crate::*;
 const MAX_ROW_WALK: usize = 512;
 
 impl App {
-    pub(crate) fn hub_pointer_press(&mut self, hit: PointerHit, double: bool) {
+    pub(crate) fn hub_pointer_click(&mut self, hit: PointerHit) {
         match hit {
             PointerHit::Page(key) => self.pointer_page(key),
             PointerHit::Tab(to) => self.pointer_tab(to),
-            PointerHit::Row(row) if self.hub_at().is_some() => self.pointer_row(row, double),
+            PointerHit::Row(row) if self.hub_at().is_some() => self.pointer_row(row),
             PointerHit::More(dir) if self.hub_at().is_some() => {
                 self.focus_hub_page();
                 self.handle_key(match dir {
@@ -109,9 +109,9 @@ impl App {
     }
 
     /// Walks the arrows to `row`; a click on the row the cursor is already
-    /// on, or a double-click, then presses `Enter`. A click that only
+    /// on (which is all a double-click is), then presses `Enter`. A click that only
     /// brought the cursor in from the rail is not a second click.
-    fn pointer_row(&mut self, row: usize, double: bool) {
+    fn pointer_row(&mut self, row: usize) {
         let second = !self.hub_on_rail && self.menu_selected == row;
         self.focus_hub_page();
         let (key, steps) = if row >= self.menu_selected {
@@ -122,7 +122,7 @@ impl App {
         for _ in 0..steps.min(MAX_ROW_WALK) {
             self.handle_key(key);
         }
-        if second || double {
+        if second {
             self.handle_key(GameKey::Enter);
         }
     }

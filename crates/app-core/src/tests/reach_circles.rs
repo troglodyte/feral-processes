@@ -4,7 +4,7 @@ use super::support::*;
 use crate::*;
 
 /// A base at zone 2 with a Mk1 Shield one tile east of the party.
-fn app_beside_a_shield(seed: u32) -> App {
+pub(crate) fn app_beside_a_shield(seed: u32) -> App {
     let mut app = app_in_base_with_programs(seed, 2);
     let game = app.game.as_mut().unwrap();
     game.dev_unlock_research(&"fortification".into())
@@ -71,8 +71,9 @@ fn deploying_a_shield_previews_four_circles() {
 #[test]
 fn a_shield_upgrade_skips_the_program_picker() {
     let mut app = app_beside_a_shield(6104);
+    on_the_info_tab_of(&mut app, "Shield");
 
-    app.upgrade_toward((1, 0));
+    app.handle_key(GameKey::Char('U'));
 
     assert_ne!(app.mode, Mode::BuildProgram);
     assert!(
@@ -81,7 +82,7 @@ fn a_shield_upgrade_skips_the_program_picker() {
             .unwrap()
             .adjacent_build_site(1, 0)
             .is_some(),
-        "the upgrade is filed by the call alone"
+        "the upgrade is filed by the key alone"
     );
 }
 
@@ -105,7 +106,7 @@ fn board_hover_circle_is_in_board_cells() {
 }
 
 /// A base at zone 2 with a Patch Node one tile east of the party.
-fn app_beside_a_patch_node(seed: u32) -> App {
+pub(crate) fn app_beside_a_patch_node(seed: u32) -> App {
     let mut app = app_in_base_with_programs(seed, 2);
     let game = app.game.as_mut().unwrap();
     game.dev_unlock_research(&"fortification".into())

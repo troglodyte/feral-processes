@@ -269,6 +269,53 @@ fn the_structure_launcher_verbs_act_on_the_entry_they_are_pressed_on() {
     assert_eq!(after, before - 1, "and only it");
 }
 
+/// Info-only structures get a BESIDE YOU entry because W, U or X does
+/// something to them; the keys are pressed through the app, never the
+/// `Game` door.
+#[test]
+fn the_verbs_reach_the_info_only_structures() {
+    use crate::tests::reach_circles::{app_beside_a_patch_node, app_beside_a_shield};
+
+    for (kind, mut app) in [
+        ("Shield", app_beside_a_shield(46030)),
+        ("Patch Node", app_beside_a_patch_node(46031)),
+    ] {
+        on_the_info_tab_of(&mut app, kind);
+        app.handle_key(GameKey::Char('U'));
+        assert_ne!(app.mode, Mode::BuildProgram, "{kind} needs no program");
+        assert!(
+            app.game
+                .as_mut()
+                .unwrap()
+                .adjacent_build_site(1, 0)
+                .is_some(),
+            "U filed an upgrade of the {kind}"
+        );
+    }
+
+    let mut app = app_beside_a_shield(46032);
+    let shield = on_the_info_tab_of(&mut app, "Shield");
+    app.handle_key(GameKey::Char('X'));
+    assert!(!is_beside(&app, shield), "X demolished the Shield");
+
+    let mut app = app_owning_a_program_and_a_research_station(46033);
+    stand_beside_the_extractor(&mut app);
+    on_the_info_tab_of(&mut app, "Research Station");
+    app.handle_key(GameKey::Char('W'));
+    assert_eq!(app.status_line, None, "the work order was taken");
+    let log = app.game.as_ref().unwrap().message_log(32);
+    assert!(
+        log.iter().any(|l| l.text.contains("You set to work")),
+        "W started work at the Research Station"
+    );
+
+    let mut app = app_inside_a_small_base_with_programs(46034, false, 2);
+    stand_in_base_at(&mut app, -1, 0);
+    on_the_info_tab_of(&mut app, "Home");
+    app.handle_key(GameKey::Char('X'));
+    assert_eq!(app.mode, Mode::RemoveConfirm, "the Home asks first");
+}
+
 /// Each door answers a refusal in its own words, aimed at the entry's own
 /// structure: the Breeding Bay is no node, has no upgrade path, and will not
 /// come down with a program incubating in it.

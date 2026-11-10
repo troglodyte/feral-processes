@@ -62,9 +62,10 @@ struct Candidate {
 impl Game {
     /// Every structure with a cell orthogonally beside the party, once each,
     /// ordered by the first side it occupies going N, E, S, W. A structure
-    /// with nothing but its `Info` page is in the cycle only when one of the
-    /// Info tab's verbs (work, upgrade, demolish) does something to it,
-    /// which is everything but a wall or a door (`is_room_boundary`).
+    /// with nothing but its `Info` page is in the cycle only when the Info
+    /// tab has a verb for it that is not demolish (`has_info_verb`): the
+    /// Home, a Broker, a Market or a Turret stay out, so `c` beside them is
+    /// the pack-only transfer or its refusal.
     ///
     /// Empty outside the field, after game over and during a fight, the
     /// guards the transfer offers carry.
@@ -89,7 +90,7 @@ impl Game {
                 continue;
             };
             let pages = self.structure_pages(entity);
-            if pages == [StructurePage::Info] && self.is_room_boundary(entity) {
+            if pages == [StructurePage::Info] && !self.has_info_verb(entity) {
                 continue;
             }
             let anchor = cells.iter().copied().min().unwrap_or((0, 0));
@@ -109,11 +110,12 @@ impl Game {
         found.into_iter().map(|(.., s)| s).collect()
     }
 
-    /// A wall or a door: the structures whose Info tab has no verb worth a
-    /// BESIDE YOU entry. Demolishing one is the player's own door-to-door
-    /// business, and neither is worked or upgraded.
-    fn is_room_boundary(&self, e: Entity) -> bool {
-        self.is_barrier(e) || self.is_door(e)
+    /// An Info-only structure earns a BESIDE YOU entry when `U` can upgrade
+    /// it or `W` can work it. Read off the def, never the current tier or
+    /// state, so an entry does not appear and disappear as it is used.
+    fn has_info_verb(&self, e: Entity) -> bool {
+        self.structure_def_of(e)
+            .is_some_and(|d| d.upgrade.is_some() || d.work.is_some())
     }
 
     /// The pages this structure offers, capability-driven, `Info` last.

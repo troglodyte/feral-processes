@@ -269,8 +269,8 @@ fn the_structure_launcher_verbs_act_on_the_entry_they_are_pressed_on() {
     assert_eq!(after, before - 1, "and only it");
 }
 
-/// Info-only structures get a BESIDE YOU entry because W, U or X does
-/// something to them; the keys are pressed through the app, never the
+/// Info-only structures get a BESIDE YOU entry because W or U does
+/// something to them (X comes along); the keys are pressed through the app, never the
 /// `Game` door.
 #[test]
 fn the_verbs_reach_the_info_only_structures() {
@@ -308,12 +308,6 @@ fn the_verbs_reach_the_info_only_structures() {
         log.iter().any(|l| l.text.contains("You set to work")),
         "W started work at the Research Station"
     );
-
-    let mut app = app_inside_a_small_base_with_programs(46034, false, 2);
-    stand_in_base_at(&mut app, -1, 0);
-    on_the_info_tab_of(&mut app, "Home");
-    app.handle_key(GameKey::Char('X'));
-    assert_eq!(app.mode, Mode::RemoveConfirm, "the Home asks first");
 }
 
 /// Each door answers a refusal in its own words, aimed at the entry's own

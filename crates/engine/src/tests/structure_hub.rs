@@ -72,6 +72,15 @@ fn a_wall_or_a_door_beside_you_is_not_in_the_cycle() {
 }
 
 #[test]
+fn the_home_a_broker_a_market_and_a_turret_are_not_beside_you() {
+    for kind in ["home", "contract_broker", "black_market", "turret"] {
+        let mut game = fresh();
+        spawn_structure_at(&mut game, kind, 1, 0);
+        assert!(game.adjacent_structures().is_empty(), "{kind} is no entry");
+    }
+}
+
+#[test]
 fn an_info_only_structure_is_beside_you_when_a_verb_acts_on_it() {
     for (kind, x, y) in [
         ("patch_node", 1, 0),

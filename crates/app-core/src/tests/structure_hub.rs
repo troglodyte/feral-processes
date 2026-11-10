@@ -294,3 +294,50 @@ fn c_with_nothing_beside_refuses_as_it_always_has() {
     assert!(app.held_structure().is_none());
     assert_eq!(tick(&app), before);
 }
+
+/// The Home's only page is Info, and Info-only structures with no upgrade or
+/// work verb are not BESIDE YOU entries, so `c` beside the Home is the
+/// pack-only transfer or the engine's refusal, as before the Info-only entries.
+#[test]
+fn c_beside_the_home_with_a_downed_program_opens_the_pack_only_transfer() {
+    let mut app = app_in_base_holding_a_downed_program(2650);
+    stand_in_base_at(&mut app, 1, 0);
+    let game = app.game.as_ref().unwrap();
+    assert!(
+        game.adjacent_structures().is_empty(),
+        "the Home is no entry"
+    );
+    assert_eq!(game.rack_offer_at(TransferAt::PackOnly).len(), 1);
+
+    app.handle_key(GameKey::Char('c'));
+
+    assert_eq!(app.mode, Mode::Transfer);
+    assert!(app.held_structure().is_none(), "no structure entry is held");
+}
+
+#[test]
+fn c_beside_the_home_with_nothing_downed_refuses() {
+    let mut app = app_beside_depots(2651, 0, 0, &[]);
+    stand_in_base_at(&mut app, 1, 0);
+    app.handle_key(GameKey::Char('c'));
+
+    assert_eq!(app.mode, Mode::Playing);
+    let said = app
+        .game
+        .as_ref()
+        .unwrap()
+        .message_log(200)
+        .into_iter()
+        .any(|e| e.text.starts_with("There is nothing"));
+    assert!(said, "the engine's transfer refusal, not an Info tab");
+}
+
+#[test]
+fn i_beside_only_the_home_opens_the_last_page_not_an_entry() {
+    let mut app = app_beside_depots(2652, 0, 0, &[]);
+    stand_in_base_at(&mut app, 1, 0);
+    app.handle_key(GameKey::Char('i'));
+
+    assert!(app.held_structure().is_none(), "no BESIDE YOU entry opens");
+    assert_eq!(app.hub_page(), Some(&HubPageKey::Named("You")));
+}

@@ -88,7 +88,6 @@ const BASE_RAIL: &[(&str, &[Mode])] = &[
         ],
     ),
     ("Alerts", &[Mode::Alerts]),
-    ("Structures", &[Mode::BaseStructures]),
 ];
 
 const INVENTORY_RAIL: &[(&str, &[Mode])] = &[
@@ -122,7 +121,7 @@ fn every_fixed_rail_reads_as_it_does_today() {
     // The fixed table leads `b`'s rail; `b_rail.rs` has the sections after.
     let fixed = |app: &App| {
         let mut rail = plain(rail(app, Hub::Base));
-        rail.truncate(rail.iter().position(|(t, _)| t == "Alerts").unwrap() + 2);
+        rail.truncate(rail.iter().position(|(t, _)| t == "Alerts").unwrap() + 1);
         rail
     };
     let app = app_inside_a_small_base_with_programs(41001, false, 2);

@@ -1,7 +1,7 @@
-//! The hub command pages — the base's Structures stopgap (`b`) and the
-//! party's two (`p`, then Programs / Routines) — and the rule that decides
-//! which of their rows are on screen right now. The base's other launchers
-//! became the tabs they opened (hub merge, ADR 0045).
+//! The party's two hub command pages (Programs / Routines on `i`) and the
+//! rule that decides which of their rows are on screen right now. The base's
+//! launchers became the tabs they opened, and its structure verbs keys on a
+//! structure's Info tab (hub merge, ADR 0045).
 //!
 //! These exist because the map screen bound 27 keys. A row here is the
 //! *only* way to reach the screen behind it: the old direct keys were
@@ -26,37 +26,6 @@ struct GroupEntry {
     label: &'static str,
     target: Mode,
     available: fn(&mut App) -> bool,
-}
-
-/// The BASE section's Structures page: a stopgap that keeps the three
-/// structure verbs reachable until hub-merge phase 3 makes them keys on the
-/// structure's Info tab in `i`. Delete it with the page.
-///
-/// Each is a field action (`Game::require_field`'s callers), so a row is
-/// also hidden in the Stack.
-const STRUCTURE_ROWS: &[GroupEntry] = &[
-    GroupEntry {
-        label: "Work a structure yourself",
-        target: Mode::WorkStructure,
-        available: |app| on_the_field(app) && !app.workable_structures().is_empty(),
-    },
-    GroupEntry {
-        label: "Upgrade a structure",
-        target: Mode::UpgradeDirection,
-        // The *scan radius*, where the screen it opens reaches one tile:
-        // a row that appeared only while you stood beside a machine would
-        // hide the verb from a player who never has.
-        available: |app| on_the_field(app) && !app.upgradeable_structures().is_empty(),
-    },
-    GroupEntry {
-        label: "Demolish a structure",
-        target: Mode::Remove,
-        available: |app| on_the_field(app) && !app.nearby_structures().is_empty(),
-    },
-];
-
-fn on_the_field(app: &App) -> bool {
-    app.game.as_ref().is_some_and(|g| !g.is_underground())
 }
 
 const PROGRAM_ROWS: &[GroupEntry] = &[
@@ -131,7 +100,6 @@ const ROUTINE_ROWS: &[GroupEntry] = &[
 /// The static table behind a command page, or `None` for any other mode.
 fn command_table(page: Mode) -> Option<&'static [GroupEntry]> {
     match page {
-        Mode::BaseStructures => Some(STRUCTURE_ROWS),
         Mode::PartyPrograms => Some(PROGRAM_ROWS),
         Mode::PartyRoutines => Some(ROUTINE_ROWS),
         _ => None,

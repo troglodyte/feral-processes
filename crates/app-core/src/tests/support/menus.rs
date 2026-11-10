@@ -61,24 +61,8 @@ pub(crate) fn pick_row(app: &mut App, row: usize) {
     app.handle_key(GameKey::Enter);
 }
 
-/// The base's command pages: the Structures stopgap alone since the hub
-/// merge made the other launchers' rows into tabs.
-pub(crate) const COMMAND_PAGES: [Mode; 1] = [Mode::BaseStructures];
-
-/// Every base command row on offer right now.
-pub(crate) fn command_labels_all(app: &mut App) -> Vec<&'static str> {
-    COMMAND_PAGES
-        .iter()
-        .flat_map(|&page| app.command_rows(page).unwrap_or_default())
-        .map(|r| r.label)
-        .collect()
-}
-
 /// Opens the screen a base launcher row `label` opened, the way a player
-/// reaches it now: a retired row through its tab (`open_hub_screen`), a
-/// structure verb through the Structures page, highlighted and picked.
-/// Those rows are filtered by what is currently possible, so they are found
-/// by label rather than by position.
+/// reaches it now: through its tab (`open_hub_screen`).
 pub(crate) fn open_command(app: &mut App, label: &str) {
     let tab = match label {
         "Deploy a structure" => Some(Mode::Build),
@@ -107,17 +91,7 @@ pub(crate) fn open_command(app: &mut App, label: &str) {
         app.menu_selected = 0;
         return;
     }
-    let mut offered = Vec::new();
-    for page in COMMAND_PAGES {
-        let rows = app.command_rows(page).unwrap_or_default();
-        offered.push((page, rows.iter().map(|r| r.label).collect::<Vec<_>>()));
-        if let Some(idx) = rows.iter().position(|r| r.label == label) {
-            open_hub_screen(app, page);
-            pick_row(app, idx);
-            return;
-        }
-    }
-    panic!("{label:?} is not offered right now; pages: {offered:?}");
+    panic!("{label:?} is not a launcher row that became a tab");
 }
 
 /// Where `mode` sits in the base report's or the inventory's fixed table, as
@@ -220,4 +194,36 @@ pub(crate) fn open_hub_screen(app: &mut App, target: Mode) {
 /// and both from an empty tile, which is three neighbours of one tile.
 pub(crate) fn app_inside_a_small_base(seed: u32, underground: bool) -> App {
     app_inside_a_small_base_with_programs(seed, underground, 0)
+}
+
+/// Walks `[c]`'s entries to the one named `name` and into its Info tab,
+/// cursor in the page, so the next key is the tab's own.
+pub(crate) fn on_the_info_tab_of(app: &mut App, name: &str) -> Entity {
+    app.handle_key(GameKey::Char('c'));
+    for _ in 0..8 {
+        if held_beside(app).name == name {
+            break;
+        }
+        app.handle_key(GameKey::Char(']'));
+    }
+    assert_eq!(held_beside(app).name, name, "an entry for {name}");
+    let entity = held_beside(app).entity;
+    for _ in 0..16 {
+        if app.mode == Mode::StructureManifest {
+            break;
+        }
+        app.handle_key(GameKey::Tab);
+    }
+    assert_eq!(app.mode, Mode::StructureManifest, "the Info tab");
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail);
+    entity
+}
+
+/// Whether `entity` is one of the structures beside the party.
+pub(crate) fn is_beside(app: &App, entity: Entity) -> bool {
+    let game = app.game.as_ref().unwrap();
+    game.adjacent_structures()
+        .iter()
+        .any(|s| s.entity == entity)
 }

@@ -177,9 +177,12 @@
   (`Painter::target`), `gui/src/pointer.rs` is the only reader of egui pointer
   input, and every `PointerHit` ends in a key the keyboard already presses
   (`App::handle_pointer_event`).** The traps: (1) **recomputing or stashing a
-  layout** to hit-test it (the sprite editor's `sprite_hits`, the map's
-  `MapClickLayout`) is the pattern this retired — the rect is known only
-  where it is drawn, and a stash is a frame old by construction; (2) a hit
+  layout** to hit-test it (the sprite editor's old hit rects, the map's old
+  `Fx` layout stash) is the pattern this retired — the rect is known only
+  where it is drawn, and a stash is a frame old by construction; the map's
+  `MapLayout` is a draw-time value the map draw returns, and each tile is a
+  `MapTile` target, whose click is resolved at the release (the camera eases
+  between press and release) and whose Alt+click stays primary; (2) a hit
   that does *new* work instead of a key (a bespoke setter for "select row")
   drifts from the keyboard — `Row(i)` is the arrows walked to `i` and a
   second click or a double-click is `Enter`, once (`second || double`, never
@@ -202,13 +205,13 @@
   and the list is dropped when `Reader::drawn`'s screen stamp (mode and held
   page) is no longer the app's; **a hub acts on the click (release over the
   press's target, no drag), never the press**, and while that gesture is live
-  `Reader::owns_gesture` keeps the map, world-map and sprite paths from
+  `Reader::owns_gesture` keeps the world-map path from
   reading the same press or release again (a keycap that closes a hub must
   not also travel; egui's double-click flag spans screens, so the picker
   takes it only if `double_click_on_one_screen`); there is no double-click
   flag in `PointerEvent`, since a click on the row already under the cursor
-  is `Enter`; (6) `App::handle_pointer(hit, button, phase)` is still the sprite
-  editor's until phase 5 — the hub's door is `handle_pointer_event`; (7)
+  is `Enter`; (6) `App::handle_pointer(hit, button, phase)` is the sprite editor's
+  stroke door, driven from `handle_pointer_event`; (7)
   keycap labels *are* the keys (`keys_of`): `↑/↓` is two targets, `1–9` is
   none, so a hint spelled differently from its handler is also unclickable.
 - **A Broker's board is derived, never stored** — seeded off

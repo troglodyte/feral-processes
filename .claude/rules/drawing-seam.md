@@ -63,7 +63,13 @@ owns "armed", the wheel remainder and the click (a press and release on one
 target with no drag between, which is when a hub acts), drops targets drawn
 for a screen the app has since left, and hands `App::handle_pointer_event`
 one `PointerEvent`; while a gesture that began on a target is live the older
-per-screen paths stand down (`Reader::owns_gesture`). **`pointer.rs` is the one exception to "only `paint.rs`
+per-screen path (the world map's) stands down (`Reader::owns_gesture`). **The map registers a `MapTile` per tile it draws**
+(`MapLayout::register_tiles`, called by `draw_surface_map` and
+`draw_tactical_map`, which return the `MapLayout` for what is drawn over the
+map that frame): a click on any tile that ends a press on any tile within
+`CLICK_DRAG_TOLERANCE_PX` is a click on the tile it ended on, because the camera
+eases between press and release, and Alt+click on a tile stays a primary click
+(Alt is the room overlay there; elsewhere it is the middle button). **`pointer.rs` is the one exception to "only `paint.rs`
 names a graphics library"**: it names `egui` to read pointer input and
 nothing else — it draws nothing and `render/` still never names egui. It
 has no `match app.mode` and names no hub; what a hit means is app-core's, and

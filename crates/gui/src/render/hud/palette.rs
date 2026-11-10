@@ -33,6 +33,7 @@
 //! [`glyph`]) and the rarity tier colours from `render/mod.rs`.
 
 use crate::paint::Color;
+use crate::render::SELECT_BG;
 use feral_processes_engine::components::GlyphColor;
 use feral_processes_engine::world::Biome;
 
@@ -301,6 +302,20 @@ pub(crate) fn ground_cast(biome: Biome) -> Color {
         Biome::DataVoid | Biome::BlackIce | Biome::Entropy => Color::new(1.0, 1.0, 1.0, 1.0),
     }
 }
+
+/// How much of the cursor's strength a hover keeps.
+const HOVER_STRENGTH: f32 = 0.4;
+
+/// What the pointer's row, rail entry, tab or keycap is tinted: the cursor's
+/// own hue at 40% of its alpha, so a hover reads as the cursor's quieter
+/// sibling and never as a second selection. A role of its own rather than an
+/// inline alpha, so the two cannot drift apart.
+pub(in crate::render) const HOVER_BG: Color = Color::new(
+    SELECT_BG.r,
+    SELECT_BG.g,
+    SELECT_BG.b,
+    SELECT_BG.a * HOVER_STRENGTH,
+);
 
 #[cfg(test)]
 mod tests {

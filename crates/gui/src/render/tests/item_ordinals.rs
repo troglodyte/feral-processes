@@ -131,6 +131,29 @@ fn tab_rows(app: &mut App) -> Option<Vec<Row>> {
     })
 }
 
+/// The `Row` ordinals `draw_rows_in` registers for `rows` drawn into a rect
+/// tall enough that nothing scrolls off, in draw order.
+fn registered_ordinals(rows: &[Row]) -> Vec<usize> {
+    let m = crate::text::ui_metrics(720.0);
+    let rect = crate::paint::Rect::new(0.0, 0.0, 1200.0, (rows.len() + 4) as f32 * m.line_height);
+    crate::paint::with_targets(|p| {
+        crate::render::popup::draw_rows_in(
+            rect,
+            rows,
+            true,
+            Some(crate::render::popup::RowTargets { hover: None }),
+            p,
+            &m,
+        )
+    })
+    .into_iter()
+    .filter_map(|(_, hit)| match hit {
+        feral_processes_app_core::PointerHit::Row(i) => Some(i),
+        _ => None,
+    })
+    .collect()
+}
+
 /// How many rows app-core lets the cursor walk: Up from the top wraps to
 /// the last. Zero and one rows both leave it at 0.
 fn selection_rows(app: &mut App) -> usize {
@@ -167,18 +190,28 @@ fn walk_hub(app: &mut App, hub: Hub, key: char) -> (usize, Vec<String>) {
                 .count();
             let selectable = selection_rows(app);
             assert_eq!(app.mode, mode, "Up left {mode:?}");
+            // What the draw registers for a click: one target per `Item`,
+            // numbered from zero in order, so the ordinal a click reports is
+            // the index its handler selects by.
+            let registered = registered_ordinals(&rows);
+            if registered != (0..items).collect::<Vec<_>>() {
+                wrong.push(format!(
+                    "{mode:?}: registered {registered:?} for {items} items"
+                ));
+            }
+            let n = registered.len();
             let agrees = match mode {
                 // A member is the page's key, not a highlight: nothing on the
                 // page is an `Item`, and the cursor's row is the roster's.
-                Mode::PartyMember => items == 0,
+                Mode::PartyMember => n == 0,
                 // These three draw an entry over several `Item` lines (a
                 // wrapped continuation, a perk group's heading and spacer) and
                 // `draw_popup` pages them by span rather than by ordinal, so
                 // the count can only be bounded: every selectable entry has a
                 // row.
-                Mode::Inventory | Mode::Perks | Mode::Companion => items >= selectable,
+                Mode::Inventory | Mode::Perks | Mode::Companion => n >= selectable,
                 // Zero rows and one both leave the cursor at the top.
-                _ => items == selectable || (items == 0 && selectable == 1),
+                _ => n == selectable || (n == 0 && selectable == 1),
             };
             if !agrees {
                 wrong.push(format!("{mode:?}: {items} items, {selectable} selectable"));
@@ -219,4 +252,51 @@ fn every_i_tab_counts_one_item_per_selectable_row() {
     let (seen, wrong) = walk_hub(&mut app, Hub::Inventory, 'i');
     assert!(seen > 10, "the census walked {seen} tabs");
     assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// A list too long for its rect registers only the rows on screen, numbered
+/// from where the window starts, and a marker for each hidden side that
+/// scrolls it; the highlighted row is not also tinted for hover.
+#[test]
+fn a_scrolling_list_registers_its_window_and_its_markers() {
+    use crate::render::popup::{RowTargets, draw_rows_in, item_row};
+    use feral_processes_app_core::{Direction, PointerHit};
+    let m = crate::text::ui_metrics(720.0);
+    let rows: Vec<Row> = (0..40)
+        .map(|i| item_row(format!("row {i}"), i == 20))
+        .collect();
+    let rect = crate::paint::Rect::new(0.0, 0.0, 600.0, 10.0 * m.line_height);
+    let draw = |hover| {
+        crate::paint::with_painter(|p| {
+            let hover = Some(RowTargets { hover });
+            draw_rows_in(rect, &rows, true, hover, p, &m)
+        })
+        .1
+    };
+    let hits = crate::paint::with_targets(|p| {
+        draw_rows_in(rect, &rows, true, Some(RowTargets { hover: None }), p, &m)
+    });
+    let ordinals: Vec<usize> = hits
+        .iter()
+        .filter_map(|(_, h)| match h {
+            PointerHit::Row(i) => Some(*i),
+            _ => None,
+        })
+        .collect();
+    assert!(ordinals.contains(&20), "the cursor's row is on screen");
+    assert!(!ordinals.contains(&0) && !ordinals.contains(&39));
+    assert!(
+        ordinals.windows(2).all(|w| w[1] == w[0] + 1),
+        "{ordinals:?}"
+    );
+    let hit_list: Vec<PointerHit> = hits.iter().map(|(_, h)| *h).collect();
+    assert!(hit_list.contains(&PointerHit::More(Direction::Up)));
+    assert!(hit_list.contains(&PointerHit::More(Direction::Down)));
+    // Hover tints a row that is not the cursor's, and the marker too.
+    let tint = crate::render::hud::palette::HOVER_BG;
+    let tinted = |shapes: &[_]| crate::paint::painted_rect_fill_count(shapes, tint);
+    assert_eq!(tinted(&draw(None)), 0);
+    assert_eq!(tinted(&draw(Some(PointerHit::Row(ordinals[0])))), 1);
+    assert_eq!(tinted(&draw(Some(PointerHit::Row(20)))), 0, "the cursor's");
+    assert_eq!(tinted(&draw(Some(PointerHit::More(Direction::Down)))), 1);
 }

@@ -845,6 +845,7 @@ pub(super) fn draw_popup(
         w,
         y + m.line_height * 2.0,
         y + h - m.inset,
+        None,
         painter,
         m,
     );
@@ -861,6 +862,7 @@ pub(super) fn draw_rows_in(
     rect: Rect,
     rows: &[Row],
     focused: bool,
+    targets: Option<RowTargets>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -874,6 +876,7 @@ pub(super) fn draw_rows_in(
         rect.w,
         rect.y + m.font_size as f32,
         rect.y + rect.h,
+        targets,
         painter,
         m,
     );
@@ -890,6 +893,7 @@ fn draw_layout_rows(
     w: f32,
     mut cy: f32,
     max_y: f32,
+    targets: Option<RowTargets>,
     painter: &Painter,
     m: &Metrics,
 ) {
@@ -908,11 +912,23 @@ fn draw_layout_rows(
                 String::new()
             };
             painter.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            if let (Some(t), true) = (targets, layout.offset > 0) {
+                register_more(Direction::Up, &text, t, (x, w, cy), painter, m);
+            }
             cy += m.line_height;
         }
 
         let visible_end = (layout.offset + layout.capacity).min(layout.body.len());
+        let mut ordinal = item_ordinal(&layout.body[..layout.offset]);
         for row in &layout.body[layout.offset..visible_end] {
+            if let (Some(t), Row::Item { selected, .. }) = (targets, row) {
+                let bar = row_bar(x, w, cy, m);
+                painter.target(bar, PointerHit::Row(ordinal));
+                if t.hover == Some(PointerHit::Row(ordinal)) && !(*selected && focused) {
+                    painter.rect(bar.x, bar.y, bar.w, bar.h, hud::palette::HOVER_BG);
+                }
+                ordinal += 1;
+            }
             cy = match row {
                 Row::Item { selected: true, .. } if !focused => {
                     draw_row(&unselected(row), x, w, cy, max_y, painter, m)
@@ -929,6 +945,9 @@ fn draw_layout_rows(
                 String::new()
             };
             painter.ui(&text, x + m.pad, cy, m.small(), TEXT_DIM);
+            if let (Some(t), true) = (targets, below > 0) {
+                register_more(Direction::Down, &text, t, (x, w, cy), painter, m);
+            }
             cy += m.line_height;
         }
     }
@@ -936,6 +955,59 @@ fn draw_layout_rows(
     for row in layout.footer {
         cy = draw_row(row, x, w, cy, max_y, painter, m);
     }
+}
+
+/// What a hub's row list is to the pointer: its `Row::Item`s and its
+/// scroll markers are targets, and `hover` is what the app says is under
+/// the pointer. A popup's rows are not (`draw_popup` passes none).
+#[derive(Clone, Copy)]
+pub(super) struct RowTargets {
+    pub(super) hover: Option<PointerHit>,
+}
+
+/// How many `Row::Item`s `rows` holds: the ordinal the next one carries,
+/// which is the index its handler selects by.
+pub(super) fn item_ordinal(rows: &[Row]) -> usize {
+    rows.iter()
+        .filter(|r| matches!(r, Row::Item { .. }))
+        .count()
+}
+
+/// The highlight bar `draw_row` fills behind the row whose baseline is
+/// `cy`, which is also the row's pointer target.
+fn row_bar(x: f32, w: f32, cy: f32, m: &Metrics) -> Rect {
+    let bleed = m.pad - m.inset;
+    Rect::new(
+        x + bleed,
+        cy - m.font_size as f32,
+        w - bleed * 2.0,
+        m.line_height,
+    )
+}
+
+/// Registers an "n more" marker drawn at baseline `cy` as the scroll it
+/// stands for, tinted when hovered. `at` is the list's `(x, width, cy)`.
+fn register_more(
+    dir: Direction,
+    text: &str,
+    targets: RowTargets,
+    (x, w, cy): (f32, f32, f32),
+    painter: &Painter,
+    m: &Metrics,
+) {
+    let bar = Rect::new(
+        x + m.pad,
+        cy - m.small() as f32,
+        painter
+            .measure_ui_advance(text, m.small())
+            .min(w - m.pad * 2.0),
+        m.line_height,
+    );
+    let hit = PointerHit::More(dir);
+    if targets.hover == Some(hit) {
+        painter.rect(bar.x, bar.y, bar.w, bar.h, hud::palette::HOVER_BG);
+    }
+    painter.target(bar, hit);
 }
 
 fn unselected(row: &Row) -> Row {

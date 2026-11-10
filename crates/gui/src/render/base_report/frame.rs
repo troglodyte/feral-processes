@@ -1,10 +1,11 @@
 //! The hub's chrome: the page rail, the title line with its screen dots, and
 //! the keybar. Returns the rect the screen's rows go in.
 
-use super::manifest::keybar::{draw_groups, group};
+use super::manifest::keybar::{draw_groups, group, keycap_targets};
 use super::manifest::layout::{RailGeom, frame_rect, rail_window};
 use super::manifest::{cut_at_end_to_fit, elided_to_fit};
 use super::*;
+use feral_processes_app_core::{PointerHit, Region};
 use hud::log_frame::keycap;
 
 /// The rail's width in cells: a caret, the longest page title and the `!`.
@@ -72,6 +73,8 @@ pub(super) struct FrameView<'a> {
     pub(super) screen: usize,
     /// The hub's own keys, as `(key, verb)`.
     pub(super) extra_keys: &'a [(&'static str, &'static str)],
+    /// What the pointer is over, from the app's own record of it.
+    pub(super) hover: Option<PointerHit>,
 }
 
 /// Paints the frame (its keybar only when `keybar_mode` is given) and
@@ -99,15 +102,23 @@ pub(super) fn paint_frame(
         2.0,
         hud::palette::PANE_BORDER,
     );
-    draw_rail(&l.rail, view, on_rail, char_w, painter, m);
-    draw_title(&l.title, view.pages, view.page, view.screen, painter, m);
+    // Only the hub's own page is a pointer surface: the frame drawn behind
+    // a popup child is not, and nothing under the popup should take a click.
+    let live = keybar_mode.is_some();
+    if live {
+        painter.target(l.rail.rect, PointerHit::Region(Region::Rail));
+        painter.target(l.content, PointerHit::Region(Region::Page));
+    }
+    draw_rail(&l.rail, view, on_rail, live, char_w, painter, m);
+    draw_title(&l.title, view, live, painter, m);
     if let Some(mode) = keybar_mode {
-        draw_groups(
-            l.keybar,
-            &keybar_groups(mode, view.pages, view.page, on_rail, view.extra_keys),
-            painter,
-            m,
-        );
+        let groups = keybar_groups(mode, view.pages, view.page, on_rail, view.extra_keys);
+        for (rect, key) in keycap_targets(l.keybar, &groups, painter, m) {
+            let hit = PointerHit::Key(key);
+            tint_if_hovered(view, hit, rect, painter);
+            painter.target(rect, hit);
+        }
+        draw_groups(l.keybar, &groups, painter, m);
     }
 
     let mut content = l.content;
@@ -123,6 +134,14 @@ pub(super) fn paint_frame(
         content.h = (content.h - m.line_height).max(0.0);
     }
     content
+}
+
+/// Tints `rect` when the pointer is over `hit`, behind whatever is drawn
+/// next.
+fn tint_if_hovered(view: &FrameView, hit: PointerHit, rect: Rect, painter: &Painter) {
+    if view.hover == Some(hit) {
+        painter.rect(rect.x, rect.y, rect.w, rect.h, hud::palette::HOVER_BG);
+    }
 }
 
 /// One line of the rail: a section header, which the cursor never lands on,
@@ -153,6 +172,7 @@ fn draw_rail(
     rail: &RailGeom,
     view: &FrameView,
     focused: bool,
+    live: bool,
     char_w: f32,
     painter: &Painter,
     m: &Metrics,
@@ -185,7 +205,13 @@ fn draw_rail(
         .unwrap_or(0);
     let w = rail_window(lines.len(), selected_line, rail.fits());
     let mut slot = 0;
-    let more = |slot: usize, arrow: char, n: usize| {
+    // A marker stands for the nearest page it hides, so a click on it is
+    // the step to that page.
+    let page_of = |line: &RailLine| match line {
+        RailLine::Page(i) => Some(*i),
+        RailLine::Section(_) => None,
+    };
+    let more = |slot: usize, arrow: char, n: usize, hides: Option<usize>| {
         painter.ui(
             format!("{arrow} {n} more"),
             rail.rows.x + char_w,
@@ -193,9 +219,25 @@ fn draw_rail(
             m.small(),
             hud::palette::FAINT,
         );
+        if let (true, Some(page)) = (live, hides) {
+            let bar = Rect::new(
+                rail.rows.x,
+                rail.rows.y + slot as f32 * rail.row_h,
+                rail.rows.w,
+                rail.row_h,
+            );
+            let hit = PointerHit::Page(pages[page].key);
+            tint_if_hovered(view, hit, bar, painter);
+            painter.target(bar, hit);
+        }
     };
     if w.above > 0 {
-        more(slot, '↑', w.above);
+        more(
+            slot,
+            '↑',
+            w.above,
+            lines[..w.start].iter().rev().find_map(page_of),
+        );
         slot += 1;
     }
     for line in &lines[w.start..w.end] {
@@ -211,6 +253,14 @@ fn draw_rail(
         };
         let entry = &pages[page];
         let current = page == selected;
+        let bar = Rect::new(rail.rows.x, top, rail.rows.w, rail.row_h);
+        if live {
+            let hit = PointerHit::Page(entry.key);
+            if !(current && focused) {
+                tint_if_hovered(view, hit, bar, painter);
+            }
+            painter.target(bar, hit);
+        }
         if current && focused {
             painter.rect(rail.rows.x, top, rail.rows.w, rail.row_h, SELECT_BG);
         }
@@ -253,7 +303,7 @@ fn draw_rail(
         }
     }
     if w.below > 0 {
-        more(slot, '↓', w.below);
+        more(slot, '↓', w.below, lines[w.end..].iter().find_map(page_of));
     }
 }
 
@@ -297,14 +347,8 @@ pub(super) fn tab_strip_fits(
 /// The page's title, then its tab names with the current one marked
 /// (`Title   One · [Two] · Three`). A one-tab page draws nothing after the
 /// title, and a strip that does not fit falls back to one dot per tab.
-fn draw_title(
-    title: &Rect,
-    pages: &[HubPage],
-    page: usize,
-    tab: usize,
-    painter: &Painter,
-    m: &Metrics,
-) {
+fn draw_title(title: &Rect, view: &FrameView, live: bool, painter: &Painter, m: &Metrics) {
+    let (pages, page, tab) = (view.pages, view.page, view.screen);
     let base = title.y + title.h * 0.75;
     let name = pages[page].title.as_str();
     painter.ui_bold(name, title.x, base, m.title(), hud::palette::PANE_TITLE);
@@ -320,6 +364,16 @@ fn draw_title(
         let dots: Vec<&str> = (0..tabs.len())
             .map(|i| if i == tab { "●" } else { "○" })
             .collect();
+        if live {
+            // One target per dot: the dot and the space after it.
+            let step = advance("● ");
+            for i in 0..tabs.len() {
+                let bar = Rect::new(x + step * i as f32, title.y, step, title.h);
+                let hit = PointerHit::Tab(i);
+                tint_if_hovered(view, hit, bar, painter);
+                painter.target(bar, hit);
+            }
+        }
         painter.ui(dots.join(" "), x, base, m.font_size, hud::palette::FAINT);
         return;
     }
@@ -331,6 +385,12 @@ fn draw_title(
         }
         let label = tab_label(name, i == tab);
         let w = advance(&label);
+        if live {
+            let bar = Rect::new(x, title.y, w, title.h);
+            let hit = PointerHit::Tab(i);
+            tint_if_hovered(view, hit, bar, painter);
+            painter.target(bar, hit);
+        }
         if i == tab {
             painter.rect(x, title.y, w, title.h, SELECT_BG);
             painter.ui(&label, x, base, m.font_size, hud::palette::PANE_TITLE);
@@ -497,6 +557,7 @@ mod tests {
     use super::*;
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
+    use feral_processes_app_core::GameKey;
 
     /// Rail, title, content and keybar tile the frame without overlapping or
     /// escaping it, at every window height the game supports.
@@ -665,6 +726,7 @@ mod tests {
                     page: 0,
                     screen: 0,
                     extra_keys: TAB,
+                    hover: None,
                 },
                 None,
                 false,
@@ -709,6 +771,7 @@ mod tests {
                     page: selected,
                     screen: 0,
                     extra_keys: &[],
+                    hover: None,
                 },
                 None,
                 true,
@@ -812,6 +875,7 @@ mod tests {
                     page: 0,
                     screen: 1,
                     extra_keys: &[],
+                    hover: None,
                 },
                 None,
                 true,
@@ -890,5 +954,142 @@ mod tests {
         let lines = rail_lines(&pages);
         assert_eq!(lines.len(), pages.len());
         assert!(lines.iter().all(|l| matches!(l, RailLine::Page(_))));
+    }
+
+    fn base_pages() -> Vec<HubPage> {
+        feral_processes_app_core::BASE_REPORT_PAGES
+            .iter()
+            .map(|p| p.page())
+            .collect()
+    }
+
+    /// What `paint_frame` registers for the base report's Staff page (four
+    /// tabs), keybar on, at 1440x900.
+    fn staff_targets(hover: Option<PointerHit>, live: bool) -> Vec<(Rect, PointerHit)> {
+        let pages = base_pages();
+        let staff = pages.iter().position(|p| p.title == "Staff").unwrap();
+        let m = ui_metrics(900.0);
+        crate::paint::with_targets(|p| {
+            paint_frame(
+                &FrameView {
+                    title: ("BASE", ""),
+                    pages: &pages,
+                    page: staff,
+                    screen: 0,
+                    extra_keys: &[],
+                    hover,
+                },
+                live.then_some(Mode::StaffWellbeing),
+                true,
+                None,
+                p,
+                &m,
+            );
+        })
+    }
+
+    fn hits(targets: &[(Rect, PointerHit)]) -> Vec<PointerHit> {
+        targets.iter().map(|(_, h)| *h).collect()
+    }
+
+    /// Every rail entry, every tab name and the keybar's keys are targets,
+    /// under a background region for each half.
+    #[test]
+    fn the_frame_registers_its_rail_tabs_and_keys() {
+        let pages = base_pages();
+        let hit = hits(&staff_targets(None, true));
+        assert_eq!(hit[0], PointerHit::Region(Region::Rail));
+        assert_eq!(hit[1], PointerHit::Region(Region::Page));
+        for p in &pages {
+            assert!(hit.contains(&PointerHit::Page(p.key)), "{}", p.title);
+        }
+        let staff = pages.iter().find(|p| p.title == "Staff").unwrap();
+        for i in 0..staff.tabs.len() {
+            assert!(hit.contains(&PointerHit::Tab(i)), "tab {i}");
+        }
+        for key in [GameKey::Tab, GameKey::Up, GameKey::Down, GameKey::Esc] {
+            assert!(hit.contains(&PointerHit::Key(key)), "{key:?}");
+        }
+    }
+
+    /// The frame behind a popup child registers nothing: a click there is
+    /// the popup's, and nothing under it may take one.
+    #[test]
+    fn a_popup_parents_frame_registers_nothing() {
+        assert!(staff_targets(None, false).is_empty());
+    }
+
+    /// Hover tints the target under the pointer and only it, and not the
+    /// cursor's own row, which already wears the stronger fill.
+    #[test]
+    fn hover_tints_one_target_and_not_the_held_one() {
+        let count = |hover| {
+            let pages = base_pages();
+            let staff = pages.iter().position(|p| p.title == "Staff").unwrap();
+            let m = ui_metrics(900.0);
+            let (_, shapes) = with_painter(|p| {
+                paint_frame(
+                    &FrameView {
+                        title: ("BASE", ""),
+                        pages: &pages,
+                        page: staff,
+                        screen: 0,
+                        extra_keys: &[],
+                        hover,
+                    },
+                    Some(Mode::StaffWellbeing),
+                    true,
+                    None,
+                    p,
+                    &m,
+                );
+            });
+            crate::paint::painted_rect_fill_count(&shapes, hud::palette::HOVER_BG)
+        };
+        let pages = base_pages();
+        let other = pages.iter().find(|p| p.title == "Build").unwrap().key;
+        let held = pages.iter().find(|p| p.title == "Staff").unwrap().key;
+        assert_eq!(count(None), 0);
+        assert_eq!(count(Some(PointerHit::Page(other))), 1);
+        assert_eq!(count(Some(PointerHit::Tab(2))), 1);
+        assert_eq!(count(Some(PointerHit::Key(GameKey::Esc))), 1);
+        assert_eq!(count(Some(PointerHit::Page(held))), 0, "the cursor's own");
+    }
+
+    /// A keycap's label is the key it presses, `↑/↓` and `[ ]` one key per
+    /// half, and a range like `1–9` is no key at all.
+    #[test]
+    fn keycaps_press_the_keys_they_spell() {
+        let m = ui_metrics(900.0);
+        let bar = Rect::new(0.0, 0.0, 1400.0, m.line_height);
+        let caps = |chips: Vec<Vec<hud::strip::Piece>>| {
+            crate::paint::with_painter(|p| keycap_targets(bar, &[group(chips)], p, &m)).0
+        };
+        let keys = |chips| caps(chips).into_iter().map(|(_, k)| k).collect::<Vec<_>>();
+        assert_eq!(
+            keys(vec![keycap("↑/↓", "page"), keycap("[ ]", "turn")]),
+            [
+                GameKey::Up,
+                GameKey::Down,
+                GameKey::Char('['),
+                GameKey::Char(']')
+            ]
+        );
+        assert_eq!(
+            keys(vec![keycap("Enter", "open"), keycap("x/d", "dismiss")]),
+            [GameKey::Enter, GameKey::Char('x'), GameKey::Char('d')]
+        );
+        assert!(keys(vec![keycap("1–9", "jump")]).is_empty());
+        // The halves of a two-key cap tile its own text, left then right.
+        let two = caps(vec![keycap("↑/↓", "page")]);
+        assert!(two[0].0.x + two[0].0.w <= two[1].0.x + 0.01);
+    }
+
+    /// The hover tint is the cursor's colour at 40% of its strength.
+    #[test]
+    fn the_hover_tint_is_the_cursor_at_two_fifths_alpha() {
+        let (h, s) = (hud::palette::HOVER_BG, crate::render::SELECT_BG);
+        assert_eq!((h.r, h.g, h.b), (s.r, s.g, s.b));
+        assert!((h.a - s.a * 0.4).abs() < 1e-6);
     }
 }

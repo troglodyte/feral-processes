@@ -722,6 +722,28 @@ pub(crate) fn with_painter<R>(
     (out, shapes)
 }
 
+/// `with_painter` for a draw that registers pointer targets: what `f`
+/// recorded, in draw order.
+#[cfg(test)]
+pub(crate) fn with_targets(f: impl FnOnce(&Painter)) -> Vec<(Rect, PointerHit)> {
+    let ctx = egui::Context::default();
+    install_fonts(&ctx);
+    ctx.begin_pass(egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(
+            egui::Pos2::ZERO,
+            egui::vec2(1440.0, 900.0),
+        )),
+        ..Default::default()
+    });
+    let targets = Targets::default();
+    f(&Painter::for_frame(&ctx, 1.0 / 60.0, Arc::default()).recording_into(&targets));
+    let _ = ctx.end_pass();
+    Arc::try_unwrap(targets)
+        .expect("the painter that recorded into it is gone")
+        .into_inner()
+        .expect("no panic held the list")
+}
+
 /// `with_painter`, with sprites loaded — for the one operation that has a
 /// texture table to consult.
 #[cfg(test)]

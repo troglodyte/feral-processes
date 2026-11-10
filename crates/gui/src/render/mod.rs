@@ -9,9 +9,10 @@ use crate::fx::Fx;
 use crate::paint::{Color, GRAY, Painter, Rect, TextRun, WHITE};
 use crate::text::{Metrics, map_cell, ui_metrics};
 use feral_processes_app_core::{
-    App, ArenaRow, BattlePane, GearInspect, MENU_SCAN_RADIUS, Mode, Staffing, SwapChoice, SwapRow,
-    TradeChoice, TransferEntry, base_popup_parent, equip_preview_tag, equip_swap_rows,
-    inventory_item_actions, item_fusion_note, menu_shortcut, qty_column, stat_summary,
+    App, ArenaRow, BattlePane, Direction, GearInspect, MENU_SCAN_RADIUS, Mode, PointerHit,
+    Staffing, SwapChoice, SwapRow, TradeChoice, TransferEntry, base_popup_parent,
+    equip_preview_tag, equip_swap_rows, inventory_item_actions, item_fusion_note, menu_shortcut,
+    qty_column, stat_summary,
 };
 use feral_processes_engine::components::{GlyphColor, MachineStatus, Rarity, TaskKind};
 use feral_processes_engine::items::{EquipmentSlot, GearCopy, ItemId, QualityBand, quality_band};

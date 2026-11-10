@@ -62,6 +62,8 @@ pub(super) struct HubFrame {
     screen: usize,
     /// The hub's own keys, as `(key, verb)`.
     extra_keys: Vec<(&'static str, &'static str)>,
+    /// What the pointer is over, for the frame and its rows to tint.
+    hover: Option<PointerHit>,
 }
 
 impl HubFrame {
@@ -76,7 +78,13 @@ impl HubFrame {
             page,
             screen,
             extra_keys: kind.extra_keys(app),
+            hover: app.pointer_hover,
         })
+    }
+
+    /// The rows of the page this frame is drawn for are pointer targets.
+    fn row_targets(&self) -> Option<RowTargets> {
+        Some(RowTargets { hover: self.hover })
     }
 
     fn paint(
@@ -94,6 +102,7 @@ impl HubFrame {
                 page: self.page,
                 screen: self.screen,
                 extra_keys: &self.extra_keys,
+                hover: self.hover,
             },
             keybar_mode,
             on_rail,
@@ -117,7 +126,7 @@ pub(super) fn draw_hub_page(
     m: &Metrics,
 ) {
     let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
-    draw_rows_in(content, rows, !on_rail, painter, m);
+    draw_rows_in(content, rows, !on_rail, frame.row_targets(), painter, m);
 }
 
 /// `draw_hub_page` in two columns: the rows the cursor walks on the left,
@@ -136,13 +145,13 @@ pub(super) fn draw_hub_split_page(
 ) {
     let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
     let (left, right) = split_columns(content, m);
-    draw_rows_in(left, rows, !on_rail, painter, m);
+    draw_rows_in(left, rows, !on_rail, frame.row_targets(), painter, m);
     let h = side_box_height(side.len(), right.h, m);
     // The frame's own border colour at half its weight, so the box reads
     // as part of the page rather than a popup over it.
     painter.rect_lines(right.x, right.y, right.w, h, 1.0, hud::palette::PANE_BORDER);
     let inner = Rect::new(right.x, right.y + m.pad / 2.0, right.w, h - m.pad);
-    draw_rows_in(inner, side, false, painter, m);
+    draw_rows_in(inner, side, false, None, painter, m);
 }
 
 /// The outline around the side column hugs its rows, a half pad above and
@@ -181,7 +190,14 @@ pub(super) fn draw_base_report(
     };
     let rows = screen_rows(game, mode, selected, app_screens, &flags);
     let content = frame.paint(Some(mode), app_screens.on_rail, refusal, painter, m);
-    draw_rows_in(content, &rows, !app_screens.on_rail, painter, m);
+    draw_rows_in(
+        content,
+        &rows,
+        !app_screens.on_rail,
+        frame.row_targets(),
+        painter,
+        m,
+    );
 }
 
 /// A popup child's parent page, drawn as the frame behind it: rail and title,

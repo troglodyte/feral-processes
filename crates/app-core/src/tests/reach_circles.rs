@@ -106,8 +106,16 @@ fn a_tier_1_patch_nodes_info_tab_previews_radius_6() {
 
 #[test]
 fn another_structures_info_tab_draws_no_circle() {
-    let mut app = app_inside_a_small_base_with_programs(6115, false, 2);
-    on_the_info_tab_of(&mut app, "Extractor");
+    // A Shield stands in reach of the party, so a circle that was not
+    // filtered to the held entry would be drawn for the Depot's tab.
+    let mut app = app_beside_a_shield(6115);
+    let game = app.game.as_mut().unwrap();
+    game.dev_set_free_build(true);
+    game.place_structure("depot", -1, 0, None)
+        .expect("a Depot deploys on the party's other side");
+    game.dev_set_free_build(false);
+    assert_eq!(app.game.as_mut().unwrap().view_shields().len(), 1);
+    on_the_info_tab_of(&mut app, "Depot");
     assert!(app.reach_circles().is_empty());
 }
 

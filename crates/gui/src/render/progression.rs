@@ -64,14 +64,14 @@ pub(super) fn perks_menu_rows(
 }
 
 /// A section heading, and the blank line that sets it off from the section
-/// above it. `Row::Item` rather than `Row::TextColored` for
+/// above it. `Row::Detail` rather than `Row::TextColored` for
 /// `description_rows`' reason — `popup_layout` cuts the scrollable body at
-/// the last `Row::Item`, so a heading drawn as text would be torn off its
-/// perks and pinned to the foot of the box, where it scrolls with nothing.
+/// the last `Row::Item` or `Detail`, so a heading drawn as text would be
+/// torn off its perks and pinned.
 ///
-/// Nothing ever selects one: `App` tracks an index into the *perks*, and
-/// `perks_menu_rows` only ever marks a perk row `selected`. So a heading is
-/// an item row that is never an option, which is exactly what a heading is.
+/// **Not a `Row::Item`**: `App` tracks an index into the *perks*, and a
+/// heading numbered as an item would shift every perk's click ordinal by the
+/// headings above it (`as_detail`).
 ///
 /// An empty name draws nothing at all, not a blank heading. That is the
 /// trailing bucket `PerkDb::grouped` puts an ungrouped perk in, and with no
@@ -83,9 +83,9 @@ fn heading_rows(name: &str, gap_above: bool) -> Vec<Row> {
     }
     let mut rows = Vec::new();
     if gap_above {
-        rows.push(item_row("", false));
+        rows.push(Row::Detail(String::new(), TEXT_DIM));
     }
-    rows.push(colored_item_row(name.to_string(), false, CYAN));
+    rows.push(Row::Detail(name.to_string(), CYAN));
     rows
 }
 
@@ -1052,10 +1052,18 @@ mod tests {
             .iter()
             .filter(|r| !is_description_row(r))
             .filter_map(|r| match r {
-                Row::Item { text, .. } if !text.is_empty() => Some(text.clone()),
+                Row::Item { text, .. } | Row::Detail(text, _) if !text.is_empty() => {
+                    Some(text.clone())
+                }
                 _ => None,
             })
             .collect();
+        // Only a perk is an `Item`: a click's ordinal is the perk's index.
+        let items = rows
+            .iter()
+            .filter(|r| matches!(r, Row::Item { .. }))
+            .count();
+        assert_eq!(items, flat.len(), "headings are not selectable rows");
 
         let mut expected = Vec::new();
         for (name, defs) in &groups {

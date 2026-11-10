@@ -185,9 +185,15 @@
   second click or a double-click is `Enter`, once (`second || double`, never
   both), and `Page`/`Tab` call the same `turn_hub_to`/`show_hub_tab` the
   keys do; (3) **`Row::Item` ordinal must equal the handler's selection
-  index**, so a description or wrapped line is never an `Item`
-  (`item_ordinals.rs` draws every `b` and `i` tab and compares the
-  registered ordinals to the cursor's wrap length); (4) the frame drawn
+  index**, so only an entry's own head is an `Item`: a heading, spacer or
+  wrapped tail is a `Row::Detail` (`popup::as_detail`; `page_rows` keeps
+  Details above the first entry in the scrolling body), and the wielded
+  weapon line stays an `Item` because the cursor has a slot there.
+  `item_ordinals.rs` drives the **real** `render::draw` into a recording
+  painter for every `b`, `i` and game-menu tab, with the cursor on the first
+  and the last row, and compares the registered ordinals to the cursor's wrap
+  length; a tab that skips `draw_rows_in` or hands it no targets fails it;
+  (4) the frame drawn
   behind a popup child (`keybar_mode == None`) registers nothing, or a click
   would land under the popup, and `hub_at` is `None` there so app-core
   ignores a stale hub hit anyway; (5) `pointer.rs` reading **before** the

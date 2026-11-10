@@ -714,7 +714,17 @@ fn popup_layout<'a>(
 /// the selected row in view. The one paging rule: a popup and a hub content
 /// rect both call it, so they cannot scroll differently.
 fn page_rows<'a>(rows: &'a [Row], rows_shown: usize, status: usize, h: f32) -> PopupLayout<'a> {
-    let first_item = rows.iter().position(|r| matches!(r, Row::Item { .. }));
+    // A section heading drawn as a `Detail` ahead of the first entry
+    // belongs to the list, so it scrolls with it rather than pinning.
+    let first_item = rows
+        .iter()
+        .position(|r| matches!(r, Row::Item { .. }))
+        .map(|first| {
+            rows[..first]
+                .iter()
+                .rposition(|r| !matches!(r, Row::Detail(..)))
+                .map_or(0, |last_other| last_other + 1)
+        });
     let last_item = rows
         .iter()
         .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(_, _)));
@@ -963,6 +973,21 @@ fn draw_layout_rows(
 #[derive(Clone, Copy)]
 pub(super) struct RowTargets {
     pub(super) hover: Option<PointerHit>,
+}
+
+/// An entry's continuation line as a `Row::Detail` in the colour it had.
+///
+/// **Only an entry's own head is a `Row::Item`**: the ordinal a click reports
+/// is the item's position among them, and that has to be the index the
+/// handler selects by. A wrapped tail, a heading or a spacer drawn as an
+/// `Item` would number itself into the list and shift every entry below it.
+/// `Detail` draws identically (the same two-column prefix) and is part of
+/// the scrolling body (`page_rows`), which is why these were `Item`s at all.
+pub(super) fn as_detail(row: Row) -> Row {
+    match row {
+        Row::Item { text, color, .. } => Row::Detail(text, color),
+        other => other,
+    }
 }
 
 /// How many `Row::Item`s `rows` holds: the ordinal the next one carries,

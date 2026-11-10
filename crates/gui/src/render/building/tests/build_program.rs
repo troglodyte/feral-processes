@@ -492,8 +492,8 @@ fn no_program_picker_row_runs_past_the_popup_body() {
     }
 }
 
-/// `popup_layout` ends the scrollable body at the *last* `Row::Item` and
-/// pins whatever follows as a footer, so a continuation line under the
+/// `popup_layout` ends the scrollable body at the *last* `Row::Item` or
+/// `Row::Detail` and pins whatever follows as a footer, so a text line under the
 /// final program would be torn off it and drawn at the bottom of the
 /// box. Nothing may follow the last item row.
 #[test]
@@ -503,7 +503,7 @@ fn every_picker_row_stays_inside_the_scrollable_body() {
         let rows = build_program_rows(Some(&deploy("Fabricator")), &pets, selected);
         let last = rows
             .iter()
-            .rposition(|r| matches!(r, Row::Item { .. }))
+            .rposition(|r| matches!(r, Row::Item { .. } | Row::Detail(..)))
             .expect("a candidate is an item row");
         assert_eq!(
             last,

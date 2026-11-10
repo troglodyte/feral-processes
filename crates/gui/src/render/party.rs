@@ -394,7 +394,7 @@ pub(super) fn companion_rows(
     // row's name, and the popup's scroll anchor is the first selected
     // `Item`, so these cannot disturb it.
     for line in lines {
-        rows.push(colored(line, false));
+        rows.push(as_detail(colored(line, false)));
     }
     rows
 }

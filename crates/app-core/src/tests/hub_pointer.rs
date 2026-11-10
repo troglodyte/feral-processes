@@ -289,3 +289,44 @@ fn a_far_rail_click_walks_the_rail_with_the_keys() {
     keys(&mut kb, &[Up]);
     assert_eq!(place(&mouse), place(&kb));
 }
+
+/// Esc is claimed while a Build category is open, but `Left` still reaches
+/// the rail, so a rail click must too.
+#[test]
+fn a_rail_click_takes_left_when_only_esc_is_claimed() {
+    use GameKey::*;
+    let utility = feral_processes_engine::structures::StructureCategory::Utility;
+    let (mut mouse, mut kb) = pair(41217, &[Char('b'), Down, Right]);
+    assert_eq!(mouse.mode, Mode::Build);
+    mouse.build_category = Some(utility);
+    kb.build_category = Some(utility);
+    assert!(mouse.screen_claims(Esc) && !mouse.screen_claims(Left));
+    keys(&mut kb, &[Left]);
+    assert!(kb.hub_on_rail, "the key reaches the rail");
+    click(&mut mouse, PointerHit::Region(Region::Rail));
+    assert_eq!(place(&mouse), place(&kb));
+    let (mut mouse, _) = pair(41218, &[Char('b'), Down, Right]);
+    mouse.build_category = Some(utility);
+    click(&mut mouse, PointerHit::Page(HubPageKey::Named("Overview")));
+    assert!(mouse.hub_on_rail);
+    assert_eq!(mouse.mode, Mode::BaseOverview, "and turned the page");
+}
+
+/// A scroll never opens anything: `→` on the game menu's Sprites page opens
+/// the picker, so the wheel over that page, with the cursor on the rail, does
+/// nothing.
+#[test]
+fn the_wheel_never_activates_a_page() {
+    use GameKey::*;
+    let (mut mouse, kb) = pair(41219, &[Esc, Down, Down, Down]);
+    assert_eq!(mouse.mode, Mode::SpriteOptions);
+    for notches in [-1, 1] {
+        mouse.handle_pointer_event(PointerEvent {
+            hover: Some(PointerHit::Region(Region::Page)),
+            wheel: notches,
+            ..Default::default()
+        });
+    }
+    assert_eq!(place(&mouse), place(&kb));
+    assert!(mouse.hub_on_rail);
+}

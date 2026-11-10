@@ -64,13 +64,19 @@ impl App {
         }
     }
 
-    /// Puts the cursor on the rail as `Esc` does, and answers whether it is
-    /// there. A page holding `Esc` for a question of its own
-    /// (`screen_claims`) keeps the cursor: the pointer escapes nothing a key
-    /// cannot.
+    /// Puts the cursor on the rail the way the keys do — `Left`, else `Esc`
+    /// — and answers whether it is there. Where the page holds both for a
+    /// question or a cursor of its own (`screen_claims`) no key reaches the
+    /// rail, and the pointer does not either.
     fn pointer_focus_rail(&mut self) -> bool {
-        if !self.hub_on_rail && !self.screen_claims(GameKey::Esc) {
-            self.hub_on_rail = true;
+        if self.hub_on_rail {
+            return true;
+        }
+        for key in [GameKey::Left, GameKey::Esc] {
+            if !self.screen_claims(key) {
+                self.handle_key(key);
+                break;
+            }
         }
         self.hub_on_rail
     }
@@ -86,9 +92,13 @@ impl App {
                     return;
                 }
             }
-            PointerHit::Row(_) | PointerHit::More(_) | PointerHit::Region(Region::Page) => {
-                self.focus_hub_page()
-            }
+            // A list under the pointer is there to scroll, so the cursor
+            // goes in as `→` puts it, without the activation `→` is on a
+            // page that opens a screen (Sprites, Manual, Manifests): a
+            // scroll never opens anything, so bare page background does
+            // nothing from the rail.
+            PointerHit::Row(_) | PointerHit::More(_) => self.hub_on_rail = false,
+            PointerHit::Region(Region::Page) if !self.hub_on_rail => {}
             _ => return,
         }
         let key = if notches > 0 {

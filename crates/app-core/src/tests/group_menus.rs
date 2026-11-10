@@ -255,3 +255,46 @@ fn refactoring_works_underground() {
         "a refactor reaches no zone-map state through Position, so it is not surface-only"
     );
 }
+
+/// The parked row is an index into a list that can shrink while the child
+/// screen is open; Esc must land on a row that still exists. Ported from the
+/// deleted BASE Structures page to the party's Programs page, whose rows hide
+/// dynamically too (Develop wants a program). No other test covers the clamp
+/// in `handle_key`'s mode-change tail.
+#[test]
+fn esc_clamps_the_parked_row_when_the_page_shrank_under_it() {
+    let mut app = app_inside_a_small_base_with_programs(4010, false, 1);
+    open_hub_screen(&mut app, Mode::PartyPrograms);
+    let rows = labels(&app.command_rows(Mode::PartyPrograms).unwrap());
+    let develop = rows
+        .iter()
+        .position(|l| *l == "Develop a program")
+        .expect("a program is enough to develop");
+    assert!(develop > 0, "precondition: the parked row is not the first");
+    pick_row(&mut app, develop);
+    assert_eq!(app.mode, Mode::Develop);
+
+    // Every program leaves the party, so the page keeps only "Read a
+    // manifest" (the player is still a subject).
+    let path = scratch_path("parked_row_shrinks", 4010);
+    app.game.as_mut().unwrap().save(&path).unwrap();
+    let mut data = feral_processes_engine::save::load_from_file(&path).unwrap();
+    data.creatures.retain(|c| !c.tamed);
+    feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+    app.game = Game::load(&path, &test_assets_dir()).ok();
+    let _ = std::fs::remove_file(&path);
+    let after = app.command_rows(Mode::PartyPrograms).unwrap().len();
+    assert!(
+        after <= develop,
+        "precondition: the page shrank under the parked row ({after} rows)"
+    );
+
+    app.handle_key(GameKey::Esc);
+
+    assert_eq!(app.mode, Mode::PartyPrograms);
+    assert!(
+        app.menu_selected < after.max(1),
+        "highlight {} is past the {after} rows the page now has",
+        app.menu_selected
+    );
+}

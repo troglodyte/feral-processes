@@ -68,6 +68,49 @@ fn deploying_a_shield_previews_four_circles() {
     assert!(app.reach_circles().is_empty(), "a depot has no circle");
 }
 
+/// The Info tab of a Shield's or Patch Node's BESIDE YOU entry draws the
+/// circle it has now and, faint beside it, the one the next tier would.
+fn assert_info_tab_shows(app: &mut App, anchor: (i32, i32), kind: ReachKind, now: u32, next: u32) {
+    assert_eq!(app.mode, Mode::StructureManifest);
+    let circle = |radius, style| ReachCircle {
+        anchor,
+        radius,
+        style,
+        kind,
+    };
+    assert_eq!(
+        app.reach_circles(),
+        vec![
+            circle(now, ReachCircleStyle::Hover),
+            circle(next, ReachCircleStyle::Preview)
+        ]
+    );
+}
+
+#[test]
+fn a_shields_info_tab_previews_the_next_radius() {
+    let mut app = app_beside_a_shield(6103);
+    let anchor = shield_anchor(&mut app);
+    assert!(app.reach_circles().is_empty(), "nothing on the plain map");
+    on_the_info_tab_of(&mut app, "Shield");
+    assert_info_tab_shows(&mut app, anchor, ReachKind::Shield, 4, 6);
+}
+
+#[test]
+fn a_tier_1_patch_nodes_info_tab_previews_radius_6() {
+    let mut app = app_beside_a_patch_node(6113);
+    let anchor = app.game.as_mut().unwrap().view_patch_nodes()[0].anchor;
+    on_the_info_tab_of(&mut app, "Patch Node");
+    assert_info_tab_shows(&mut app, anchor, ReachKind::Patch, 4, 6);
+}
+
+#[test]
+fn another_structures_info_tab_draws_no_circle() {
+    let mut app = app_inside_a_small_base_with_programs(6115, false, 2);
+    on_the_info_tab_of(&mut app, "Extractor");
+    assert!(app.reach_circles().is_empty());
+}
+
 #[test]
 fn a_shield_upgrade_skips_the_program_picker() {
     let mut app = app_beside_a_shield(6104);

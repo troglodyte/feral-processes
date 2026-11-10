@@ -18,9 +18,18 @@ fn press(app: &mut App, keys: &[GameKey]) {
     }
 }
 
-/// `i`, then Right off the rail, onto the Items page's rows.
+/// `i`, then Right off the rail, onto the Items page's rows. `i` opens on a
+/// structure beside the party when there is one, so the rail is stepped back
+/// to Items first.
 fn open_items_in_page(app: &mut App) {
-    press(app, &[GameKey::Char('i'), GameKey::Right]);
+    app.handle_key(GameKey::Char('i'));
+    for _ in 0..32 {
+        if app.mode == Mode::Inventory {
+            break;
+        }
+        app.handle_key(GameKey::Char('['));
+    }
+    app.handle_key(GameKey::Right);
     assert_eq!(app.mode, Mode::Inventory);
     assert!(!app.hub_on_rail);
 }

@@ -558,10 +558,11 @@ fn two_depots_beside_the_party_share_their_tabs_and_that_is_pinned() {
 }
 
 /// Compile has two homes once a routine bench stands beside the party: `b`'s
-/// Production page and the bench's own `c` page. Each enters it by its own
-/// page (`turn_hub_to` / the structure hub's turn), never `settle_hub`'s
-/// guess.
-const SHARED_WITH_A_BENCH: &[Mode] = &[Mode::Craft];
+/// Production page and the bench's own BESIDE YOU entry. Each enters it by
+/// its own page (`turn_hub_to` / `enter_structure_page`), never
+/// `settle_hub`'s guess. The Home beside the bench is a second entry, and
+/// every entry's Info tab is the one `StructureManifest`.
+const SHARED_WITH_A_BENCH: &[Mode] = &[Mode::Craft, Mode::StructureManifest];
 
 #[test]
 fn compile_beside_a_bench_is_pinned_and_each_hub_keeps_its_own() {

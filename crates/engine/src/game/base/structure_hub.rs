@@ -62,7 +62,9 @@ struct Candidate {
 impl Game {
     /// Every structure with a cell orthogonally beside the party, once each,
     /// ordered by the first side it occupies going N, E, S, W. A structure
-    /// with nothing but its `Info` page is not in the cycle.
+    /// with nothing but its `Info` page is in the cycle only when one of the
+    /// Info tab's verbs (work, upgrade, demolish) does something to it,
+    /// which is everything but a wall or a door (`is_room_boundary`).
     ///
     /// Empty outside the field, after game over and during a fight, the
     /// guards the transfer offers carry.
@@ -87,7 +89,7 @@ impl Game {
                 continue;
             };
             let pages = self.structure_pages(entity);
-            if pages == [StructurePage::Info] {
+            if pages == [StructurePage::Info] && self.is_room_boundary(entity) {
                 continue;
             }
             let anchor = cells.iter().copied().min().unwrap_or((0, 0));
@@ -105,6 +107,13 @@ impl Game {
         }
         found.sort_by_key(|(side, anchor, entity, _)| (*side, *anchor, *entity));
         found.into_iter().map(|(.., s)| s).collect()
+    }
+
+    /// A wall or a door: the structures whose Info tab has no verb worth a
+    /// BESIDE YOU entry. Demolishing one is the player's own door-to-door
+    /// business, and neither is worked or upgraded.
+    fn is_room_boundary(&self, e: Entity) -> bool {
+        self.is_barrier(e) || self.is_door(e)
     }
 
     /// The pages this structure offers, capability-driven, `Info` last.

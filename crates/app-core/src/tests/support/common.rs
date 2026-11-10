@@ -223,3 +223,22 @@ pub(crate) fn open_manual(app: &mut App) {
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::Help);
 }
+
+/// The pointer resting on map tile `cell`, or on nothing: the event the
+/// reader builds from the tile targets a draw registered.
+pub(crate) fn hover_tile(app: &mut App, cell: Option<(i32, i32)>) {
+    app.handle_pointer_event(PointerEvent {
+        hover: cell.map(|(x, y)| PointerHit::MapTile(x, y)),
+        ..Default::default()
+    });
+}
+
+/// A click of `button` on map tile `cell`.
+pub(crate) fn click_tile(app: &mut App, cell: (i32, i32), button: PointerButton) {
+    app.handle_pointer_event(PointerEvent {
+        hover: Some(PointerHit::MapTile(cell.0, cell.1)),
+        click: true,
+        button,
+        ..Default::default()
+    });
+}

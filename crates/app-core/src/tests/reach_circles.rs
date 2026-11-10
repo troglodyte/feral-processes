@@ -29,7 +29,7 @@ fn hovering_a_shield_returns_its_circle() {
     let mut app = app_beside_a_shield(6101);
     let anchor = shield_anchor(&mut app);
 
-    app.set_map_hover(Some(anchor));
+    hover_tile(&mut app, Some(anchor));
     assert_eq!(
         app.reach_circles(),
         vec![ReachCircle {
@@ -40,7 +40,7 @@ fn hovering_a_shield_returns_its_circle() {
         }]
     );
 
-    app.set_map_hover(Some((anchor.0 + 1, anchor.1)));
+    hover_tile(&mut app, Some((anchor.0 + 1, anchor.1)));
     assert!(app.reach_circles().is_empty());
 }
 
@@ -148,7 +148,7 @@ fn board_hover_circle_is_in_board_cells() {
     app.mode = Mode::TacticalBattle;
     let cell = (anchor.0 - origin.0, anchor.1 - origin.1);
 
-    app.set_map_hover(Some(cell));
+    hover_tile(&mut app, Some(cell));
     let circles = app.reach_circles();
 
     assert_eq!(circles.len(), 1);
@@ -176,7 +176,7 @@ fn hovering_a_patch_node_shows_a_patch_circle() {
     let mut app = app_beside_a_patch_node(6111);
     let anchor = app.game.as_mut().unwrap().view_patch_nodes()[0].anchor;
 
-    app.set_map_hover(Some(anchor));
+    hover_tile(&mut app, Some(anchor));
 
     assert_eq!(
         app.reach_circles(),
@@ -207,7 +207,7 @@ fn deploy_preview_of_a_patch_node_shows_radius_4() {
 fn a_shield_circle_is_still_kind_shield() {
     let mut app = app_beside_a_shield(6114);
     let anchor = shield_anchor(&mut app);
-    app.set_map_hover(Some(anchor));
+    hover_tile(&mut app, Some(anchor));
 
     assert_eq!(app.reach_circles()[0].kind, ReachKind::Shield);
 }

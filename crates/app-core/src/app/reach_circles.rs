@@ -37,7 +37,7 @@ impl App {
     /// footprint" is the pointer on its anchor. An unarmed Shield still shows
     /// its circle: the player should see what it would cover.
     pub fn reach_circles(&mut self) -> Vec<ReachCircle> {
-        let hover = self.map_hover;
+        let hover = self.hovered_tile();
         match self.mode {
             Mode::Playing => self.hover_circle(hover, (0, 0)),
             Mode::TacticalBattle => {

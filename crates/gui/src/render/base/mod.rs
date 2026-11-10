@@ -14,14 +14,16 @@ use feral_processes_engine::views::drawn_on_surface_map;
 use feral_processes_engine::views::{FarmTileState, FarmTileView};
 use feral_processes_engine::views::{Sight, shown_at};
 
-mod click_layout;
+mod map_layout;
 mod overlay_style;
 mod plan_overlays;
 mod playing;
 mod surface_map;
 
-pub(crate) use click_layout::tile_origin_px;
-pub(crate) use click_layout::{MapClickLayout, tile_at_px};
+pub(crate) use map_layout::MapLayout;
+#[cfg(test)]
+pub(crate) use map_layout::tile_at_px;
+pub(crate) use map_layout::tile_origin_px;
 pub(super) use overlay_style::*;
 pub(crate) use overlay_style::{CUTTING_OUTLINE, floor_item_mark};
 pub(super) use plan_overlays::*;

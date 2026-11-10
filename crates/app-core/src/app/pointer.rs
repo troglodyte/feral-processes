@@ -1,10 +1,11 @@
-//! The mouse's one entry into app-core for anything drawn in the map pane.
+//! The mouse's one entry into app-core, and what a click on a map tile means.
 //!
-//! The renderer resolves a pixel to a cell through the layout the draw pass
-//! published and hands the cell here with the button; what the cell *means*
-//! is decided from `App::mode`, the way `handle_key` decides a key. `crates/
-//! gui` has no `match app.mode` of its own, so a gesture can never do on the
-//! screen what it would not do here.
+//! The renderer registers each tile of the map pane while it draws
+//! (`PointerHit::MapTile`); the reader resolves the pointer to one and hands
+//! it here with the button. What the tile *means* is decided from
+//! `App::mode`, the way `handle_key` decides a key. `crates/gui` has no
+//! `match app.mode` of its own, so a gesture can never do on the screen what
+//! it would not do here.
 //!
 //! Every gesture ends in a call the keyboard already makes — a walk is
 //! `Game::tactical_step` a cell a beat, a swing is `Game::tactical_attack`,
@@ -82,14 +83,38 @@ impl App {
     /// The one entry for the pointer layer: records what is hovered and
     /// turns a press or the wheel into the keys it stands for.
     pub fn handle_pointer_event(&mut self, event: PointerEvent) {
+        let entered = self.hover_entered(event.hover);
         self.pointer_hover = event.hover;
+        self.aim_follows(entered);
         self.pointer_stroke(&event);
         let Some(hit) = event.hover else { return };
         if event.wheel != 0 {
             self.hub_pointer_wheel(hit, event.wheel);
         }
-        if event.click && event.button == PointerButton::Primary {
-            self.pointer_click(hit);
+        if event.click {
+            match hit {
+                PointerHit::MapTile(x, y) => self.tile_click((x, y), event.button),
+                _ if event.button == PointerButton::Primary => self.pointer_click(hit),
+                _ => {}
+            }
+        }
+    }
+
+    /// The map cell under the pointer, `None` off the pane or over anything
+    /// that is not a tile.
+    pub fn hovered_tile(&self) -> Option<(i32, i32)> {
+        match self.pointer_hover {
+            Some(PointerHit::MapTile(x, y)) => Some((x, y)),
+            _ => None,
+        }
+    }
+
+    /// The tile the pointer has just moved onto, `None` when it is on the
+    /// one it was on or on no tile.
+    fn hover_entered(&self, hover: Option<PointerHit>) -> Option<(i32, i32)> {
+        match hover {
+            Some(PointerHit::MapTile(x, y)) if self.hovered_tile() != Some((x, y)) => Some((x, y)),
+            _ => None,
         }
     }
 
@@ -108,8 +133,8 @@ impl App {
             | PointerHit::Region(_) => self.hub_pointer_click(hit),
             PointerHit::Button(_) | PointerHit::Subject(_) => self.forge_pointer_click(hit),
             // Strokes are read on press, drag and release
-            // (`pointer_stroke`), not on a click; the map has its own
-            // pointer path until it moves onto this one.
+            // (`pointer_stroke`), not on a click; a tile click takes any
+            // button (`handle_pointer_event`).
             PointerHit::Cell(..) | PointerHit::Swatch(_) | PointerHit::MapTile(..) => {}
         }
     }
@@ -176,18 +201,14 @@ impl App {
 }
 
 impl App {
-    /// Records the cell under the pointer this frame, `None` off the pane.
-    ///
     /// In `Mode::TacticalAim` the cell cursor follows the pointer — but
-    /// only when the pointer **enters a different cell**, never every
-    /// frame, or a pointer parked over the board would snap the cursor back
-    /// after every arrow key. Off the board the cursor stays where it was:
-    /// the pane shows cells past the edge whenever the camera sits near
+    /// only when the pointer **enters a different cell** (`entered`), never
+    /// every frame, or a pointer parked over the board would snap the cursor
+    /// back after every arrow key. Off the board the cursor stays where it
+    /// was: the pane shows cells past the edge whenever the camera sits near
     /// one, and a cursor dragged to the edge by every pointer twitch out
     /// there would fight the arrows exactly as a parked pointer would.
-    pub fn set_map_hover(&mut self, cell: Option<(i32, i32)>) {
-        let entered = cell.filter(|&c| Some(c) != self.map_hover);
-        self.map_hover = cell;
+    fn aim_follows(&mut self, entered: Option<(i32, i32)>) {
         if self.mode != Mode::TacticalAim {
             return;
         }
@@ -199,7 +220,7 @@ impl App {
     }
 
     /// Whether `cell` is one of the board's own — the pane can name cells
-    /// past the edge, and `tile_at_px` does not know where the edge is.
+    /// past the edge, and a tile target does not know where the edge is.
     fn on_board(&mut self, cell: (i32, i32)) -> bool {
         self.game
             .as_mut()
@@ -216,7 +237,7 @@ impl App {
     /// (primary) or backs out of it (secondary). Every other screen the
     /// pane draws under — the Stack corridor, the base grid, a popup —
     /// takes nothing from the pointer.
-    pub fn map_click(&mut self, cell: (i32, i32), button: PointerButton) {
+    fn tile_click(&mut self, cell: (i32, i32), button: PointerButton) {
         match self.mode {
             Mode::Playing if button == PointerButton::Primary => self.travel_to(cell.0, cell.1),
             Mode::TacticalBattle => self.tactical_board_click(cell, button),
@@ -340,7 +361,7 @@ impl App {
         if self.mode != Mode::TacticalBattle || !self.tactical_player_turn() {
             return Vec::new();
         }
-        let Some(cell) = self.map_hover else {
+        let Some(cell) = self.hovered_tile() else {
             return Vec::new();
         };
         let Some(game) = &mut self.game else {

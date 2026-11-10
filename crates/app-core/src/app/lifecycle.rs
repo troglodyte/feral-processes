@@ -114,7 +114,6 @@ impl App {
             pending_field_routine: None,
             field_cursor: None,
             tactical_cursor: None,
-            map_hover: None,
             pointer_hover: None,
             pointer_stroke: None,
             picker_clicked: None,

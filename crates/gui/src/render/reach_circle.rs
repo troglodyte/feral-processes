@@ -65,15 +65,15 @@ pub(crate) fn draw_reach_circle(
 }
 
 /// Draws the pane's circles and the flashes of softened hits, over
-/// the map `fx.map_click()` describes (set by whichever map drew this
-/// frame). `in_battle` picks the siege board's flashes over the field's.
+/// the map `lay` describes (returned by whichever map drew this frame).
+/// `in_battle` picks the siege board's flashes over the field's.
 pub(crate) fn draw_reach_circles(
     fx: &Fx,
     painter: &Painter,
+    lay: &MapLayout,
     circles: &[ReachCircle],
     in_battle: bool,
 ) {
-    let Some(lay) = fx.map_click() else { return };
     let tile = lay.tile_px;
     let centre_of = |anchor: (i32, i32)| {
         let (px, py) = tile_origin_px(anchor, lay.center, lay.half, lay.off, tile, lay.pane);
@@ -143,22 +143,22 @@ mod tests {
     #[test]
     fn a_hovered_shield_draws_a_circle_on_the_surface_map() {
         use crate::paint::painted_circle_centres;
-        let mut fx = Fx::new();
+        let fx = Fx::new();
         let pane = Rect::new(10.0, 20.0, 400.0, 300.0);
-        fx.set_map_click(Some(MapClickLayout {
+        let layout = MapLayout {
             pane,
             center: (5, 5),
             half: (6, 4),
             off: (0.0, 0.0),
             tile_px: 32.0,
-        }));
+        };
         let circle = ReachCircle {
             anchor: (7, 4),
             radius: 4,
             style: ReachCircleStyle::Hover,
             kind: ReachKind::Shield,
         };
-        let (_, shapes) = with_painter(|p| draw_reach_circles(&fx, p, &[circle], false));
+        let (_, shapes) = with_painter(|p| draw_reach_circles(&fx, p, &layout, &[circle], false));
         let circles = painted_circles(&shapes);
         assert_eq!(circles.len(), 2, "one fill and one stroke");
         assert!(circles.iter().all(|c| c.0 == 128.0));

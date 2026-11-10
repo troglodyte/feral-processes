@@ -3115,14 +3115,11 @@ pub struct App {
     /// map's field coordinates. `None` outside
     /// that mode; opening it puts the cursor on the acting body's own cell.
     pub tactical_cursor: Option<(i32, i32)>,
-    /// The map or board cell under the pointer this frame, `None` off the
-    /// pane. Written by the renderer every frame and read by the aim
-    /// cursor's follow rule and the board's hover path; in whichever
-    /// coordinate space the pane is drawing, as `tactical_cursor` is.
-    pub map_hover: Option<(i32, i32)>,
     /// The pointer target under the pointer, as of the frame just drawn
     /// (`App::handle_pointer_event`), for a renderer to tint through
-    /// `App::hovered`.
+    /// `App::hovered`. On the map it is a `MapTile`, which the aim cursor's
+    /// follow rule and the board's hover path read, in whichever coordinate
+    /// space the pane is drawing, as `tactical_cursor` is.
     pub pointer_hover: Option<PointerHit>,
     /// The sprite editor's stroke in progress: the button that opened it
     /// and the last cell or swatch it reached, so leaving the canvas still

@@ -120,10 +120,11 @@ use base::draw_playing_base;
 // space lives beside `App`.
 #[cfg(test)]
 pub(crate) use base::CUTTING_OUTLINE;
-// The click-to-travel geometry: `fx.rs` stores the frame's `MapClickLayout`
-// and `lib.rs`'s pointer system inverts a click through `tile_at_px` — both
-// outside `render`, so both need the path out.
-pub(crate) use base::{MapClickLayout, tile_at_px, tile_origin_px};
+// The map pane's geometry, which `tile_origin_px` places and `tile_at_px`
+// inverts; the notice anchors to a tile through it.
+#[cfg(test)]
+pub(crate) use base::tile_at_px;
+pub(crate) use base::{MapLayout, tile_origin_px};
 use battle::{
     draw_battle, draw_battle_ally_menu, draw_battle_emulate_menu, draw_battle_item_menu,
     draw_battle_special_menu, draw_battle_target_menu,
@@ -675,17 +676,13 @@ pub fn draw(app: &mut App, fx: &mut Fx, painter: &Painter, reveal: bool, shortcu
         // — `needs_status_banner` names it, so a refusal raised underneath
         // still reaches the strip along the bottom.
         Mode::Notification => {
-            draw_playing_base(app, fx, None, painter, &m, reveal);
+            let layout = draw_playing_base(app, fx, None, painter, &m, reveal);
             let shown = notify::Shown {
                 dock: fx.notice_dock(),
-                cell: app
-                    .notification_focus()
-                    .zip(fx.map_click())
-                    .map(|(tile, l)| {
-                        let (x, y) =
-                            tile_origin_px(tile, l.center, l.half, l.off, l.tile_px, l.pane);
-                        crate::paint::Rect::new(x, y, l.tile_px, l.tile_px)
-                    }),
+                cell: app.notification_focus().zip(layout).map(|(tile, l)| {
+                    let (x, y) = tile_origin_px(tile, l.center, l.half, l.off, l.tile_px, l.pane);
+                    crate::paint::Rect::new(x, y, l.tile_px, l.tile_px)
+                }),
                 watch: app.notification_watchable(),
             };
             match &app.pending_notification {

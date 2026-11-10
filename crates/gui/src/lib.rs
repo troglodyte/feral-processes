@@ -42,7 +42,7 @@ use bevy_egui::{
 use ambience::Ambience;
 use bevy::audio::Volume;
 pub use capture::Capture;
-use feral_processes_app_core::{App, GameKey, Mode, PointerButton, SoundEvent};
+use feral_processes_app_core::{App, GameKey, Mode, SoundEvent};
 use fx::{FrameCues, Fx};
 use keys::{KeyRepeat, SheetHold, TextGate};
 use paint::{Color, Painter};
@@ -176,22 +176,16 @@ const SPECIAL_KEYS: &[KeyCode] = &[
 ];
 
 /// How far apart a primary press and release may land, in pixels, and still
-/// count as a click rather than a drag — `handle_map_pointer`'s own
-/// tolerance. The camera eases toward its target while a travel is live
-/// (`Fx::camera_offset`), so a pointer held dead still over several frames
-/// can see the tile under it drift a cell or two; a tile-equality test
-/// dropped exactly the clicks that easing caused.
+/// count as a click rather than a drag. The camera eases toward its target
+/// while a travel is live (`Fx::camera_offset`), so a pointer held dead still
+/// over several frames can see the tile under it drift a cell or two; a
+/// tile-equality test dropped exactly the clicks that easing caused.
 const CLICK_DRAG_TOLERANCE_PX: f32 = 6.0;
 
 /// Scroll distance, in egui points, per map zoom step: egui's native
 /// `line_scroll_speed`, so one notch of a line wheel is exactly one step,
 /// while a touchpad's pixel deltas have to add up to the same distance.
 const WHEEL_STEP_POINTS: f32 = 40.0;
-
-/// How long the pointer must rest on one map tile before its hover label
-/// shows — long enough that sweeping across the map to click somewhere
-/// does not flicker a label over every tile on the way.
-const HOVER_DELAY_SECS: f64 = 0.5;
 
 /// How far down-right of the pointer the hover label sits, in pixels, so
 /// the cursor does not cover its first letters.
@@ -211,83 +205,10 @@ struct Frontend {
     sheet_hold: SheetHold,
     last_mode: Mode,
     perf: perf::PerfMeter,
-    map_pointer: MapPointer,
     pointer: pointer::Reader,
     /// `smooth_scroll_delta` not yet spent on a zoom step — see `wheel_steps`.
     wheel_acc: f32,
     ambience: Ambience,
-}
-
-/// The map's and the world map's pointer paths, for a frame the pointer
-/// layer's reader does not own: a press or release that began on one of its
-/// targets was already read there, and a second read would act twice (a
-/// keycap that closes a hub, then a map click on the screen it lands on).
-/// Answers the hover label due, if any.
-fn map_pointer_paths(
-    app: &mut App,
-    ctx: &egui::Context,
-    reader: &pointer::Reader,
-    fx: &Fx,
-    painter: &Painter,
-    tracker: &mut MapPointer,
-) -> Option<(egui::Pos2, (i32, i32))> {
-    if reader.owns_gesture() {
-        return None;
-    }
-    let hover = handle_map_pointer(app, ctx, fx, tracker);
-    handle_world_map_pointer(app, ctx, painter);
-    hover
-}
-
-/// Frame-to-frame pointer state for click-to-travel: the pane-space pixel a
-/// primary press landed at, if it started inside the map pane. A release is
-/// compared against it by *distance* (`CLICK_DRAG_TOLERANCE_PX`), not by
-/// tile — the camera eases while a travel is live, so the tile under a
-/// pointer held dead still can drift between press and release, and a
-/// tile-equality test dropped exactly the clicks that easing caused. There
-/// is no in-between phase to draw.
-#[derive(Default)]
-struct MapPointer {
-    /// The button that opened the gesture and where; a second button
-    /// pressed while one is held cancels it.
-    down: Option<(egui::PointerButton, egui::Pos2)>,
-    /// The tile the pointer is resting on and when it arrived — see
-    /// `hover_tile`.
-    hover: Option<((i32, i32), f64)>,
-}
-
-/// The tile under `pos`, or `None` outside the map pane. Every map gesture
-/// resolves through this one check — a click, the hover label, and a
-/// right-click menu when one exists.
-fn pane_tile(pos: egui::Pos2, layout: &render::MapClickLayout) -> Option<(i32, i32)> {
-    let inside = pos.x >= layout.pane.x
-        && pos.x < layout.pane.x + layout.pane.w
-        && pos.y >= layout.pane.y
-        && pos.y < layout.pane.y + layout.pane.h;
-    inside.then(|| render::tile_at_px(pos.x, pos.y, layout))
-}
-
-/// Advances the hover timer: `tile` is what the pointer is over this frame
-/// (`None` off the map), `now` is in seconds. Answers the tile once the
-/// pointer has rested on it for `HOVER_DELAY_SECS`; a different tile, or
-/// none, starts the wait over.
-fn hover_tile(
-    hover: &mut Option<((i32, i32), f64)>,
-    tile: Option<(i32, i32)>,
-    now: f64,
-) -> Option<(i32, i32)> {
-    let Some(tile) = tile else {
-        *hover = None;
-        return None;
-    };
-    let since = match *hover {
-        Some((held, since)) if held == tile => since,
-        _ => {
-            *hover = Some((tile, now));
-            now
-        }
-    };
-    (now - since >= HOVER_DELAY_SECS).then_some(tile)
 }
 
 /// Where a hover label of `size` goes: `offset` down-right of `cursor`,
@@ -303,98 +224,18 @@ fn hover_box_origin(
     (x, y)
 }
 
-/// Names the cell under the pointer and the button that clicked it, and
-/// nothing more: the cell is reported to `App::set_map_hover` every frame
-/// and a click to `App::map_click`, and what either means is app-core's
-/// to decide from its mode. It also answers where the hover label goes, if
-/// one is due: the pointer's pixel and the tile it has rested on. Any
-/// button held hides it — a press is the start of a click, not a pause to
-/// read.
-///
-/// `fx.map_click()` is `None` whenever this frame's map pane drew something
-/// with no cells to click (a Stack corridor, or no map at all) — see
-/// `Fx::set_map_click` — so a click finds nothing to invert rather than
-/// reading a stale layout from a screen the player has since left.
-fn handle_map_pointer(
-    app: &mut App,
-    ctx: &egui::Context,
-    fx: &Fx,
-    tracker: &mut MapPointer,
-) -> Option<(egui::Pos2, (i32, i32))> {
-    let layout = (!ctx.egui_wants_pointer_input())
-        .then(|| fx.map_click())
-        .flatten();
-    let Some(layout) = layout else {
-        tracker.down = None;
-        tracker.hover = None;
-        app.set_map_hover(None);
-        return None;
-    };
-    let (pressed, released, pos, hover_pos, any_down, now) = ctx.input(|i| {
-        (
-            MAP_BUTTONS
-                .into_iter()
-                .find(|&b| i.pointer.button_pressed(b)),
-            MAP_BUTTONS
-                .into_iter()
-                .find(|&b| i.pointer.button_released(b)),
-            i.pointer.interact_pos(),
-            i.pointer.hover_pos(),
-            i.pointer.any_down(),
-            i.time,
-        )
-    });
-    app.set_map_hover(hover_pos.and_then(|p| pane_tile(p, &layout)));
-    let hovered = hover_pos
-        .filter(|_| !any_down)
-        .and_then(|p| pane_tile(p, &layout).map(|tile| (p, tile)));
-    let label = hover_tile(&mut tracker.hover, hovered.map(|(_, t)| t), now).and(hovered);
-    let Some(pos) = pos else {
-        return label;
-    };
-    let inside = pane_tile(pos, &layout).is_some();
-    if let Some(button) = pressed {
-        // A press that starts outside the pane opens no gesture — the same
-        // "nothing to paint yet" rule the sprite editor's strokes follow —
-        // and a second button pressed into a live gesture cancels it.
-        tracker.down = match tracker.down {
-            None if inside => Some((button, pos)),
-            _ => None,
-        };
-    }
-    if let Some(button) = released
-        && let Some((held, down)) = tracker.down.take()
-        && held == button
-        && inside
-        && down.distance(pos) <= CLICK_DRAG_TOLERANCE_PX
-    {
-        // The tile is resolved at *release*, not at the press — the camera
-        // may have eased between the two, and the release is what the
-        // player was looking at when they let go.
-        let tile = render::tile_at_px(pos.x, pos.y, &layout);
-        app.map_click(tile, map_button(button));
-    }
-    label
-}
-
-/// The two buttons a map gesture may be made with, in the order a frame
-/// pressing both is read.
-const MAP_BUTTONS: [egui::PointerButton; 2] =
-    [egui::PointerButton::Primary, egui::PointerButton::Secondary];
-
-/// `MAP_BUTTONS`' spelling in app-core's vocabulary.
-fn map_button(button: egui::PointerButton) -> PointerButton {
-    match button {
-        egui::PointerButton::Secondary => PointerButton::Secondary,
-        _ => PointerButton::Primary,
-    }
-}
-
 /// A primary click on the world map picks the place under it — a grid
 /// cell or a side-list row. A no-op off that screen, since
-/// `render::world_map_hit` answers `None` there.
-fn handle_world_map_pointer(app: &mut App, ctx: &egui::Context, painter: &Painter) {
-    if ctx.egui_wants_pointer_input() {
+/// `render::world_map_hit` answers `None` there. Stands down for a gesture
+/// the pointer layer's reader already read, or one click would act twice
+/// (a keycap that closes a hub, then a pick on the screen it lands on).
+fn handle_world_map_pointer(
+    app: &mut App,
+    ctx: &egui::Context,
+    reader: &pointer::Reader,
+    painter: &Painter,
+) {
+    if reader.owns_gesture() || ctx.egui_wants_pointer_input() {
         return;
     }
     let click = ctx.input(|i| {
@@ -566,7 +407,6 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             sheet_hold: SheetHold::new(),
             last_mode,
             perf: perf::PerfMeter::new(),
-            map_pointer: MapPointer::default(),
             pointer: pointer::Reader::new(),
             wheel_acc: 0.0,
             ambience: Ambience::new(ambience_seed(), AMBIENT_BLIPS),
@@ -882,20 +722,10 @@ fn frame(
         started.elapsed().as_secs_f64(),
     );
     fe.pointer.drawn(&fe.app);
-    // After `render::draw`, which is what stashes `fe.fx`'s `MapClickLayout`
-    // for this frame — see `handle_map_pointer`'s own doc for why reading it
-    // any earlier would find last frame's layout instead.
     {
         let ctx = contexts.ctx_mut()?;
-        let hover = map_pointer_paths(
-            &mut fe.app,
-            ctx,
-            &fe.pointer,
-            &fe.fx,
-            &painter,
-            &mut fe.map_pointer,
-        );
-        if let Some((cursor, tile)) = hover {
+        handle_world_map_pointer(&mut fe.app, ctx, &fe.pointer, &painter);
+        if let Some((cursor, tile)) = fe.pointer.hover_label() {
             let lines = fe.app.hover_lines(tile.0, tile.1);
             if !lines.is_empty() {
                 draw_hover(&lines, cursor, &painter);
@@ -1034,47 +864,6 @@ mod tests {
             wheel_steps(&mut acc, -short),
             -1,
             "the reverse notch was eaten"
-        );
-    }
-
-    #[test]
-    fn pane_tile_resolves_inside_the_pane_and_nothing_outside_it() {
-        let mut layout = test_layout((0, 0));
-        layout.pane = paint::Rect::new(100.0, 100.0, 200.0, 200.0);
-        let inside = egui::pos2(150.0, 150.0);
-        assert_eq!(
-            pane_tile(inside, &layout),
-            Some(render::tile_at_px(150.0, 150.0, &layout))
-        );
-        assert_eq!(pane_tile(egui::pos2(99.0, 150.0), &layout), None);
-        assert_eq!(pane_tile(egui::pos2(150.0, 300.0), &layout), None);
-    }
-
-    /// The label waits `HOVER_DELAY_SECS` on one tile, and moving to
-    /// another tile — or off the map — starts the wait over.
-    #[test]
-    fn hover_waits_on_one_tile_and_restarts_when_the_tile_changes() {
-        let mut hover = None;
-        let (a, b) = ((1, 1), (2, 1));
-        assert_eq!(hover_tile(&mut hover, Some(a), 10.0), None);
-        assert_eq!(
-            hover_tile(&mut hover, Some(a), 10.0 + HOVER_DELAY_SECS * 0.9),
-            None
-        );
-        assert_eq!(
-            hover_tile(&mut hover, Some(a), 10.0 + HOVER_DELAY_SECS),
-            Some(a)
-        );
-        assert_eq!(hover_tile(&mut hover, Some(b), 11.0), None);
-        assert_eq!(
-            hover_tile(&mut hover, Some(b), 11.0 + HOVER_DELAY_SECS),
-            Some(b)
-        );
-        assert_eq!(hover_tile(&mut hover, None, 12.0), None);
-        assert_eq!(
-            hover_tile(&mut hover, Some(b), 12.0),
-            None,
-            "leaving the map did not reset the wait"
         );
     }
 
@@ -1256,372 +1045,8 @@ mod tests {
         );
     }
 
-    fn assets_dir() -> PathBuf {
+    pub(crate) fn assets_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets")
-    }
-
-    /// An `App` standing on the map in `Mode::Playing` with a real `Game`
-    /// — `handle_map_pointer`'s own fixture, since click-to-travel needs a
-    /// live run to hand `App::travel_to` to.
-    fn app_on_the_map(seed: u32) -> App {
-        let assets = assets_dir();
-        let tmp = std::env::temp_dir().join(format!("feral_processes_gui_map_pointer_{seed}"));
-        let mut app = App::new(
-            assets.clone(),
-            tmp.join("saves"),
-            tmp.join("history.log"),
-            tmp.join("profile.ron"),
-            tmp.join("arenas"),
-            tmp.join("telemetry.jsonl"),
-        );
-        app.game = Game::new(seed, DifficultyMode::Forgiving, &assets).ok();
-        app.mode = Mode::Playing;
-        app
-    }
-
-    /// A `MapClickLayout` whose pixel math is simple enough to invert by
-    /// hand: ten pixels to a tile, `center` sitting wherever the caller
-    /// wants tile `(0, 0)` (relative) to land, and a wide enough box that a
-    /// handful of tiles off `center` in any direction still falls inside
-    /// `pane`.
-    fn test_layout(center: (i32, i32)) -> render::MapClickLayout {
-        render::MapClickLayout {
-            pane: paint::Rect::new(0.0, 0.0, 4000.0, 4000.0),
-            center,
-            half: (200, 200),
-            off: (0.0, 0.0),
-            tile_px: 10.0,
-        }
-    }
-
-    /// Feeds one primary-button event to a headless `egui::Context` and
-    /// calls `handle_map_pointer` against it. `pos` is in the same
-    /// pane-pixel space `test_layout` and `render::tile_at_px` both use.
-    ///
-    /// Driven through `Context::run_ui`, not the bare `begin_pass`/
-    /// `end_pass` pair `paint::with_painter` uses — this app never builds
-    /// an egui `Area`/`Panel` (`render/` paints through `Painter`'s own
-    /// `layer_painter(LayerId::background())` alone), so without a
-    /// `run_ui`-style root `Ui` there is no `root_ui_available_rect` for
-    /// `Context::is_pointer_over_egui` to compare against, and its own
-    /// documented "we shouldn't get here" fallback answers `true` for
-    /// every point — exactly what `bevy_egui::run_egui_context_pass_loop_
-    /// system` avoids by driving the real app through `ctx.run_ui` too.
-    fn map_pointer_frame(
-        app: &mut App,
-        ctx: &egui::Context,
-        fx: &Fx,
-        tracker: &mut MapPointer,
-        pos: egui::Pos2,
-        pressed: bool,
-        button: egui::PointerButton,
-    ) {
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(4000.0, 4000.0),
-            )),
-            events: vec![
-                egui::Event::PointerMoved(pos),
-                egui::Event::PointerButton {
-                    pos,
-                    button,
-                    pressed,
-                    modifiers: egui::Modifiers::default(),
-                },
-            ],
-            ..Default::default()
-        };
-        let _ = ctx.run_ui(input, |_ui| {
-            handle_map_pointer(app, ctx, fx, &mut *tracker);
-        });
-    }
-
-    /// `map_pointer_frame` for the hover path: the pointer resting at `pos`
-    /// at egui time `time`, with the primary button pressed this frame when
-    /// `press` — answering what `handle_map_pointer` says is due.
-    fn hover_frame(
-        app: &mut App,
-        ctx: &egui::Context,
-        fx: &Fx,
-        tracker: &mut MapPointer,
-        pos: egui::Pos2,
-        time: f64,
-        press: bool,
-    ) -> Option<(egui::Pos2, (i32, i32))> {
-        let mut events = vec![egui::Event::PointerMoved(pos)];
-        if press {
-            events.push(egui::Event::PointerButton {
-                pos,
-                button: egui::PointerButton::Primary,
-                pressed: true,
-                modifiers: egui::Modifiers::default(),
-            });
-        }
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(4000.0, 4000.0),
-            )),
-            time: Some(time),
-            events,
-            ..Default::default()
-        };
-        let mut due = None;
-        let _ = ctx.run_ui(input, |_ui| {
-            due = handle_map_pointer(app, ctx, fx, &mut *tracker);
-        });
-        due
-    }
-
-    /// The whole hover path through a real egui pass: nothing until the
-    /// pointer has rested `HOVER_DELAY_SECS` on one tile, then that tile at
-    /// the pointer's pixel, and nothing again while a button is held.
-    #[test]
-    fn handle_map_pointer_answers_a_hover_after_a_rest_and_not_while_held() {
-        let mut app = app_on_the_map(6601);
-        let start = app.game.as_ref().unwrap().player_status().position;
-        let layout = test_layout(start);
-        let mut fx = Fx::new();
-        fx.set_map_click(Some(layout));
-        let mut tracker = MapPointer::default();
-        let ctx = egui::Context::default();
-        warm_up_pointer_frame(&ctx);
-        let pos = egui::pos2(2005.0, 2005.0);
-        let tile = pane_tile(pos, &layout);
-        assert!(tile.is_some());
-
-        let at = |t: f64, press, app: &mut App, tracker: &mut MapPointer| {
-            hover_frame(app, &ctx, &fx, tracker, pos, t, press)
-        };
-        assert_eq!(at(1.0, false, &mut app, &mut tracker), None);
-        assert_eq!(
-            at(1.0 + HOVER_DELAY_SECS, false, &mut app, &mut tracker),
-            Some((pos, tile.unwrap()))
-        );
-        assert_eq!(
-            at(2.0, true, &mut app, &mut tracker),
-            None,
-            "a held button kept the label"
-        );
-    }
-
-    /// One `run_ui` pass with no pointer events — establishes
-    /// `root_ui_available_rect` for `map_pointer_frame`'s first real call,
-    /// exactly as several ordinary frames already will have by the time a
-    /// player's first click lands in real play.
-    fn warm_up_pointer_frame(ctx: &egui::Context) {
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(
-                egui::Pos2::ZERO,
-                egui::vec2(4000.0, 4000.0),
-            )),
-            ..Default::default()
-        };
-        let _ = ctx.run_ui(input, |_ui| {});
-    }
-
-    /// A target offset from the player's own position that `Game::
-    /// travel_step` answers `Toward` for, paired with the exact first
-    /// step `Toward` names — found by probing a handful of candidates
-    /// rather than assumed from the seed, since a real route's first step
-    /// need not be the target's own direction. `travel_step` is a pure
-    /// read (see its own doc) with no `GameRng` draw, so probing it ahead
-    /// of the click, on an otherwise untouched world, is guaranteed to
-    /// answer the click's own later call identically.
-    fn find_a_routable_offset(app: &mut App) -> ((i32, i32), (i32, i32)) {
-        let player = app.game.as_ref().unwrap().player_status().position;
-        let game = app.game.as_mut().unwrap();
-        for radius in 2..8 {
-            for &(dx, dy) in &[(radius, 0), (-radius, 0), (0, radius), (0, -radius)] {
-                let target = (player.0 + dx, player.1 + dy);
-                if let feral_processes_engine::TravelStep::Toward(sx, sy) =
-                    game.travel_step(feral_processes_engine::TravelGoal::Tile(target.0, target.1))
-                {
-                    return ((dx, dy), (sx, sy));
-                }
-            }
-        }
-        panic!("no routable offset found within radius 8 for this seed");
-    }
-
-    /// **The regression finding 7 exists for.** The camera eases toward its
-    /// target while a travel is live, so a pointer held dead still can see
-    /// the tile under it drift between press and release — a tile-equality
-    /// test dropped exactly the clicks that caused. A press and release
-    /// within `CLICK_DRAG_TOLERANCE_PX` of each other, landing on two
-    /// *different* tiles, must still travel — resolved at the release
-    /// position, proven by walking the party toward it.
-    #[test]
-    fn a_press_and_release_within_tolerance_travels_to_the_release_tile() {
-        let mut app = app_on_the_map(6501);
-        let ((dx, dy), (sx, sy)) = find_a_routable_offset(&mut app);
-        let start = app.game.as_ref().unwrap().player_status().position;
-        let layout = test_layout(start);
-        let mut fx = Fx::new();
-        fx.set_map_click(Some(layout));
-        let mut tracker = MapPointer::default();
-        let ctx = egui::Context::default();
-        warm_up_pointer_frame(&ctx);
-
-        // The release pixel sits 1px inside the target tile; the press
-        // pixel sits 2px away from it, in the *previous* tile — well
-        // inside `CLICK_DRAG_TOLERANCE_PX`, and exactly the boundary a
-        // tile-equality test would have refused.
-        let release_x = layout.pane.x + ((dx + layout.half.0) as f32) * layout.tile_px + 1.0;
-        let release_y = layout.pane.y + ((dy + layout.half.1) as f32) * layout.tile_px + 5.0;
-        let press = egui::pos2(release_x - 2.0, release_y);
-        let release = egui::pos2(release_x, release_y);
-
-        map_pointer_frame(
-            &mut app,
-            &ctx,
-            &fx,
-            &mut tracker,
-            press,
-            true,
-            egui::PointerButton::Primary,
-        );
-        map_pointer_frame(
-            &mut app,
-            &ctx,
-            &fx,
-            &mut tracker,
-            release,
-            false,
-            egui::PointerButton::Primary,
-        );
-        app.update_realtime(1.0 / app.world_speed.ticks_per_second());
-
-        assert_eq!(
-            app.game.as_ref().unwrap().player_status().position,
-            (start.0 + sx, start.1 + sy),
-            "a press+release within tolerance must travel toward the release tile"
-        );
-    }
-
-    /// A press and release beyond `CLICK_DRAG_TOLERANCE_PX` is a drag, not
-    /// a click — no travel is queued, so the party never leaves its tile.
-    #[test]
-    fn a_press_and_release_beyond_tolerance_is_not_a_click() {
-        let mut app = app_on_the_map(6502);
-        let start = app.game.as_ref().unwrap().player_status().position;
-        let layout = test_layout(start);
-        let mut fx = Fx::new();
-        fx.set_map_click(Some(layout));
-        let mut tracker = MapPointer::default();
-        let ctx = egui::Context::default();
-        warm_up_pointer_frame(&ctx);
-
-        let press = egui::pos2(2000.0, 2000.0);
-        let release = egui::pos2(2000.0 + CLICK_DRAG_TOLERANCE_PX + 10.0, 2000.0);
-
-        map_pointer_frame(
-            &mut app,
-            &ctx,
-            &fx,
-            &mut tracker,
-            press,
-            true,
-            egui::PointerButton::Primary,
-        );
-        map_pointer_frame(
-            &mut app,
-            &ctx,
-            &fx,
-            &mut tracker,
-            release,
-            false,
-            egui::PointerButton::Primary,
-        );
-        for _ in 0..5 {
-            app.update_realtime(1.0 / app.world_speed.ticks_per_second());
-        }
-
-        assert_eq!(
-            app.game.as_ref().unwrap().player_status().position,
-            start,
-            "a press+release beyond tolerance must not queue a travel"
-        );
-    }
-
-    /// Every frame the handler tells app-core which cell the pointer is
-    /// over — the aim cursor's follow and the board's hover path both read
-    /// it — and clears it the frame the pointer leaves the pane.
-    #[test]
-    fn a_frame_over_the_pane_sets_the_apps_hover_cell_and_off_it_clears_it() {
-        let mut app = app_on_the_map(6701);
-        let start = app.game.as_ref().unwrap().player_status().position;
-        let layout = test_layout(start);
-        let mut fx = Fx::new();
-        fx.set_map_click(Some(layout));
-        let mut tracker = MapPointer::default();
-        let ctx = egui::Context::default();
-        warm_up_pointer_frame(&ctx);
-        let pos = egui::pos2(2005.0, 2005.0);
-        let tile = pane_tile(pos, &layout).expect("inside the pane");
-
-        hover_frame(&mut app, &ctx, &fx, &mut tracker, pos, 1.0, false);
-        assert_eq!(app.map_hover, Some(tile));
-
-        hover_frame(
-            &mut app,
-            &ctx,
-            &fx,
-            &mut tracker,
-            egui::pos2(-5.0, -5.0),
-            1.1,
-            false,
-        );
-        assert_eq!(app.map_hover, None);
-    }
-
-    /// A secondary click reaches `App::map_click` with the secondary
-    /// button, under the same press-and-release rule as a primary one.
-    /// Observed on a battle map, where a secondary click clears the target
-    /// mark — on the surface map the button means nothing, so nothing
-    /// there could tell a delivered click from a dropped one.
-    #[test]
-    fn a_secondary_click_reaches_map_click_with_the_secondary_button() {
-        let mut app = app_in_tactical_fight();
-        for _ in 0..64 {
-            if app.tactical_player_turn() {
-                break;
-            }
-            assert!(app.game.as_mut().unwrap().tactical_ai_turn());
-        }
-        assert!(app.tactical_player_turn(), "the player's turn never came");
-        let hostile = app
-            .game
-            .as_mut()
-            .unwrap()
-            .tactical_view()
-            .unwrap()
-            .bodies
-            .into_iter()
-            .find(|b| b.is_hostile)
-            .expect("a hostile is seated");
-        app.map_click(hostile.cell, PointerButton::Primary);
-        assert!(
-            app.tactical_target.is_some(),
-            "the primary click marked nothing"
-        );
-
-        let layout = test_layout(hostile.cell);
-        let mut fx = Fx::new();
-        fx.set_map_click(Some(layout));
-        let mut tracker = MapPointer::default();
-        let ctx = egui::Context::default();
-        warm_up_pointer_frame(&ctx);
-        let pos = egui::pos2(2005.0, 2005.0);
-        let button = egui::PointerButton::Secondary;
-        map_pointer_frame(&mut app, &ctx, &fx, &mut tracker, pos, true, button);
-        map_pointer_frame(&mut app, &ctx, &fx, &mut tracker, pos, false, button);
-
-        assert_eq!(
-            app.tactical_target, None,
-            "the secondary click never reached app-core"
-        );
     }
 
     /// An `App` carrying nothing but a known content root.
@@ -1667,7 +1092,7 @@ mod tests {
 
     /// An `App` standing in an open battle-map fight, in the mode the router
     /// puts one in — `render::tactical`'s own fixture, lifted to an `App`.
-    fn app_in_tactical_fight() -> App {
+    pub(crate) fn app_in_tactical_fight() -> App {
         let assets = assets_dir();
         let tmp = std::env::temp_dir().join("feral_processes_gui_tactical_fx");
         let mut app = App::new(

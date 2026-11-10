@@ -11,7 +11,9 @@
 //! an aim is `commit_tactical_aim` — so there is no second spelling of any
 //! of them, and a refusal says what the key's would.
 
-use crate::{App, EditorButton, GameKey, HubPageKey, Mode, PointerButton, TargetMark};
+use crate::{
+    App, EditorButton, GameKey, HubPageKey, Mode, PointerButton, PointerPhase, TargetMark,
+};
 
 /// Which way a scroll marker or the wheel moves the list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,6 +83,7 @@ impl App {
     /// turns a press or the wheel into the keys it stands for.
     pub fn handle_pointer_event(&mut self, event: PointerEvent) {
         self.pointer_hover = event.hover;
+        self.pointer_stroke(&event);
         let Some(hit) = event.hover else { return };
         if event.wheel != 0 {
             self.hub_pointer_wheel(hit, event.wheel);
@@ -103,13 +106,71 @@ impl App {
             | PointerHit::Row(_)
             | PointerHit::More(_)
             | PointerHit::Region(_) => self.hub_pointer_click(hit),
-            // The sprite editor and the map have their own pointer paths
-            // until they move onto this one.
-            PointerHit::Cell(..)
-            | PointerHit::Swatch(_)
-            | PointerHit::Button(_)
-            | PointerHit::Subject(_)
-            | PointerHit::MapTile(..) => {}
+            PointerHit::Button(_) | PointerHit::Subject(_) => self.forge_pointer_click(hit),
+            // Strokes are read on press, drag and release
+            // (`pointer_stroke`), not on a click; the map has its own
+            // pointer path until it moves onto this one.
+            PointerHit::Cell(..) | PointerHit::Swatch(_) | PointerHit::MapTile(..) => {}
+        }
+    }
+
+    /// A button is a key press and a picker row a select-then-open, both on
+    /// the click like a hub's.
+    fn forge_pointer_click(&mut self, hit: PointerHit) {
+        let phase = match hit {
+            PointerHit::Subject(row) if self.picker_clicked == Some(row) => {
+                PointerPhase::DoubleClick
+            }
+            _ => PointerPhase::Down,
+        };
+        if let PointerHit::Subject(row) = hit {
+            self.picker_clicked = Some(row);
+        }
+        self.handle_pointer(hit, PointerButton::Primary, phase);
+    }
+
+    /// The sprite editor's strokes. **A whole drag is one stroke**: a press
+    /// on a cell or swatch opens it, a move onto another cell paints it, and
+    /// the release closes it — and so does leaving the canvas and palette
+    /// while held, so the next press cannot join it into one undo entry.
+    /// Only a press that began on a cell or swatch opens a stroke.
+    fn pointer_stroke(&mut self, event: &PointerEvent) {
+        if !matches!(self.mode, Mode::SpriteEditor | Mode::CreateCharacter) {
+            self.pointer_stroke = None;
+            return;
+        }
+        let paints = |hit: Option<PointerHit>| {
+            hit.filter(|h| matches!(h, PointerHit::Cell(..) | PointerHit::Swatch(_)))
+        };
+        if event.press {
+            self.end_stroke_at(None);
+            if let Some(hit) = paints(event.hover) {
+                self.handle_pointer(hit, event.button, PointerPhase::Down);
+                self.pointer_stroke = Some((event.button, hit));
+            }
+        }
+        if event.drag
+            && let Some((button, last)) = self.pointer_stroke
+        {
+            match event.hover {
+                Some(hit) if paints(Some(hit)).is_some() => {
+                    self.handle_pointer(hit, button, PointerPhase::Drag);
+                    self.pointer_stroke = Some((button, hit));
+                }
+                // Over a button, the pointer is still inside the editor.
+                Some(_) => {}
+                None => self.end_stroke_at(Some(last)),
+            }
+        }
+        if event.up {
+            self.end_stroke_at(paints(event.hover));
+        }
+    }
+
+    /// Closes the stroke in progress on `at`, or on where it last was.
+    fn end_stroke_at(&mut self, at: Option<PointerHit>) {
+        if let Some((button, last)) = self.pointer_stroke.take() {
+            self.handle_pointer(at.unwrap_or(last), button, PointerPhase::Up);
         }
     }
 }

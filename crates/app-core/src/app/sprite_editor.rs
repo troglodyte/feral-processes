@@ -355,7 +355,7 @@ impl SpriteEditor {
     /// `Secondary`), a `Swatch` selects. `PointerHit::Button` and `Subject`
     /// are the host's: a button is a key press the host routes itself.
     ///
-    /// **`PointerHit::Swatch` carries `swatch_at`'s 0-based drawn position,
+    /// **`PointerHit::Swatch` carries the swatch's 0-based drawn position,
     /// and that is the palette index itself**: `draw_swatch_grid` draws the
     /// transparent swatch (index 0) first and palette entry `n` at position
     /// `n`. It used to be a `+ 1` conversion here, and getting that wrong

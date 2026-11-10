@@ -146,6 +146,11 @@ pub(super) fn draw_sprite_picker(app: &mut App, painter: &Painter, m: &Metrics) 
         let (col, row) = picker_slot(i, g.rows_per_column);
         let x = m.pad + col as f32 * g.column_width;
         let y = g.grid_top + row as f32 * m.line_height;
+        // Text is placed by baseline, so a row spans the line above its `y`.
+        painter.target(
+            Rect::new(x, y - m.line_height, g.column_width, m.line_height),
+            PointerHit::Subject(i),
+        );
         draw_subject_row(painter, x, y, subject, i == selected, m);
     }
 }
@@ -460,6 +465,7 @@ fn speed_is_live(view: &SpriteEditorView) -> bool {
 
 fn draw_button_bar(painter: &Painter, g: &EditorGeometry, view: &SpriteEditorView, m: &Metrics) {
     for (button, r) in &g.buttons {
+        painter.target(*r, PointerHit::Button(*button));
         painter.rect(r.x, r.y, r.w, r.h, PANEL_BG);
         let lit = match button {
             EditorButton::Tool => view.tool == Tool::Fill,
@@ -536,6 +542,19 @@ pub(super) fn draw_sprite_editor_session(
     let side = edge as f32 * g.cell;
     let inner = Rect::new(c.x + m.inset, c.y + m.inset, side, side);
     canvas::draw_canvas_grid(painter, inner, &view.canvas, view.palette);
+    for y in 0..edge {
+        for x in 0..edge {
+            painter.target(
+                Rect::new(
+                    inner.x + x as f32 * g.cell,
+                    inner.y + y as f32 * g.cell,
+                    g.cell,
+                    g.cell,
+                ),
+                PointerHit::Cell(x as u8, y as u8),
+            );
+        }
+    }
 
     centered_ui(painter, "Palette", g.palette_label_y, m.small(), TEXT_DIM);
     let p = g.palette;
@@ -555,6 +574,18 @@ pub(super) fn draw_sprite_editor_session(
         view.canvas.selected,
         view.palette,
     );
+    // `PointerHit::Swatch` carries the drawn position, which is the palette
+    // index itself (`canvas::swatch_count`).
+    for (i, r) in canvas::swatch_rects(
+        palette_inner,
+        view.palette_cols as usize,
+        view.palette.len(),
+    )
+    .into_iter()
+    .enumerate()
+    {
+        painter.target(r, PointerHit::Swatch(i as u8));
+    }
 
     draw_button_bar(painter, &g, view, m);
 
@@ -656,207 +687,11 @@ fn draw_preview_cell(painter: &Painter, rect: Rect, view: &SpriteEditorView, hue
     painter.rect_lines(rect.x, rect.y, rect.w, rect.h, 1.0, BORDER);
 }
 
-// ---------------------------------------------------------------------
-// The mouse
-// ---------------------------------------------------------------------
-//
-// `crates/gui` has no mouse handling anywhere else — this is the first, and
-// it stays confined to this screen. Everything below is pure geometry: no
-// egui, no bevy, nothing that needs a window. `lib.rs::handle_sprite_pointer`
-// is the one caller, and it owns the only bevy/egui-dependent half (reading
-// the pointer, and the frame-to-frame Down/Drag/Up bookkeeping) — kept out
-// of this file so `cell_at`/`swatch_at`/`HitRects::resolve` stay testable
-// with nothing but a `Rect`.
-
-/// Resolves a pointer position to a canvas cell — pure in `(pos, rect,
-/// edge)`, so this needs no window to test. `rect` is the exact grid rect
-/// `draw_canvas_grid` fills (the canvas panel inset by `m.inset`, not the
-/// panel itself). Both bounds are inclusive, so the rect's own four corners
-/// resolve to their own four corner cells — `min(edge - 1)` is what makes
-/// the far corner (exactly `rect.x + rect.w`) land on the last column
-/// instead of reading one cell short of "inside."
-pub(crate) fn cell_at(pos: (f32, f32), rect: Rect, edge: u8) -> Option<(u8, u8)> {
-    if pos.0 < rect.x || pos.0 > rect.x + rect.w || pos.1 < rect.y || pos.1 > rect.y + rect.h {
-        return None;
-    }
-    let cell_w = rect.w / edge as f32;
-    let cell_h = rect.h / edge as f32;
-    let x = (((pos.0 - rect.x) / cell_w) as u8).min(edge - 1);
-    let y = (((pos.1 - rect.y) / cell_h) as u8).min(edge - 1);
-    Some((x, y))
-}
-
-/// Resolves a pointer position to a swatch index — `draw_swatch_grid`'s own
-/// row-major drawn position, which is also the palette index
-/// (`canvas::swatch_count`). `cols` is swatches per row and `count` is
-/// swatches drawn, not palette colours. `rect` is the exact grid
-/// `draw_swatch_grid` fills, sized through the same `canvas::swatch_side`
-/// and `canvas::SWATCH_GAP_RATIO` it draws with — a pointer landing in the
-/// gap between two swatches resolves to no hit rather than snapping to
-/// whichever is nearer, so an accidental miss stays a miss.
-pub(crate) fn swatch_at(pos: (f32, f32), rect: Rect, cols: u8, count: u8) -> Option<u8> {
-    if count == 0 || cols == 0 || pos.0 < rect.x || pos.1 < rect.y {
-        return None;
-    }
-    let (cols, count) = (cols as usize, count as usize);
-    let swatch = canvas::swatch_side(rect.h, canvas::swatch_rows(count, cols));
-    let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
-    let (dx, dy) = (pos.0 - rect.x, pos.1 - rect.y);
-    let (col, row) = ((dx / stride) as usize, (dy / stride) as usize);
-    if col >= cols || dx - col as f32 * stride > swatch || dy - row as f32 * stride > swatch {
-        return None;
-    }
-    let i = row * cols + col;
-    (i < count).then_some(i as u8)
-}
-
-/// One rect per picker row, from the same `picker_geometry` and
-/// `picker_slot` the rows are drawn at. Text is placed by baseline, so a row
-/// spans the line above its `y`.
-fn picker_row_rects(w: f32, m: &Metrics, subject_count: usize) -> Vec<Rect> {
-    let g = picker_geometry(w, m, subject_count);
-    (0..subject_count)
-        .map(|i| {
-            let (col, row) = picker_slot(i, g.rows_per_column);
-            Rect::new(
-                m.pad + col as f32 * g.column_width,
-                g.grid_top + row as f32 * m.line_height - m.line_height,
-                g.column_width,
-                m.line_height,
-            )
-        })
-        .collect()
-}
-
-/// What the pointer can land on, for whichever Sprite Forge screen is open.
-pub(crate) enum SpriteHits {
-    Editor(HitRects),
-    Picker(Vec<Rect>),
-}
-
-impl SpriteHits {
-    pub(crate) fn resolve(&self, pos: (f32, f32)) -> Option<PointerHit> {
-        match self {
-            SpriteHits::Editor(rects) => rects.resolve(pos),
-            SpriteHits::Picker(rows) => rows
-                .iter()
-                .position(|r| {
-                    pos.0 >= r.x && pos.0 < r.x + r.w && pos.1 >= r.y && pos.1 < r.y + r.h
-                })
-                .map(PointerHit::Subject),
-        }
-    }
-}
-
-/// The hit rects for the screen on show, or `None` on any other screen —
-/// which is also when `lib.rs` has no pointer to read.
-pub(crate) fn sprite_hits(app: &mut App, painter: &Painter) -> Option<SpriteHits> {
-    let m = ui_metrics(painter.screen_h());
-    match app.mode {
-        Mode::SpriteEditor => {
-            let view = app.sprite_editor_view()?;
-            Some(SpriteHits::Editor(hit_rects(
-                painter,
-                painter.screen_w(),
-                &m,
-                &view,
-                app.zoom,
-            )))
-        }
-        Mode::CreateCharacter => {
-            let view = app.creation_sprite_view()?;
-            Some(SpriteHits::Editor(hit_rects(
-                painter,
-                painter.screen_w(),
-                &m,
-                &view,
-                app.zoom,
-            )))
-        }
-        Mode::SpritePicker => {
-            let count = app.sprite_subjects().len();
-            Some(SpriteHits::Picker(picker_row_rects(
-                painter.screen_w(),
-                &m,
-                count,
-            )))
-        }
-        _ => None,
-    }
-}
-
-/// The button under `pos`, if any.
-fn button_at(pos: (f32, f32), buttons: &[(EditorButton, Rect)]) -> Option<EditorButton> {
-    buttons
-        .iter()
-        .find(|(_, r)| pos.0 >= r.x && pos.0 <= r.x + r.w && pos.1 >= r.y && pos.1 <= r.y + r.h)
-        .map(|(b, _)| *b)
-}
-
-/// The sprite editor's own hit-test rects, recomputed from the exact
-/// `editor_geometry` `draw_sprite_editor_session` draws from — a pointer
-/// resolved through `resolve` can never disagree with what's on screen.
-/// Fields stay private: `lib.rs` never reads one directly, only calls
-/// `resolve`.
-pub(crate) struct HitRects {
-    canvas: Rect,
-    edge: u8,
-    palette: Rect,
-    swatches: u8,
-    swatch_cols: u8,
-    buttons: Vec<(EditorButton, Rect)>,
-}
-
-impl HitRects {
-    /// The canvas rect first, the palette rect second — the two panels
-    /// never overlap on screen, so trying both in this order and returning
-    /// the first hit is exactly "which panel was the pointer over."
-    pub(crate) fn resolve(&self, pos: (f32, f32)) -> Option<PointerHit> {
-        if let Some(button) = button_at(pos, &self.buttons) {
-            return Some(PointerHit::Button(button));
-        }
-        if let Some((x, y)) = cell_at(pos, self.canvas, self.edge) {
-            return Some(PointerHit::Cell(x, y));
-        }
-        swatch_at(pos, self.palette, self.swatch_cols, self.swatches).map(PointerHit::Swatch)
-    }
-}
-
-/// `render::sprite_editor_hit_rects` is the one caller — `app`'s zoom and
-/// `view`'s own edge/palette length feed the same `editor_geometry` the draw
-/// call built its rects from, then re-derives `inner`/`palette_inner`
-/// exactly as `draw_sprite_editor_session` does.
-pub(crate) fn hit_rects(
-    painter: &Painter,
-    w: f32,
-    m: &Metrics,
-    view: &SpriteEditorView,
-    zoom: u16,
-) -> HitRects {
-    let edge = view.canvas.edge as usize;
-    let g = editor_geometry(painter, w, m, view, zoom);
-    let side = edge as f32 * g.cell;
-    let canvas = Rect::new(g.canvas.x + m.inset, g.canvas.y + m.inset, side, side);
-    let palette = Rect::new(
-        g.palette.x + m.inset,
-        g.palette.y + m.inset,
-        g.palette.w - m.inset * 2.0,
-        g.palette.h - m.inset * 2.0,
-    );
-    HitRects {
-        canvas,
-        edge: view.canvas.edge,
-        palette,
-        swatches: canvas::swatch_count(view.palette.len()) as u8,
-        swatch_cols: view.palette_cols,
-        buttons: g.buttons,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use feral_processes_app_core::{FORGE_BUTTONS, GameKey, Mode, PointerButton, PointerPhase};
+    use crate::pointer::{Reader, tests::Frame};
+    use feral_processes_app_core::{FORGE_BUTTONS, GameKey, Mode, PointerHit};
     use feral_processes_engine::components::GlyphColor;
     use feral_processes_engine::icon::SPRITE_PALETTE;
 
@@ -1306,29 +1141,6 @@ mod tests {
         assert!(!drawn.contains("[s] save"), "{drawn}");
     }
 
-    #[test]
-    fn the_wizard_publishes_editor_hits_only_while_its_editor_is_open() {
-        use super::super::creation::tests::{walk_past, wizard_app};
-        use feral_processes_app_core::CreationStep;
-        let mut app = wizard_app();
-        for step in CreationStep::ALL
-            .iter()
-            .take_while(|s| **s != CreationStep::Icon)
-        {
-            walk_past(&mut app, *step);
-        }
-        assert_eq!(app.mode, Mode::CreateCharacter);
-        let hits = |app: &mut feral_processes_app_core::App| {
-            crate::paint::with_painter(|p| sprite_hits(app, p)).0
-        };
-        assert!(hits(&mut app).is_none());
-        while app.menu_selected != app.creation_rows().len() - 1 {
-            app.handle_key(GameKey::Down);
-        }
-        app.handle_key(GameKey::Enter);
-        assert!(matches!(hits(&mut app), Some(SpriteHits::Editor(_))));
-    }
-
     /// The preview must show what the map will draw: a colour sprite takes a
     /// grey tint at the subject hue's brightest channel, not the hue.
     #[test]
@@ -1427,113 +1239,200 @@ mod tests {
     }
 
     // -------------------------------------------------------------
-    // The mouse: `cell_at` and `swatch_at`, pure functions of a position, a
-    // rect and an edge/count — no window, no egui, no `App`.
+    // The mouse, through the pointer layer: a draw registers the targets,
+    // the reader resolves a frame's pointer against them.
     // -------------------------------------------------------------
 
-    /// **The failing test this task starts from.** A 16x16 grid in a
-    /// 160x160 rect (10px cells): each of the rect's own four corners must
-    /// resolve to its own corner cell, and a point in the middle of an
-    /// interior cell must resolve to that cell.
+    /// A screen drawn and read frame by frame, as the frontend does: the
+    /// reader first, then the draw that registers the next frame's targets.
+    struct Drive {
+        reader: Reader,
+        ctx: bevy_egui::egui::Context,
+        fx: crate::fx::Fx,
+        time: f64,
+    }
+
+    impl Drive {
+        fn new() -> Self {
+            let ctx = bevy_egui::egui::Context::default();
+            crate::paint::install_fonts(&ctx);
+            Drive {
+                reader: Reader::new(),
+                ctx,
+                fx: crate::fx::Fx::new(),
+                time: 0.0,
+            }
+        }
+
+        fn frame(
+            &mut self,
+            app: &mut feral_processes_app_core::App,
+            at: (f32, f32),
+            f: impl FnOnce(Frame) -> Frame,
+        ) {
+            self.time += 0.05;
+            let input = f(Frame::at(at.0, at.1, self.time)).input();
+            let ctx = self.ctx.clone();
+            let _ = ctx.run_ui(input, |_| {
+                self.reader.frame(&ctx, app);
+                let painter = crate::paint::Painter::for_frame(&ctx, 0.0, Default::default())
+                    .recording_into(self.reader.sink());
+                crate::render::draw(app, &mut self.fx, &painter, false, false);
+            });
+            self.reader.drawn(app);
+        }
+
+        /// Two frames with the pointer off every target, so the reader is
+        /// armed and holds the targets the screen registers.
+        fn settle(&mut self, app: &mut feral_processes_app_core::App) {
+            self.frame(app, (-50.0, -50.0), |f| f);
+            self.frame(app, (-50.0, -50.0), |f| f);
+        }
+
+        fn targets(&self) -> Vec<(Rect, PointerHit)> {
+            self.reader.sink().lock().expect("no panic").clone()
+        }
+
+        fn rect_of(&self, hit: PointerHit) -> Rect {
+            self.targets()
+                .into_iter()
+                .find(|(_, h)| *h == hit)
+                .unwrap_or_else(|| panic!("{hit:?} was not drawn"))
+                .0
+        }
+
+        fn centre(&self, hit: PointerHit) -> (f32, f32) {
+            let r = self.rect_of(hit);
+            (r.x + r.w / 2.0, r.y + r.h / 2.0)
+        }
+
+        /// What the pointer is over at `at`, as the app records it.
+        fn hover(
+            &mut self,
+            app: &mut feral_processes_app_core::App,
+            at: (f32, f32),
+        ) -> Option<PointerHit> {
+            self.frame(app, at, |f| f);
+            app.pointer_hover
+        }
+
+        fn click(&mut self, app: &mut feral_processes_app_core::App, at: (f32, f32)) {
+            self.frame(app, at, Frame::press);
+            self.frame(app, at, Frame::release);
+        }
+    }
+
+    fn editor_drive() -> (feral_processes_app_core::App, Drive) {
+        let mut app = sprite_forge_app();
+        open_editor(&mut app, 0);
+        let mut drive = Drive::new();
+        drive.settle(&mut app);
+        (app, drive)
+    }
+
+    /// The canvas's own four corners resolve to their own corner cells and
+    /// a point in the middle of an interior cell to that cell. The far
+    /// corners are taken a hair inside: cells are half-open rects now, so
+    /// the one pixel exactly on the far edge belongs to no cell.
     #[test]
-    fn cell_at_resolves_the_four_corners_and_one_interior_point() {
-        let rect = Rect::new(100.0, 50.0, 160.0, 160.0);
-        let edge = 16;
+    fn the_canvas_corners_and_an_interior_point_resolve_to_their_cells() {
+        let (mut app, mut drive) = editor_drive();
+        let first = drive.rect_of(PointerHit::Cell(0, 0));
+        let last = drive.rect_of(PointerHit::Cell(15, 15));
+        let (x0, y0) = (first.x, first.y);
+        let (x1, y1) = (last.x + last.w - 0.01, last.y + last.h - 0.01);
+        for (pos, cell, what) in [
+            ((x0, y0), (0, 0), "top-left corner"),
+            ((x1, y0), (15, 0), "top-right corner"),
+            ((x0, y1), (0, 15), "bottom-left corner"),
+            ((x1, y1), (15, 15), "bottom-right corner"),
+        ] {
+            assert_eq!(
+                drive.hover(&mut app, pos),
+                Some(PointerHit::Cell(cell.0, cell.1)),
+                "{what}"
+            );
+        }
+        let middle = drive.centre(PointerHit::Cell(8, 8));
         assert_eq!(
-            cell_at((100.0, 50.0), rect, edge),
-            Some((0, 0)),
-            "top-left corner"
-        );
-        assert_eq!(
-            cell_at((260.0, 50.0), rect, edge),
-            Some((15, 0)),
-            "top-right corner"
-        );
-        assert_eq!(
-            cell_at((100.0, 210.0), rect, edge),
-            Some((0, 15)),
-            "bottom-left corner"
-        );
-        assert_eq!(
-            cell_at((260.0, 210.0), rect, edge),
-            Some((15, 15)),
-            "bottom-right corner"
-        );
-        // The middle of cell (8, 8): rect.x + 8.5 cells, rect.y + 8.5 cells.
-        assert_eq!(
-            cell_at((185.0, 135.0), rect, edge),
-            Some((8, 8)),
+            drive.hover(&mut app, middle),
+            Some(PointerHit::Cell(8, 8)),
             "an interior point"
         );
     }
 
-    /// A position outside the rect on any of the four sides resolves to no
+    /// A position outside the canvas on any of the four sides resolves to no
     /// hit at all.
     #[test]
-    fn cell_at_returns_none_outside_the_rect() {
-        let rect = Rect::new(100.0, 50.0, 160.0, 160.0);
-        let edge = 16;
-        assert_eq!(cell_at((99.9, 50.0), rect, edge), None, "left of the rect");
-        assert_eq!(
-            cell_at((260.1, 50.0), rect, edge),
-            None,
-            "right of the rect"
-        );
-        assert_eq!(cell_at((100.0, 49.9), rect, edge), None, "above the rect");
-        assert_eq!(cell_at((100.0, 210.1), rect, edge), None, "below the rect");
+    fn a_position_outside_the_canvas_resolves_to_nothing() {
+        let (mut app, mut drive) = editor_drive();
+        let first = drive.rect_of(PointerHit::Cell(0, 0));
+        let last = drive.rect_of(PointerHit::Cell(15, 15));
+        let (right, bottom) = (last.x + last.w, last.y + last.h);
+        for (pos, what) in [
+            ((first.x - 0.1, first.y), "left of the canvas"),
+            ((right + 0.1, first.y), "right of the canvas"),
+            ((first.x, first.y - 0.1), "above the canvas"),
+            ((first.x, bottom + 0.1), "below the canvas"),
+        ] {
+            assert_eq!(drive.hover(&mut app, pos), None, "{what}");
+        }
     }
 
-    /// A swatch hit lands on the swatch it is over, and misses the gap
-    /// between two swatches rather than snapping to the nearer one.
+    /// A swatch is hit where it is, and its gap to the next is a miss rather
+    /// than a snap to the nearer one.
     #[test]
-    fn swatch_at_resolves_a_hit_and_a_gap_and_outside() {
-        // Two swatches, 30px side, 10px gap (`SWATCH_GAP_RATIO` = 1/3).
-        let rect = Rect::new(0.0, 0.0, 70.0, 30.0);
+    fn a_swatch_is_hit_and_the_gap_beside_it_and_the_strip_outside_are_not() {
+        let (mut app, mut drive) = editor_drive();
+        let (a, b) = (
+            drive.rect_of(PointerHit::Swatch(0)),
+            drive.rect_of(PointerHit::Swatch(1)),
+        );
+        let centre = drive.centre(PointerHit::Swatch(0));
         assert_eq!(
-            swatch_at((15.0, 15.0), rect, 2, 2),
-            Some(0),
+            drive.hover(&mut app, centre),
+            Some(PointerHit::Swatch(0)),
             "inside the first swatch"
         );
+        let gap = ((a.x + a.w + b.x) / 2.0, centre.1);
         assert_eq!(
-            swatch_at((35.0, 15.0), rect, 2, 2),
+            drive.hover(&mut app, gap),
             None,
             "in the gap between the two swatches"
         );
+        let centre = drive.centre(PointerHit::Swatch(1));
         assert_eq!(
-            swatch_at((55.0, 15.0), rect, 2, 2),
-            Some(1),
+            drive.hover(&mut app, centre),
+            Some(PointerHit::Swatch(1)),
             "inside the second swatch"
         );
         assert_eq!(
-            swatch_at((-1.0, 15.0), rect, 2, 2),
+            drive.hover(&mut app, (a.x - 1.0, a.y + a.h / 2.0)),
             None,
             "left of the strip"
         );
-        assert_eq!(swatch_at((15.0, 31.0), rect, 2, 2), None, "below the strip");
     }
 
-    /// `HitRects::resolve` tries the canvas rect first and the palette rect
-    /// second, and misses entirely outside both — the composition
-    /// `render::sprite_editor_hit_rects` hands `lib.rs` each frame.
+    /// The canvas, the palette and neither: the origin of each resolves to
+    /// its first cell or swatch, and the window's corner to nothing.
     #[test]
-    fn hit_rects_resolve_tries_canvas_then_palette_then_neither() {
-        let mut app = sprite_forge_app();
-        open_editor(&mut app, 0);
-        let view = app.sprite_editor_view().expect("just opened");
-        let m = crate::text::ui_metrics(900.0);
-        let rects = crate::paint::with_painter(|p| hit_rects(p, 1280.0, &m, &view, app.zoom)).0;
-
-        let canvas_hit = rects.resolve((rects.canvas.x, rects.canvas.y));
-        assert_eq!(canvas_hit, Some(PointerHit::Cell(0, 0)));
-
-        let swatch_hit = rects.resolve((rects.palette.x, rects.palette.y));
-        assert_eq!(swatch_hit, Some(PointerHit::Swatch(0)));
-
-        assert_eq!(rects.resolve((-1.0, -1.0)), None, "outside both panels");
+    fn the_canvas_and_the_palette_each_resolve_and_the_rest_does_not() {
+        let (mut app, mut drive) = editor_drive();
+        let cell = drive.rect_of(PointerHit::Cell(0, 0));
+        assert_eq!(
+            drive.hover(&mut app, (cell.x, cell.y)),
+            Some(PointerHit::Cell(0, 0))
+        );
+        let swatch = drive.rect_of(PointerHit::Swatch(0));
+        assert_eq!(
+            drive.hover(&mut app, (swatch.x, swatch.y)),
+            Some(PointerHit::Swatch(0))
+        );
+        assert_eq!(drive.hover(&mut app, (-1.0, -1.0)), None, "outside both");
     }
 
-    /// **The seam neither side's own test spanned.** `swatch_at` answers in
-    /// drawn positions, `pick_swatch` writes `CanvasView::selected`, and
+    /// **The seam neither side's own test spanned.** A click answers in drawn
+    /// positions, `pick_swatch` writes `CanvasView::selected`, and
     /// `draw_swatch_grid` reads that back to outline exactly one swatch — so
     /// the only honest question is whether the outline lands on the swatch
     /// the pointer was actually over. Asked of the first drawn position (the
@@ -1542,24 +1441,23 @@ mod tests {
     /// at all.
     #[test]
     fn a_click_outlines_the_swatch_under_the_pointer() {
-        let mut app = sprite_forge_app();
-        open_editor(&mut app, 0);
-        let view = app.sprite_editor_view().expect("just opened");
-        let m = crate::text::ui_metrics(900.0);
-        let rects = crate::paint::with_painter(|p| hit_rects(p, CENSUS_W, &m, &view, app.zoom)).0;
-        let palette = rects.palette;
-        let cols = view.palette_cols as usize;
+        let (mut app, mut drive) = editor_drive();
         let positions = canvas::swatch_count(SPRITE_PALETTE.len());
-        let swatch = canvas::swatch_side(palette.h, canvas::swatch_rows(positions, cols));
-        let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
+        let origin = drive.rect_of(PointerHit::Swatch(0));
+        let cols = app.sprite_editor_view().expect("open").palette_cols as usize;
+        let rows = canvas::swatch_rows(positions, cols);
+        let side = origin.w;
+        let grid = Rect::new(
+            origin.x,
+            origin.y,
+            0.0,
+            side * (rows as f32 + (rows - 1) as f32 * canvas::SWATCH_GAP_RATIO),
+        );
 
         for i in [0usize, positions / 2, positions - 1] {
-            let left = palette.x + (i % cols) as f32 * stride;
-            let top = palette.y + (i / cols) as f32 * stride;
-            let pos = (left + swatch * 0.5, top + swatch * 0.5);
-            let hit = rects.resolve(pos).expect("inside a swatch");
-            app.handle_pointer(hit, PointerButton::Primary, PointerPhase::Down);
-            app.handle_pointer(hit, PointerButton::Primary, PointerPhase::Up);
+            let r = drive.rect_of(PointerHit::Swatch(i as u8));
+            let (left, top) = (r.x, r.y);
+            drive.click(&mut app, drive.centre(PointerHit::Swatch(i as u8)));
 
             let selected = app
                 .sprite_editor_view()
@@ -1567,7 +1465,7 @@ mod tests {
                 .canvas
                 .selected;
             let (_, shapes) = crate::paint::with_painter(|p| {
-                canvas::draw_swatch_grid(p, palette, 16, selected, &SPRITE_PALETTE)
+                canvas::draw_swatch_grid(p, grid, cols, selected, &SPRITE_PALETTE)
             });
             let outlined =
                 crate::paint::painted_rect_stroke_boxes(&shapes, canvas::SELECTED_SWATCH_COLOR);
@@ -1584,40 +1482,218 @@ mod tests {
     /// A 16-column grid: every swatch centre hits its own index and every
     /// gap between swatches, in both directions, misses.
     #[test]
-    fn swatch_at_hits_every_centre_and_misses_every_gap_in_a_16_column_grid() {
-        let (cols, count) = (16usize, 64usize);
-        let rect = Rect::new(40.0, 30.0, 16.0 * 12.0 + 15.0 * 4.0, 4.0 * 12.0 + 3.0 * 4.0);
-        let swatch = canvas::swatch_side(rect.h, 4);
-        assert!((swatch - 12.0).abs() < 1e-4);
-        let stride = swatch * (1.0 + canvas::SWATCH_GAP_RATIO);
-        for i in 0..count {
-            let (cx, cy) = (
-                rect.x + (i % cols) as f32 * stride + swatch / 2.0,
-                rect.y + (i / cols) as f32 * stride + swatch / 2.0,
+    fn every_swatch_centre_hits_and_every_gap_misses_in_a_16_column_grid() {
+        let (mut app, mut drive) = editor_drive();
+        let count = canvas::swatch_count(SPRITE_PALETTE.len());
+        assert_eq!(app.sprite_editor_view().expect("open").palette_cols, 16);
+        let stride = {
+            let (a, b) = (
+                drive.rect_of(PointerHit::Swatch(0)),
+                drive.rect_of(PointerHit::Swatch(1)),
             );
+            b.x - a.x
+        };
+        for i in 0..count {
+            let (cx, cy) = drive.centre(PointerHit::Swatch(i as u8));
             assert_eq!(
-                swatch_at((cx, cy), rect, 16, 64),
-                Some(i as u8),
+                drive.hover(&mut app, (cx, cy)),
+                Some(PointerHit::Swatch(i as u8)),
                 "centre {i}"
             );
-            let gap_right = (cx + stride / 2.0, cy);
-            let gap_below = (cx, cy + stride / 2.0);
-            assert_eq!(swatch_at(gap_right, rect, 16, 64), None, "gap right of {i}");
-            assert_eq!(swatch_at(gap_below, rect, 16, 64), None, "gap below {i}");
+            assert_eq!(
+                drive.hover(&mut app, (cx + stride / 2.0, cy)),
+                None,
+                "gap right of {i}"
+            );
+            assert_eq!(
+                drive.hover(&mut app, (cx, cy + stride / 2.0)),
+                None,
+                "gap below {i}"
+            );
         }
     }
 
-    /// A short last row: a position past the final swatch is no hit.
+    /// A short last row has no swatch in its empty tail.
     #[test]
-    fn swatch_at_ignores_the_empty_tail_of_the_last_row() {
+    fn the_empty_tail_of_the_last_swatch_row_has_no_swatch() {
         let rect = Rect::new(
             0.0,
             0.0,
             3.0 * 10.0 + 2.0 * (10.0 / 3.0),
             2.0 * 10.0 + 10.0 / 3.0,
         );
-        assert_eq!(swatch_at((18.0, 15.0), rect, 3, 5), Some(4));
-        assert_eq!(swatch_at((32.0, 15.0), rect, 3, 5), None);
+        let swatches = canvas::swatch_rects(rect, 3, 4);
+        assert_eq!(swatches.len(), 5);
+        let inside = |r: &Rect, pos: (f32, f32)| {
+            pos.0 >= r.x && pos.0 < r.x + r.w && pos.1 >= r.y && pos.1 < r.y + r.h
+        };
+        assert!(inside(&swatches[4], (18.0, 15.0)));
+        assert!(!swatches.iter().any(|r| inside(r, (32.0, 15.0))));
+    }
+
+    /// A press and a drag across the canvas paint every cell the pointer
+    /// reaches, as one stroke: one undo takes it all back. Leaving the canvas
+    /// while held ends the stroke, so coming back onto it paints nothing.
+    #[test]
+    fn a_drag_across_the_canvas_paints_one_stroke_and_leaving_ends_it() {
+        let (mut app, mut drive) = editor_drive();
+        let cells = |app: &mut feral_processes_app_core::App| {
+            app.sprite_editor_view().expect("open").canvas.cells
+        };
+        let before = cells(&mut app);
+        let at = |drive: &Drive, x, y| drive.centre(PointerHit::Cell(x, y));
+        let (a, b, c) = (at(&drive, 0, 0), at(&drive, 1, 0), at(&drive, 2, 0));
+        drive.frame(&mut app, a, Frame::press);
+        drive.frame(&mut app, b, |f| f);
+        drive.frame(&mut app, c, Frame::release);
+        let painted = cells(&mut app);
+        assert!(
+            (0..3).all(|x| painted[x] != before[x]),
+            "every cell the stroke crossed is painted: {:?}",
+            &painted[..3]
+        );
+        app.handle_key(GameKey::Char('u'));
+        assert_eq!(cells(&mut app), before, "one undo takes the whole stroke");
+
+        let (far, away, back) = (at(&drive, 5, 5), (-50.0, -50.0), at(&drive, 6, 5));
+        drive.frame(&mut app, far, Frame::press);
+        drive.frame(&mut app, away, |f| f);
+        drive.frame(&mut app, back, |f| f);
+        drive.frame(&mut app, back, Frame::release);
+        let after = cells(&mut app);
+        assert_ne!(after[5 * 16 + 5], before[5 * 16 + 5], "the press painted");
+        assert_eq!(
+            after[5 * 16 + 6],
+            before[5 * 16 + 6],
+            "the stroke ended when the pointer left the canvas"
+        );
+    }
+
+    /// A click on the middle of each drawn button lands on that button, and
+    /// every button the editor has is drawn.
+    #[test]
+    fn a_click_on_each_button_rect_resolves_to_that_button() {
+        let (mut app, mut drive) = editor_drive();
+        let buttons: Vec<_> = drive
+            .targets()
+            .into_iter()
+            .filter_map(|(r, h)| match h {
+                PointerHit::Button(b) => Some((b, r)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(buttons.len(), FORGE_BUTTONS.len());
+        for (button, r) in &buttons {
+            let centre = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+            assert_eq!(
+                drive.hover(&mut app, centre),
+                Some(PointerHit::Button(*button))
+            );
+        }
+    }
+
+    /// A button is the key it names: Back leaves the editor as Esc does.
+    #[test]
+    fn a_click_on_a_button_presses_its_key() {
+        let (mut app, mut drive) = editor_drive();
+        let back = drive.centre(PointerHit::Button(
+            feral_processes_app_core::EditorButton::Back,
+        ));
+        drive.click(&mut app, back);
+        assert_eq!(app.mode, Mode::SpritePicker);
+    }
+
+    /// A click on the middle of each picker row resolves to that row's index,
+    /// through the geometry the rows are drawn from, and the margin around
+    /// the grid is no row.
+    #[test]
+    fn a_click_on_each_picker_row_resolves_to_its_subject() {
+        let mut app = sprite_forge_app();
+        app.mode = Mode::SpritePicker;
+        let count = app.sprite_subjects().len();
+        let mut drive = Drive::new();
+        drive.settle(&mut app);
+        let rows = (0..count)
+            .map(|i| drive.rect_of(PointerHit::Subject(i)))
+            .collect::<Vec<_>>();
+        for (i, r) in rows.iter().enumerate() {
+            let centre = (r.x + r.w / 2.0, r.y + r.h / 2.0);
+            assert_eq!(
+                drive.hover(&mut app, centre),
+                Some(PointerHit::Subject(i)),
+                "row {i}"
+            );
+        }
+        assert_eq!(
+            drive.hover(&mut app, (1.0, 1.0)),
+            None,
+            "the title area is no row"
+        );
+    }
+
+    /// A row's rect holds the baseline its text is drawn on, and nothing of
+    /// the row above.
+    #[test]
+    fn a_picker_row_rect_spans_the_line_its_text_sits_on() {
+        let mut app = sprite_forge_app();
+        app.mode = Mode::SpritePicker;
+        let count = app.sprite_subjects().len();
+        let mut drive = Drive::new();
+        drive.settle(&mut app);
+        let m = crate::text::ui_metrics(600.0);
+        let g = picker_geometry(800.0, &m, count);
+        let (above, row) = (
+            drive.rect_of(PointerHit::Subject(2)),
+            drive.rect_of(PointerHit::Subject(3)),
+        );
+        let baseline = g.grid_top + 3.0 * m.line_height;
+        assert!(row.y < baseline && baseline <= row.y + row.h);
+        assert!(above.y + above.h <= row.y + 0.01, "rows do not overlap");
+    }
+
+    /// Two clicks on a picker row select it, then open it — whatever the
+    /// pace, there is no double-click to time.
+    #[test]
+    fn a_click_selects_a_picker_row_and_a_second_opens_it() {
+        let mut app = sprite_forge_app();
+        app.mode = Mode::SpritePicker;
+        let mut drive = Drive::new();
+        drive.settle(&mut app);
+        let row = drive.centre(PointerHit::Subject(4));
+        drive.click(&mut app, row);
+        assert_eq!((app.mode, app.menu_selected), (Mode::SpritePicker, 4));
+        drive.click(&mut app, row);
+        assert_eq!(app.mode, Mode::SpriteEditor);
+    }
+
+    /// The wizard registers editor targets only while its editor is open.
+    #[test]
+    fn the_wizard_registers_editor_targets_only_while_its_editor_is_open() {
+        use super::super::creation::tests::{walk_past, wizard_app};
+        use feral_processes_app_core::CreationStep;
+        let mut app = wizard_app();
+        for step in CreationStep::ALL
+            .iter()
+            .take_while(|s| **s != CreationStep::Icon)
+        {
+            walk_past(&mut app, *step);
+        }
+        assert_eq!(app.mode, Mode::CreateCharacter);
+        let mut drive = Drive::new();
+        drive.settle(&mut app);
+        let editor_targets = |drive: &Drive| {
+            drive
+                .targets()
+                .iter()
+                .any(|(_, h)| matches!(h, PointerHit::Cell(..) | PointerHit::Swatch(_)))
+        };
+        assert!(!editor_targets(&drive));
+        while app.menu_selected != app.creation_rows().len() - 1 {
+            app.handle_key(GameKey::Down);
+        }
+        app.handle_key(GameKey::Enter);
+        drive.settle(&mut app);
+        assert!(editor_targets(&drive));
     }
 
     /// The sprite editor's whole screen, grid included, still fits inside
@@ -1632,28 +1708,6 @@ mod tests {
             canvas::swatch_rows(canvas::swatch_count(view.palette.len()), 16),
             4
         );
-    }
-
-    /// A click on the middle of each drawn button resolves to that button,
-    /// through the same geometry the bar is drawn from.
-    #[test]
-    fn a_click_on_each_button_rect_resolves_to_that_button() {
-        let mut app = sprite_forge_app();
-        open_editor(&mut app, 0);
-        let view = app.sprite_editor_view().expect("just opened");
-        let m = crate::text::ui_metrics(CENSUS_H);
-        let (g, rects) = crate::paint::with_painter(|p| {
-            (
-                editor_geometry(p, CENSUS_W, &m, &view, app.zoom),
-                hit_rects(p, CENSUS_W, &m, &view, app.zoom),
-            )
-        })
-        .0;
-        assert_eq!(g.buttons.len(), FORGE_BUTTONS.len());
-        for (button, r) in &g.buttons {
-            let centre = (r.x + r.w / 2.0, r.y + r.h / 2.0);
-            assert_eq!(rects.resolve(centre), Some(PointerHit::Button(*button)));
-        }
     }
 
     /// The bar sits below the palette, inside the window, without overlap.
@@ -1731,43 +1785,6 @@ mod tests {
                 "{label:?} missing: {drawn:?}"
             );
         }
-    }
-
-    /// A click on the middle of each picker row resolves to that row's index,
-    /// through the geometry the rows are drawn from, and the margin around
-    /// the grid is no row.
-    #[test]
-    fn a_click_on_each_picker_row_resolves_to_its_subject() {
-        let mut app = sprite_forge_app();
-        let count = app.sprite_subjects().len();
-        let m = crate::text::ui_metrics(CENSUS_H);
-        let hits = SpriteHits::Picker(picker_row_rects(CENSUS_W, &m, count));
-        let rows = picker_row_rects(CENSUS_W, &m, count);
-        assert_eq!(rows.len(), count);
-        for (i, r) in rows.iter().enumerate() {
-            let centre = (r.x + r.w / 2.0, r.y + r.h / 2.0);
-            assert_eq!(
-                hits.resolve(centre),
-                Some(PointerHit::Subject(i)),
-                "row {i}"
-            );
-        }
-        assert_eq!(hits.resolve((1.0, 1.0)), None, "the title area is no row");
-    }
-
-    /// A row's rect holds the baseline its text is drawn on, and nothing of
-    /// the row above.
-    #[test]
-    fn a_picker_row_rect_spans_the_line_its_text_sits_on() {
-        let m = crate::text::ui_metrics(CENSUS_H);
-        let g = picker_geometry(CENSUS_W, &m, 40);
-        let rows = picker_row_rects(CENSUS_W, &m, 40);
-        let baseline = g.grid_top + 3.0 * m.line_height;
-        assert!(rows[3].y < baseline && baseline <= rows[3].y + rows[3].h);
-        assert!(
-            rows[2].y + rows[2].h <= rows[3].y + 0.01,
-            "rows do not overlap"
-        );
     }
 
     /// The preview's frame is drawn over its pixels, not under them: drawn

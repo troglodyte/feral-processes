@@ -578,7 +578,7 @@ fn secondary_button_paints_index_zero_erase() {
 
 #[test]
 fn a_swatch_hit_selects_it() {
-    // `PointerHit::Swatch(6)` is `swatch_at`'s 0-based drawn position, and
+    // `PointerHit::Swatch(6)` is the swatch's 0-based drawn position, and
     // position 0 is the transparent swatch — so the drawn position *is* the
     // palette index and there is no conversion to get wrong.
     let mut app = app_with_sprite_forge(28);

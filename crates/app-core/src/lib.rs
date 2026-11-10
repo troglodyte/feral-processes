@@ -3124,6 +3124,14 @@ pub struct App {
     /// (`App::handle_pointer_event`), for a renderer to tint through
     /// `App::hovered`.
     pub pointer_hover: Option<PointerHit>,
+    /// The sprite editor's stroke in progress: the button that opened it
+    /// and the last cell or swatch it reached, so leaving the canvas still
+    /// closes it with a hit to close on (`App::pointer_stroke`).
+    pub(crate) pointer_stroke: Option<(PointerButton, PointerHit)>,
+    /// The picker row the last click selected, so a second click on it
+    /// opens it (`App::forge_pointer_click`). Cleared whenever the picker
+    /// is entered.
+    pub(crate) picker_clicked: Option<usize>,
     /// The hostile a click has picked for a second click to swing at.
     /// Per fight and per turn, never saved: `settle_tactical_end` clears it
     /// and `tactical_target_cell` drops it once its turn has passed.

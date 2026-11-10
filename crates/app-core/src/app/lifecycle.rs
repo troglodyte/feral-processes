@@ -116,6 +116,8 @@ impl App {
             tactical_cursor: None,
             map_hover: None,
             pointer_hover: None,
+            pointer_stroke: None,
+            picker_clicked: None,
             tactical_target: None,
             pending_tactical: None,
             pending_tactical_emulate: None,

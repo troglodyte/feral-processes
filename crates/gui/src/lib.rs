@@ -42,9 +42,7 @@ use bevy_egui::{
 use ambience::Ambience;
 use bevy::audio::Volume;
 pub use capture::Capture;
-use feral_processes_app_core::{
-    App, GameKey, Mode, PointerButton, PointerHit, PointerPhase, SoundEvent,
-};
+use feral_processes_app_core::{App, GameKey, Mode, PointerButton, SoundEvent};
 use fx::{FrameCues, Fx};
 use keys::{KeyRepeat, SheetHold, TextGate};
 use paint::{Color, Painter};
@@ -213,7 +211,6 @@ struct Frontend {
     sheet_hold: SheetHold,
     last_mode: Mode,
     perf: perf::PerfMeter,
-    sprite_pointer: SpritePointer,
     map_pointer: MapPointer,
     pointer: pointer::Reader,
     /// `smooth_scroll_delta` not yet spent on a zoom step — see `wheel_steps`.
@@ -221,170 +218,11 @@ struct Frontend {
     ambience: Ambience,
 }
 
-/// Frame-to-frame pointer state for the sprite editor — the first mouse
-/// tracking anywhere in this crate, confined to `Mode::SpriteEditor`,
-/// `Mode::SpritePicker` and `Mode::CreateCharacter` while its editor is
-/// open, by `sprite_hits` returning `None` everywhere else.
-///
-/// `active` names which button is mid-stroke, so a fresh press (`None ->
-/// Some`) is `Down`, a held frame that still resolves is `Drag`, and a
-/// release or a switch of buttons is `Up`. `last_hit` is where the stroke
-/// last actually resolved: `App::handle_pointer` takes a `PointerHit` on
-/// every phase including `Up`, so a stroke dragged off both the canvas and
-/// the swatch row while still held still needs one to close with — the
-/// design's own rule that leaving the rect must end the stroke rather than
-/// let the next click join it, since a stroke is one undo entry.
-#[derive(Default)]
-struct SpritePointer {
-    active: Option<PointerButton>,
-    last_hit: Option<PointerHit>,
-    /// Whether a frame with no button held has been seen since this tracker
-    /// was reset. A button still held when the editor opens by keyboard
-    /// must not paint the cell it happens to be over.
-    armed: bool,
-}
-
-/// Reads the egui pointer and drives `App::handle_pointer` for the sprite
-/// editor's canvas and swatch panels — the mouse's one entry point into
-/// `crates/gui`, and it never sees a pixel further than this function:
-/// everything past `rects.resolve` is a `PointerHit`
-/// (`render::sprite_forge::cell_at`/`swatch_at`, tested headlessly).
-///
-/// A no-op whenever `render::sprite_forge::sprite_hits` returns `None` — no
-/// mode check needed here beyond that, since `sprite_hits` answers only in
-/// `Mode::SpriteEditor`, `Mode::SpritePicker` and `Mode::CreateCharacter`
-/// while its editor is open — and the tracker is reset in that case so a stroke
-/// cannot survive into a session that opens later.
-///
-/// **No interpolation between frames** (M6, final review): a fast drag
-/// reports only the cell under the pointer each frame, so a quick stroke at
-/// 60fps can leave a dotted rather than solid line. Acceptable for a dev
-/// tool — worth knowing, not worth fixing here.
-fn handle_sprite_pointer(
-    app: &mut App,
-    ctx: &egui::Context,
-    painter: &Painter,
-    tracker: &mut SpritePointer,
-    double_ok: bool,
-) {
-    let Some(rects) = render::sprite_forge::sprite_hits(app, painter) else {
-        *tracker = SpritePointer::default();
-        return;
-    };
-
-    let (primary_down, secondary_down, middle_down, alt, hover) = ctx.input(|i| {
-        (
-            i.pointer.primary_down(),
-            i.pointer.secondary_down(),
-            i.pointer.middle_down(),
-            i.modifiers.alt,
-            i.pointer.hover_pos(),
-        )
-    });
-    if let render::sprite_forge::SpriteHits::Picker(_) = rects {
-        // The picker has no strokes: a press selects a row and a double
-        // click opens it, both read straight off egui.
-        *tracker = SpritePointer::default();
-        let (pressed, double) = ctx.input(|i| {
-            (
-                i.pointer.primary_pressed(),
-                // egui counts clicks across screens; a second click on the
-                // picker after one that opened it is not a double.
-                double_ok
-                    && i.pointer
-                        .button_double_clicked(egui::PointerButton::Primary),
-            )
-        });
-        let hit = hover.and_then(|pos| rects.resolve((pos.x, pos.y)));
-        if let Some(h) = hit {
-            if pressed {
-                app.handle_pointer(h, PointerButton::Primary, PointerPhase::Down);
-            }
-            if double {
-                app.handle_pointer(h, PointerButton::Primary, PointerPhase::DoubleClick);
-            }
-        }
-        return;
-    }
-    // Alt+click is the eyedropper too, for a mouse with no middle button.
-    let now_button = if primary_down && alt || middle_down {
-        Some(PointerButton::Middle)
-    } else if primary_down {
-        Some(PointerButton::Primary)
-    } else if secondary_down {
-        Some(PointerButton::Secondary)
-    } else {
-        None
-    };
-    let hit = hover.and_then(|pos| rects.resolve((pos.x, pos.y)));
-    if let Some(h) = hit {
-        tracker.last_hit = Some(h);
-    }
-
-    if now_button.is_none() {
-        tracker.armed = true;
-    }
-    match (tracker.active, now_button) {
-        (None, Some(_)) if !tracker.armed => {}
-        (None, Some(button)) => {
-            // A press that starts outside both panels opens no stroke —
-            // there is nothing to paint or select yet, and one may still
-            // begin later if the pointer moves onto a panel while held.
-            if let Some(h) = hit {
-                app.handle_pointer(h, button, PointerPhase::Down);
-                tracker.active = Some(button);
-            }
-        }
-        (Some(active), Some(button)) if active == button => {
-            if let Some(h) = hit {
-                app.handle_pointer(h, button, PointerPhase::Drag);
-            } else if let Some(last) = tracker.last_hit {
-                // The pointer left both rects while held — end the stroke
-                // now rather than waiting for release, so the next click
-                // cannot join it into one undo entry.
-                app.handle_pointer(last, active, PointerPhase::Up);
-                tracker.active = None;
-            }
-        }
-        (Some(active), _) => {
-            // Release, or a different button now down — either way the
-            // held stroke is over. `hit.or(tracker.last_hit)` is never
-            // `None` here: `active` could only be set by a `Down` that had
-            // a hit, and every hit since has been kept in `last_hit`.
-            if let Some(h) = hit.or(tracker.last_hit) {
-                app.handle_pointer(h, active, PointerPhase::Up);
-            }
-            tracker.active = None;
-            tracker.last_hit = None;
-        }
-        (None, None) => {}
-    }
-}
-
-/// The sprite editor's pointer path, for a frame the pointer layer's reader
-/// does not own: a press or release that began on one of its targets was
-/// already read there, and a second read would act twice (a keycap that
-/// closes a hub, then a map click on the screen it lands on).
-fn sprite_pointer_path(
-    app: &mut App,
-    ctx: &egui::Context,
-    reader: &pointer::Reader,
-    painter: &Painter,
-    tracker: &mut SpritePointer,
-) {
-    if !reader.owns_gesture() {
-        handle_sprite_pointer(
-            app,
-            ctx,
-            painter,
-            tracker,
-            reader.double_click_on_one_screen(),
-        );
-    }
-}
-
-/// The map's and the world map's pointer paths, under the same rule as
-/// `sprite_pointer_path`. Answers the hover label due, if any.
+/// The map's and the world map's pointer paths, for a frame the pointer
+/// layer's reader does not own: a press or release that began on one of its
+/// targets was already read there, and a second read would act twice (a
+/// keycap that closes a hub, then a map click on the screen it lands on).
+/// Answers the hover label due, if any.
 fn map_pointer_paths(
     app: &mut App,
     ctx: &egui::Context,
@@ -407,7 +245,7 @@ fn map_pointer_paths(
 /// tile — the camera eases while a travel is live, so the tile under a
 /// pointer held dead still can drift between press and release, and a
 /// tile-equality test dropped exactly the clicks that easing caused. There
-/// is no in-between phase to draw, unlike `SpritePointer`'s stroke.
+/// is no in-between phase to draw.
 #[derive(Default)]
 struct MapPointer {
     /// The button that opened the gesture and where; a second button
@@ -517,8 +355,8 @@ fn handle_map_pointer(
     let inside = pane_tile(pos, &layout).is_some();
     if let Some(button) = pressed {
         // A press that starts outside the pane opens no gesture — the same
-        // "nothing to paint yet" rule `handle_sprite_pointer` uses — and a
-        // second button pressed into a live gesture cancels it.
+        // "nothing to paint yet" rule the sprite editor's strokes follow —
+        // and a second button pressed into a live gesture cancels it.
         tracker.down = match tracker.down {
             None if inside => Some((button, pos)),
             _ => None,
@@ -728,7 +566,6 @@ pub fn run(app: App, capture: Option<Capture>) -> AppExit {
             sheet_hold: SheetHold::new(),
             last_mode,
             perf: perf::PerfMeter::new(),
-            sprite_pointer: SpritePointer::default(),
             map_pointer: MapPointer::default(),
             pointer: pointer::Reader::new(),
             wheel_acc: 0.0,
@@ -969,22 +806,11 @@ fn frame(
         fe.key_repeat.block_held();
         fe.last_mode = fe.app.mode;
     }
-    // Confined to `Mode::SpriteEditor`, `Mode::SpritePicker` and
-    // `Mode::CreateCharacter` while its editor is open, by
-    // `render::sprite_forge::sprite_hits` returning `None` everywhere else — see `handle_sprite_pointer`'s own
-    // doc comment for why no separate mode check is needed here.
     {
         let ctx = contexts.ctx_mut()?;
         // Before the draw, which refills the target list this swaps out,
         // and before the older paths, which stand down on a gesture it owns.
         fe.pointer.frame(ctx, &mut fe.app);
-        sprite_pointer_path(
-            &mut fe.app,
-            ctx,
-            &fe.pointer,
-            &painter,
-            &mut fe.sprite_pointer,
-        );
     }
     // The settings live in the profile, which the game menu writes; the
     // frame only reads them.

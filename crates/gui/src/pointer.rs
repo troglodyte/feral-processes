@@ -55,7 +55,12 @@ impl Raw {
             pressed: BUTTONS
                 .into_iter()
                 .find(|(b, _)| i.pointer.button_pressed(*b))
-                .map(|(_, mine)| mine),
+                .map(|(_, mine)| match mine {
+                    // Alt+click is the middle button for a mouse with none:
+                    // the sprite editor's eyedropper.
+                    PointerButton::Primary if i.modifiers.alt => PointerButton::Middle,
+                    other => other,
+                }),
             released: BUTTONS
                 .into_iter()
                 .any(|(b, _)| i.pointer.button_released(b)),
@@ -89,8 +94,6 @@ pub struct Reader {
     gesture: Option<Gesture>,
     /// This frame's press, release or live gesture began on a target.
     owns: bool,
-    /// The screens the last two presses (of any kind) landed on.
-    press_screens: (Option<Screen>, Option<Screen>),
     /// Wheel travel not yet spent on a whole notch.
     wheel_acc: f32,
 }
@@ -110,7 +113,6 @@ impl Reader {
             armed: false,
             gesture: None,
             owns: false,
-            press_screens: (None, None),
             wheel_acc: 0.0,
         }
     }
@@ -130,17 +132,10 @@ impl Reader {
 
     /// Whether a gesture that began on one of this reader's targets is live
     /// this frame, or ended on it. The older per-screen pointer paths (the
-    /// map, the world map, the sprite editor) stand down while it is: they
+    /// map and the world map) stand down while it is: they
     /// would read the same press or release a second time.
     pub fn owns_gesture(&self) -> bool {
         self.owns
-    }
-
-    /// Whether the press egui calls the second of a double-click began on the
-    /// same screen as the first. A click that changed the screen and a
-    /// second click on the new one are two gestures, not a double.
-    pub fn double_click_on_one_screen(&self) -> bool {
-        self.press_screens.0 == self.press_screens.1
     }
 
     /// Reads this frame's pointer, resolves it against the targets the last
@@ -153,9 +148,6 @@ impl Reader {
                 .expect("the target list is never held across a panic"),
         );
         let raw = Raw::read(ctx);
-        if raw.pressed.is_some() {
-            self.press_screens = (self.press_screens.1, Some(screen_of(app)));
-        }
         if self.drawn_under != Some(screen_of(app)) {
             // Drawn for a screen the app has since left.
             self.prev.clear();
@@ -236,7 +228,7 @@ fn topmost(targets: &[(Rect, PointerHit)], pos: egui::Pos2) -> Option<PointerHit
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::paint::Painter;
     use feral_processes_app_core::{GameKey, Mode, Region};
@@ -591,37 +583,6 @@ mod tests {
     }
 
     #[test]
-    fn a_double_click_is_one_screen_only_if_both_presses_were() {
-        let mut app = app_in_a_hub(41313);
-        let mut reader = Reader::new();
-        let ctx = egui::Context::default();
-        settled(&mut reader, &ctx, &mut app);
-        click_at(&mut reader, &ctx, &mut app, 500.0, 500.0, 0.2);
-        click_at(&mut reader, &ctx, &mut app, 500.0, 500.0, 0.3);
-        assert!(reader.double_click_on_one_screen());
-        // A click that changes the screen, then another on the new one.
-        let mut reader = Reader::new();
-        let ctx = egui::Context::default();
-        let mut app = app_in_a_hub(41314);
-        settled(&mut reader, &ctx, &mut app);
-        run(
-            &mut reader,
-            &ctx,
-            &mut app,
-            Frame::at(150.0, 110.0, 0.2).press(),
-        );
-        app.handle_key(GameKey::Esc);
-        app.handle_key(GameKey::Esc);
-        run(
-            &mut reader,
-            &ctx,
-            &mut app,
-            Frame::at(150.0, 110.0, 0.3).press(),
-        );
-        assert!(!reader.double_click_on_one_screen());
-    }
-
-    #[test]
     fn the_wheel_equals_up_and_down() {
         let mut app = app_in_a_hub(41307);
         let mut twin = app_in_a_hub(41307);
@@ -662,7 +623,6 @@ mod tests {
         ctx: egui::Context,
         fx: crate::Fx,
         map: crate::MapPointer,
-        sprite: crate::SpritePointer,
         /// The target the hub registers, in screen pixels.
         target: Option<(Rect, PointerHit)>,
     }
@@ -671,12 +631,13 @@ mod tests {
         fn new(layout: Option<crate::render::MapClickLayout>) -> Self {
             let mut fx = crate::Fx::new();
             fx.set_map_click(layout);
+            let ctx = egui::Context::default();
+            crate::paint::install_fonts(&ctx);
             Both {
                 reader: Reader::new(),
-                ctx: egui::Context::default(),
+                ctx,
                 fx,
                 map: crate::MapPointer::default(),
-                sprite: crate::SpritePointer::default(),
                 target: None,
             }
         }
@@ -688,7 +649,6 @@ mod tests {
             let _ = ctx.run_ui(f.input(), |_| {
                 self.reader.frame(&ctx, app);
                 let painter = Painter::for_frame(&ctx, 0.0, Arc::default());
-                crate::sprite_pointer_path(app, &ctx, &self.reader, &painter, &mut self.sprite);
                 crate::map_pointer_paths(
                     app,
                     &ctx,
@@ -698,6 +658,11 @@ mod tests {
                     &mut self.map,
                 );
             });
+            if app.mode == Mode::SpritePicker {
+                let painter = Painter::for_frame(&ctx, 0.0, Arc::default())
+                    .recording_into(self.reader.sink());
+                crate::render::draw(app, &mut self.fx, &painter, false, false);
+            }
             if let (Some((rect, hit)), true) = (self.target, app.hub_at().is_some()) {
                 let sink = self.reader.sink();
                 sink.lock()
@@ -751,46 +716,40 @@ mod tests {
         );
     }
 
-    /// Esc, down to Sprites, and a click on it opens the picker; the second
-    /// click of a quick pair lands on the picker, and egui calls it a
-    /// double-click, which must not open the subject under it.
+    /// Esc, down to Sprites, and a click on it opens the picker. A click on
+    /// the picker's first row then only selects it, whatever came just
+    /// before; a second opens it, the way two clicks on a hub row are select
+    /// then Enter.
     #[test]
-    fn a_click_that_opens_the_picker_does_not_double_into_a_sprite() {
+    fn a_click_that_opens_the_picker_does_not_open_a_sprite_with_the_next() {
         let mut app = new_app(41321);
         app.handle_key(GameKey::Esc);
         for _ in 0..3 {
             app.handle_key(GameKey::Down);
         }
         assert_eq!(app.mode, Mode::SpriteOptions);
-        // Where the picker's first row is, found on a scratch app.
-        let mut probe = new_app(41322);
-        probe.mode = Mode::SpritePicker;
-        let ctx = egui::Context::default();
-        let mut at = None;
-        let _ = ctx.run_ui(Frame::at(0.0, 0.0, 0.0).input(), |_| {
-            let painter = Painter::for_frame(&ctx, 0.0, Arc::default());
-            if let Some(crate::render::sprite_forge::SpriteHits::Picker(rows)) =
-                crate::render::sprite_forge::sprite_hits(&mut probe, &painter)
-            {
-                at = rows
-                    .first()
-                    .map(|r| egui::pos2(r.x + r.w / 2.0, r.y + r.h / 2.0));
-            }
-        });
-        let at = at.expect("the picker has a first row");
         let mut both = Both::new(None);
-        both.target = Some((
-            Rect::new(at.x - 5.0, at.y - 5.0, 10.0, 10.0),
-            PointerHit::Row(0),
-        ));
+        let first = egui::pos2(330.0, 310.0);
+        both.target = Some((Rect::new(300.0, 300.0, 60.0, 20.0), PointerHit::Row(0)));
         both.settle(&mut app);
-        both.click(&mut app, at, 0.2);
+        both.click(&mut app, first, 0.2);
         assert_eq!(app.mode, Mode::SpritePicker, "the first click opened it");
-        both.click(&mut app, at, 0.3);
+        let row = both
+            .reader
+            .sink()
+            .lock()
+            .expect("no panic held the list")
+            .iter()
+            .find(|(_, hit)| *hit == PointerHit::Subject(0))
+            .map(|(r, _)| egui::pos2(r.x + r.w / 2.0, r.y + r.h / 2.0))
+            .expect("the picker drew a first row");
+        both.click(&mut app, row, 0.3);
         assert_eq!(
             app.mode,
             Mode::SpritePicker,
-            "the second click opened the subject under it"
+            "the next click opened the subject under it"
         );
+        both.click(&mut app, row, 0.4);
+        assert_eq!(app.mode, Mode::SpriteEditor, "a second click opens it");
     }
 }

@@ -468,7 +468,7 @@ fn an_outpost_lost_while_open_moves_to_the_next_then_the_previous() {
     let order = names(&app);
     assert_eq!(order.len(), 3, "precondition");
     app.handle_key(GameKey::Char('b'));
-    app.enter_hub_at(Hub::Base, order[1].clone(), Mode::OutpostCrew);
+    app.enter_hub_at(Hub::Base, order[1], Mode::OutpostCrew);
     app.hub_on_rail = false;
     app.handle_key(GameKey::Up);
     let kept: Vec<_> = tiles
@@ -478,14 +478,14 @@ fn an_outpost_lost_while_open_moves_to_the_next_then_the_previous() {
         .collect();
     with(&mut app, &kept);
     app.handle_key(GameKey::Down);
-    assert_eq!(held(&app), Some(order[2].clone()), "the next in OUTPOSTS");
+    assert_eq!(held(&app), Some(order[2]), "the next in OUTPOSTS");
     assert_eq!(app.mode, Mode::OutpostCrew, "the tab is kept");
     assert!(!app.hub_on_rail);
 
     let mut app = crate::tests::sites_hub::app_with_far_sites(46023);
     with(&mut app, &tiles);
     app.handle_key(GameKey::Char('b'));
-    app.enter_hub_at(Hub::Base, order[2].clone(), Mode::OutpostStatus);
+    app.enter_hub_at(Hub::Base, order[2], Mode::OutpostStatus);
     app.handle_key(GameKey::Char('x'));
     assert!(app.hub_on_rail);
     let kept: Vec<_> = tiles
@@ -495,11 +495,7 @@ fn an_outpost_lost_while_open_moves_to_the_next_then_the_previous() {
         .collect();
     with(&mut app, &kept);
     app.handle_key(GameKey::Char('x'));
-    assert_eq!(
-        held(&app),
-        Some(order[1].clone()),
-        "the previous in OUTPOSTS"
-    );
+    assert_eq!(held(&app), Some(order[1]), "the previous in OUTPOSTS");
     assert_eq!(app.mode, Mode::OutpostStatus);
     assert!(app.hub_on_rail, "focus is unchanged");
 }

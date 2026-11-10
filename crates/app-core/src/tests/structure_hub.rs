@@ -190,7 +190,7 @@ fn losing_the_last_entry_of_the_section_steps_to_the_previous_one() {
     app.handle_key(GameKey::Char(']'));
     app.handle_key(GameKey::Char(']'));
     assert_eq!(page(&app), 5, "precondition: on the last of three");
-    let middle = Hub::Inventory.kind().pages(&app)[4].key.clone();
+    let middle = Hub::Inventory.kind().pages(&app)[4].key;
     let last = held_beside(&app).entity;
     app.game.as_mut().unwrap().remove_structure(last).unwrap();
     app.settle_hub();

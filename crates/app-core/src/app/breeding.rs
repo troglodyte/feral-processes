@@ -126,7 +126,7 @@ impl App {
         if let Some(bay) = self.held_structure() {
             self.enter_structure_page(bay, StructurePage::Info);
         } else if let Some((hub, page, _)) = self.hub_for(Mode::Breed) {
-            let key = hub.kind().pages(self)[page].key.clone();
+            let key = hub.kind().pages(self)[page].key;
             self.enter_hub_at(hub, key, Mode::Breed);
         } else {
             self.close_screen();

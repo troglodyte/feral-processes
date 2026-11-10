@@ -481,7 +481,7 @@ fn the_post_picker_and_the_take_return_to_their_tabs() {
     app.handle_key(GameKey::Esc);
     assert_eq!((app.mode, app.hub_page()), (Mode::OutpostCrew, Some(&post)));
 
-    app.enter_hub_at(Hub::Base, post.clone(), Mode::OutpostStock);
+    app.enter_hub_at(Hub::Base, post, Mode::OutpostStock);
     app.handle_key(GameKey::Char('C'));
     assert_eq!(app.mode, Mode::Transfer, "{:?}", app.status_line);
     app.handle_key(GameKey::Esc);
@@ -584,9 +584,9 @@ fn every_refusal_lands_on_the_status_line_and_spends_nothing() {
         (site(TOWN_A), Mode::SiteJobs, GameKey::Enter),
         (site(TOWN_A), Mode::SiteJobs, GameKey::Char('A')),
         (site(TOWN_A), Mode::SiteRoutes, GameKey::Char('S')),
-        (post.clone(), Mode::OutpostStatus, GameKey::Char('R')),
-        (post.clone(), Mode::OutpostCrew, GameKey::Char('U')),
-        (post.clone(), Mode::OutpostCrew, GameKey::Char('P')),
+        (post, Mode::OutpostStatus, GameKey::Char('R')),
+        (post, Mode::OutpostCrew, GameKey::Char('U')),
+        (post, Mode::OutpostCrew, GameKey::Char('P')),
         (post, Mode::OutpostStock, GameKey::Char('C')),
     ];
     for (page, tab, key) in cases {
@@ -680,7 +680,7 @@ fn an_outpost_route_has_no_manifest_and_dispatches_from_its_stock_tab() {
     let tile = (520, 500);
     set_sites(&mut app, &[], &[(tile, Vec::new())]);
     let post = HubPageKey::Site(RouteDestinationId::Outpost(tile));
-    open_routes_tab(&mut app, post.clone(), Mode::OutpostStock);
+    open_routes_tab(&mut app, post, Mode::OutpostStock);
     assert_eq!(app.outpost_stock_split(), (0, 0));
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::RouteCargo);
@@ -875,7 +875,7 @@ fn renaming_from_sites_returns_to_that_outposts_status_tab() {
     let (first, second) = ((520, 500), (530, 500));
     let page = HubPageKey::Site(RouteDestinationId::Outpost(second));
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Base, page.clone(), Mode::OutpostStatus);
+    app.enter_hub_at(Hub::Base, page, Mode::OutpostStatus);
     app.hub_on_rail = false;
     let before = tick(&app);
 
@@ -902,7 +902,7 @@ fn esc_in_the_sites_name_field_keeps_the_name_and_returns() {
     let tile = (520, 500);
     let page = HubPageKey::Site(RouteDestinationId::Outpost(tile));
     app.handle_key(GameKey::Char('w'));
-    app.enter_hub_at(Hub::Base, page.clone(), Mode::OutpostStatus);
+    app.enter_hub_at(Hub::Base, page, Mode::OutpostStatus);
     app.hub_on_rail = false;
     let name = app.game.as_ref().unwrap().outpost_destination_name(tile);
 
@@ -947,7 +947,7 @@ fn refused_off_site(seed: u32, page: HubPageKey, tab: Mode, key: GameKey) -> Str
     let mut app = app_with_far_sites(seed);
     walk_far_from_the_base(&mut app);
     app.handle_key(GameKey::Char('b'));
-    app.enter_hub_at(Hub::Base, page.clone(), tab);
+    app.enter_hub_at(Hub::Base, page, tab);
     app.hub_on_rail = false;
     let name = Hub::Base.kind().pages(&app)[page_of(&app, &page)]
         .title
@@ -1076,7 +1076,7 @@ fn an_outpost_inside_a_towns_reach_still_answers_its_doors() {
         (Mode::OutpostCrew, GameKey::Char('U'), None),
         (Mode::OutpostStock, GameKey::Char('S'), None),
     ] {
-        app.enter_hub_at(Hub::Base, post.clone(), tab);
+        app.enter_hub_at(Hub::Base, post, tab);
         app.hub_on_rail = false;
         app.status_line = None;
         app.handle_key(key);

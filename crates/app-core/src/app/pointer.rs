@@ -11,7 +11,104 @@
 //! an aim is `commit_tactical_aim` — so there is no second spelling of any
 //! of them, and a refusal says what the key's would.
 
-use crate::{App, GameKey, Mode, PointerButton, TargetMark};
+use crate::{App, EditorButton, GameKey, HubPageKey, Mode, PointerButton, TargetMark};
+
+/// Which way a scroll marker or the wheel moves the list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Up,
+    Down,
+}
+
+/// A hub's two halves, as a pointer target the wheel and a click on bare
+/// background can resolve to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Region {
+    Rail,
+    Page,
+}
+
+/// What the pointer is over, resolved by the renderer to an identity and
+/// never a pixel. **Every arm ends in a call the keyboard already makes**
+/// (`handle_pointer_event`), so a click can do nothing a key cannot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerHit {
+    /// The sprite editor's canvas cell.
+    Cell(u8, u8),
+    Swatch(u8),
+    Button(EditorButton),
+    Subject(usize),
+    /// A rail entry.
+    Page(HubPageKey),
+    /// A tab of the held page, by position.
+    Tab(usize),
+    /// A selectable row of the shown screen, by its ordinal among the
+    /// screen's `Row::Item`s — the index its handler selects by.
+    Row(usize),
+    /// A keycap: the key it names.
+    Key(GameKey),
+    /// A "↑/↓ n more" marker on the page's list.
+    More(Direction),
+    MapTile(i32, i32),
+    Region(Region),
+}
+
+/// One frame of pointer input, resolved against the frame just drawn. The
+/// reader in gui builds it; nothing in it is a pixel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PointerEvent {
+    /// The topmost target under the pointer.
+    pub hover: Option<PointerHit>,
+    /// A button went down this frame, over `hover`.
+    pub press: bool,
+    /// A button is held and the pointer moved.
+    pub drag: bool,
+    /// A button was released this frame.
+    pub up: bool,
+    /// The press is the second of a double-click.
+    pub double: bool,
+    pub button: PointerButton,
+    /// Whole wheel notches this frame, positive up.
+    pub wheel: i32,
+}
+
+impl App {
+    /// The one entry for the pointer layer: records what is hovered and
+    /// turns a press or the wheel into the keys it stands for.
+    pub fn handle_pointer_event(&mut self, event: PointerEvent) {
+        self.pointer_hover = event.hover;
+        let Some(hit) = event.hover else { return };
+        if event.wheel != 0 {
+            self.hub_pointer_wheel(hit, event.wheel);
+        }
+        if event.press && event.button == PointerButton::Primary {
+            self.pointer_press(hit, event.double);
+        }
+    }
+
+    /// Whether `hit` is what the pointer is over, for a renderer to tint.
+    pub fn hovered(&self, hit: &PointerHit) -> bool {
+        self.pointer_hover.as_ref() == Some(hit)
+    }
+
+    fn pointer_press(&mut self, hit: PointerHit, double: bool) {
+        match hit {
+            PointerHit::Key(key) => self.handle_key(key),
+            PointerHit::Page(_)
+            | PointerHit::Tab(_)
+            | PointerHit::Row(_)
+            | PointerHit::More(_)
+            | PointerHit::Region(_) => self.hub_pointer_press(hit, double),
+            // The sprite editor and the map have their own pointer paths
+            // until they move onto this one.
+            PointerHit::Cell(..)
+            | PointerHit::Swatch(_)
+            | PointerHit::Button(_)
+            | PointerHit::Subject(_)
+            | PointerHit::MapTile(..) => {}
+        }
+    }
+}
 
 impl App {
     /// Records the cell under the pointer this frame, `None` off the pane.

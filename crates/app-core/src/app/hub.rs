@@ -17,7 +17,7 @@ use feral_processes_engine::RouteDestinationId;
 
 /// A page's identity: stable across the rail growing or shrinking, which an
 /// index is not.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HubPageKey {
     /// A fixed page: its title.
     Named(&'static str),
@@ -204,12 +204,12 @@ impl RailSeen {
                 if i > 0 && p.section.is_some() {
                     section += 1;
                 }
-                (p.key.clone(), section)
+                (p.key, section)
             })
             .collect();
         RailSeen {
             hub,
-            held: pages[held].key.clone(),
+            held: pages[held].key,
             tabs: pages[held].tabs.clone(),
             pages: keyed,
         }
@@ -292,7 +292,6 @@ impl App {
         let pages = kind.pages(self);
         let Some(first) = pages.first() else { return };
         let last = self.hub_last[hub.slot()]
-            .clone()
             .filter(|_| kind.remembers())
             .filter(|(key, mode)| pages.iter().any(|p| &p.key == key && p.offers(*mode)));
         match last {
@@ -303,7 +302,7 @@ impl App {
             None => {
                 self.hub_place = Some(HubPlace {
                     hub,
-                    key: first.key.clone(),
+                    key: first.key,
                 });
                 kind.show_tab(self, first, 0);
             }
@@ -326,10 +325,7 @@ impl App {
         };
         // Held before the turn: a turn that closes the hub is then cleared
         // by `settle_hub` rather than left naming a page it never showed.
-        self.hub_place = Some(HubPlace {
-            hub,
-            key: to.key.clone(),
-        });
+        self.hub_place = Some(HubPlace { hub, key: to.key });
         let tab = kind.entry_tab(self, to);
         kind.show_tab(self, to, tab);
     }
@@ -388,10 +384,7 @@ impl App {
                     return;
                 };
                 let hub = place.hub;
-                self.hub_place = Some(HubPlace {
-                    hub,
-                    key: to.key.clone(),
-                });
+                self.hub_place = Some(HubPlace { hub, key: to.key });
                 // Through the hub's own opener, so a successor structure's
                 // page opens for that structure.
                 let tab = to.tabs.iter().position(|t| t.mode == shown).unwrap_or(0);
@@ -399,7 +392,7 @@ impl App {
                 return;
             }
             if let Some(page) = pages.iter().find(|p| p.adoptable() && p.offers(shown)) {
-                let key = page.key.clone();
+                let key = page.key;
                 if let Some(place) = &mut self.hub_place {
                     place.key = key;
                 }
@@ -483,7 +476,13 @@ impl App {
     /// `Tab` that fell through would be a second meaning on that page.
     fn step_hub_tab(&mut self, hub: Hub, page: &HubPage, tab: usize, step: isize) {
         let to = (tab as isize + step).rem_euclid(page.tabs.len() as isize) as usize;
-        hub.kind().show_tab(self, page, to);
+        self.show_hub_tab(hub, page, to);
+    }
+
+    /// Shows `tab` of `page`: what `Tab` does one step at a time and a tab
+    /// click does in one.
+    pub(crate) fn show_hub_tab(&mut self, hub: Hub, page: &HubPage, tab: usize) {
+        hub.kind().show_tab(self, page, tab);
     }
 
     /// Whether the page wants `key` before the hub's own rule does: a key

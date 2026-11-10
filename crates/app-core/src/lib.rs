@@ -51,6 +51,7 @@ pub use app::list_filter::filter_matches;
 pub use app::machine_recipe::MachineRecipeScreen;
 pub use app::map_keybar::{KeyGroup, MapLocale, locale_keybar};
 pub use app::outposts::OutpostPostRow;
+pub use app::pointer::{Direction, PointerEvent, PointerHit, Region};
 pub use app::reach_circles::{ReachCircle, ReachCircleStyle, ReachKind};
 pub use app::rig_tool::RigToolScreen;
 pub use app::routine_craft::{
@@ -61,8 +62,8 @@ pub use app::sites_hub::{CARAVAN_TABS, OUTPOST_TABS, SORTIE_TABS, TOWN_TABS, sit
 pub use app::splice_rig::SpliceRigScreen;
 pub use app::sprite_editor::{
     DEFAULT_SPRITE_FRAME_MS, EditorButton, FORGE_BUTTONS, MAX_SPRITE_FRAMES, PointerButton,
-    PointerHit, PointerPhase, SPRITE_FRAME_MS_MAX, SPRITE_FRAME_MS_MIN, SPRITE_FRAME_MS_STEP,
-    SpriteEditorView, SubjectTint, WIZARD_BUTTONS,
+    PointerPhase, SPRITE_FRAME_MS_MAX, SPRITE_FRAME_MS_MIN, SPRITE_FRAME_MS_STEP, SpriteEditorView,
+    SubjectTint, WIZARD_BUTTONS,
 };
 pub use app::sprite_forge::{InstalledSprite, SpriteArt, SpriteOp, SpriteSubject, SpriteWrite};
 pub use app::stack_market::{MarketVisible, market_visible};
@@ -3119,6 +3120,10 @@ pub struct App {
     /// cursor's follow rule and the board's hover path; in whichever
     /// coordinate space the pane is drawing, as `tactical_cursor` is.
     pub map_hover: Option<(i32, i32)>,
+    /// The pointer target under the pointer, as of the frame just drawn
+    /// (`App::handle_pointer_event`), for a renderer to tint through
+    /// `App::hovered`.
+    pub pointer_hover: Option<PointerHit>,
     /// The hostile a click has picked for a second click to swing at.
     /// Per fight and per turn, never saved: `settle_tactical_end` clears it
     /// and `tactical_target_cell` drops it once its turn has passed.

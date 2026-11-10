@@ -17,6 +17,7 @@ use feral_processes_engine::icon::{Canvas, SPRITE_PALETTE};
 
 use crate::GameKey;
 use crate::app::canvas_editor::{CanvasEditor, CanvasKey, CanvasView, ICON_UNDO_DEPTH, Tool};
+use crate::app::pointer::PointerHit;
 
 /// The sprite canvas's edge — always 16, never a brush-dependent size (the
 /// brush is a footprint over this fixed grid, not a second canvas format;
@@ -50,19 +51,6 @@ const SPRITE_PALETTE_COLS: u8 = 16;
 pub enum SubjectTint {
     Glyph(Option<GlyphColor>),
     Shade(feral_processes_engine::floors::FloorShade),
-}
-
-/// Where a pointer landed on the editor, already resolved to a
-/// cell or a swatch by the gui — never a pixel. The gui owns the canvas and
-/// swatch rects (it draws them), so it tests the pointer against those
-/// itself; app-core never receives a pixel and never learns the rects
-/// exist.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PointerHit {
-    Cell(u8, u8),
-    Swatch(u8),
-    Button(EditorButton),
-    Subject(usize),
 }
 
 /// A clickable stand-in for one of the editor's keys. **A button has no
@@ -138,8 +126,9 @@ pub const WIZARD_BUTTONS: [EditorButton; 11] = [
 ];
 
 /// Which mouse button a `PointerHit` was reported for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PointerButton {
+    #[default]
     Primary,
     /// Paints index 0 — erase, the same thing `Backspace` already means on
     /// this editor.
@@ -397,7 +386,9 @@ impl SpriteEditor {
                     editor.apply_tool(x, y, index);
                 }
                 PointerHit::Swatch(index) => editor.pick_swatch(index),
-                PointerHit::Button(_) | PointerHit::Subject(_) => {}
+                // A button or a subject is the host's; the rest are the
+                // hub's and the map's.
+                _ => {}
             }
             if phase == PointerPhase::Up {
                 editor.end_stroke();

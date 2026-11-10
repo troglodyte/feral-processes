@@ -20,10 +20,10 @@ use feral_processes_engine::structures::StructureDb;
 use feral_processes_engine::tactical::props::PropDb;
 
 use crate::app::sprite_editor::{
-    DEFAULT_SPRITE_FRAME_MS, EditorChrome, FORGE_BUTTONS, PointerButton, PointerHit, PointerPhase,
+    DEFAULT_SPRITE_FRAME_MS, EditorChrome, FORGE_BUTTONS, PointerButton, PointerPhase,
     SpriteEditor, SpriteEditorView, SubjectTint,
 };
-use crate::{App, GameKey, Mode};
+use crate::{App, GameKey, Mode, PointerHit};
 
 /// The name `assets/sprites/anchor.png` is looked up under — the one place
 /// this string is authored beside `crates/gui/src/render/base/`'s

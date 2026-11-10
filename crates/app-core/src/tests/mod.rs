@@ -33,6 +33,7 @@ mod group_menus;
 mod hover;
 mod hub_census;
 mod hub_nav;
+mod hub_pointer;
 mod info_tab;
 mod interact;
 mod inventory;

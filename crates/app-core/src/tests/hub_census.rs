@@ -411,7 +411,7 @@ fn a_held_key_that_left_the_rail_is_forgotten_on_reopen() {
     // The bay is gone: the remembered Breed page is not on the rail.
     let mut app = app_inside_a_small_base_with_programs(41061, false, 2);
     let breed = HubPageKey::Named("Breed");
-    app.hub_last[Hub::Base.slot()] = Some((breed.clone(), Mode::Breed));
+    app.hub_last[Hub::Base.slot()] = Some((breed, Mode::Breed));
     app.handle_key(GameKey::Char('b'));
     assert_eq!(app.hub_at(), Some((Hub::Base, 0, 0)));
 
@@ -453,7 +453,7 @@ fn landing_on_the_map_clears_the_held_page() {
 fn enter_hub_at_holds_the_named_page() {
     let mut app = test_app(41065);
     let key = HubPageKey::Named("Staff");
-    app.enter_hub_at(Hub::Base, key.clone(), Mode::StaffCoverage);
+    app.enter_hub_at(Hub::Base, key, Mode::StaffCoverage);
     assert_eq!(app.hub_page(), Some(&key));
     assert_eq!(app.hub_at(), Some((Hub::Base, 4, 1)));
     app.settle_hub();

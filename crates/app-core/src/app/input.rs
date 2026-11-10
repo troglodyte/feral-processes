@@ -517,7 +517,7 @@ impl App {
             && hub.kind().remembers()
             && let Some(place) = &self.hub_place
         {
-            self.hub_last[hub.slot()] = Some((place.key.clone(), self.mode));
+            self.hub_last[hub.slot()] = Some((place.key, self.mode));
         }
         // The column half of `Mode::BaseStaff`'s cursor, `menu_selected`'s
         // own reset rule — no other screen reads it, so there is no

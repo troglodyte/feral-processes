@@ -163,12 +163,10 @@ impl App {
             return;
         };
         let Some(game) = &mut self.game else { return };
-        let Some(side) = game
-            .adjacent_structures()
-            .into_iter()
-            .find(|s| s.entity == entity)
-            .map(|s| s.dir)
-        else {
+        // The entry's entity, not a re-look by direction: that lookup matches
+        // only a structure's anchor tile, so a wide one touched elsewhere is
+        // "nothing there".
+        let Some(found) = game.structure_view(entity) else {
             return;
         };
         match verb {
@@ -177,11 +175,8 @@ impl App {
                 self.report(outcome);
                 self.mode = Mode::Playing;
             }
-            'U' => self.upgrade_toward(side),
-            _ => match game.adjacent_structure(side.0, side.1) {
-                Some(found) => self.demolish_found(found),
-                None => self.mode = Mode::Playing,
-            },
+            'U' => self.upgrade_found(found),
+            _ => self.demolish_found(found),
         }
         // Every verb ends outside the hub: on the map, or on a picker (the
         // upgrade's program, a Home's demolish confirmation) that is not one

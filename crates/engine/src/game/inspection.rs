@@ -186,6 +186,24 @@ impl Game {
             .find(|e| e.is_structure && e.pos == target)
     }
 
+    /// The view of one standing structure, found by entity rather than by
+    /// tile. `adjacent_structure` matches only the anchor tile, so a wide
+    /// structure touched on any other cell is invisible to it; a caller that
+    /// already holds the entity (a BESIDE YOU entry) asks here instead.
+    ///
+    /// Carries `adjacent_structure`'s underground gate for the same reason.
+    pub fn structure_view(&mut self, entity: Entity) -> Option<EntityView> {
+        if self.is_underground() {
+            return None;
+        }
+        let at = *self.world.get::<Position>(entity)?;
+        let center = self.scan_center();
+        let reach = (at.x - center.x).abs().max((at.y - center.y).abs());
+        self.view_entities(reach, reach)
+            .into_iter()
+            .find(|e| e.is_structure && e.entity == entity)
+    }
+
     /// The pending build request on the neighbouring tile `(dx, dy)`, if
     /// one stands there.
     ///

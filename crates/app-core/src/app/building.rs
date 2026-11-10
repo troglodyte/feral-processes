@@ -652,12 +652,9 @@ impl App {
         self.mode = Mode::Playing;
     }
 
-    /// Files the upgrade for the structure on the tile `dir` away, for `U`
-    /// on a structure's Info tab: a request for the next tier, which the
-    /// base's build crew fetches for and works.
-    ///
-    /// `Game::adjacent_structure` is the same reach as the demolish key's —
-    /// the four orthogonal neighbours.
+    /// Files the upgrade for `found`, for `U` on a structure's Info tab: a
+    /// request for the next tier, which the base's build crew fetches for and
+    /// works.
     ///
     /// **The refusals about the machine are the engine's own sentences, not
     /// copies of them.** `EntityView::tier` is `Some` exactly when the def
@@ -667,13 +664,8 @@ impl App {
     /// a second copy of "can't be upgraded". Every refusal in that function
     /// lands before `commit_for_build`, so nothing is spent on the way to
     /// the sentence.
-    pub(crate) fn upgrade_toward(&mut self, dir: (i32, i32)) {
+    pub(crate) fn upgrade_found(&mut self, found: EntityView) {
         let Some(game) = &mut self.game else { return };
-        let Some(found) = game.adjacent_structure(dir.0, dir.1) else {
-            self.refuse("Nothing to upgrade that way.");
-            self.mode = Mode::Playing;
-            return;
-        };
         // `handle_build_direction_key`'s own test: a structure that runs no
         // job has nothing for a program to do, so it upgrades on the spot.
         let needs_program = game

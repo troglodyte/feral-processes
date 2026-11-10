@@ -503,3 +503,24 @@ fn an_outpost_lost_while_open_moves_to_the_next_then_the_previous() {
     assert_eq!(app.mode, Mode::OutpostStatus);
     assert!(app.hub_on_rail, "focus is unchanged");
 }
+
+/// A 2x2 structure's Info tab acts on the held entry's entity: the
+/// direction lookup finds only the anchor tile, and the party stands at
+/// `(3, -1)`, whose south neighbour is the station's `(3, 0)`, not its
+/// anchor `(2, 0)`.
+#[test]
+fn u_and_x_on_a_wide_structures_info_tab_reach_it_from_a_non_anchor_side() {
+    let station_info = |seed| {
+        let mut app = app_owning_a_program_and_a_research_station(seed);
+        stand_in_base_at(&mut app, 3, -1);
+        let station = on_the_info_tab_of(&mut app, "Research Station");
+        (app, station)
+    };
+    let (mut app, _) = station_info(46040);
+    app.handle_key(GameKey::Char('U'));
+    assert_eq!(app.mode, Mode::BuildProgram, "U found the station");
+
+    let (mut app, station) = station_info(46041);
+    app.handle_key(GameKey::Char('X'));
+    assert!(!is_beside(&app, station), "X demolished the station");
+}

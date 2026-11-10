@@ -49,7 +49,7 @@ fi
 # workspace on every single call, and this loops over all of them.
 echo "building savetool..."
 cargo build -q --bin savetool || exit 1
-SAVETOOL="target/debug/savetool"
+SAVETOOL="${CARGO_TARGET_DIR:-target}/debug/savetool"
 
 failed=0
 converted=0

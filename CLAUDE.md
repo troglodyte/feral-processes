@@ -47,33 +47,23 @@ cargo test --workspace     # full gate
 cargo run                  # the game
 cargo clippy --workspace --all-targets   # --all-targets or test code is unlinted
 cargo fmt
-
-cargo run --bin savetool -- dump saves/save.bin s.ron   # edit a save; `pack` reverses
-cargo run --bin savetool -- warp saves/save.bin 6       # runs the real breach
-cargo run -- --template extraction                      # start from dev-saves/ (README lists them)
-cargo run --bin savetool -- capture saves/save.bin <name>
-cargo run --bin arena -- dev-arenas/opening-fight.ron [--out report.ron]
-FERAL_DEV_ARENA=1 cargo run      # arena in the real battle UI; main menu [R]
-cargo run -- --template stack --keys "Right Right" --screenshot out.png  # needs DISPLAY; Read the PNG
-FERAL_DEV_REVEAL=1 cargo run -- --template stack   # whole Stack frame on the map
-FERAL_DEV_NO_SIEGES=1 cargo run                      # the siege clock never runs
-# Unset it before `cargo test`: an exported FERAL_DEV_NO_SIEGES=1 fails siege tests in the engine and launcher.
 ```
 
 - Iterate with `cargo test -p feral-processes-engine <name>`.
 - **Don't reach for a fresh `Game::new` when a `dev-saves/` template would
   do**; `capture` any state worth returning to.
-- **`docs/measurements/` is what the instruments already said** — read it
-  before running a sweep or arena batch; its `README.md` is the bar for
-  adding one. Balance curves are excluded (`balance_sim.rs`'s job).
+- Dev tools (savetool, `--template`, arena, `--screenshot`, `FERAL_DEV_*`)
+  and `docs/measurements/`: `.claude/rules/dev-tools.md`.
 - Never delete `[profile.dev]` in the root `Cargo.toml` (debug playability;
   see `.claude/rules/launcher-and-build.md`).
 - Mass `NotFound` test failures on an assets path = stale artifacts from the
   `petmud` rename: `cargo clean -p feral-processes-engine -p
   feral-processes-app-core`, never a full `cargo clean` (~3.5-minute cold
   rebuild).
-- Disk: `git worktree remove` once a branch lands; sweep with `rm -rf
-  target/debug/incremental`. Each worktree builds its own `target/`.
+- Claude sessions share one build dir, `$CARGO_TARGET_DIR`
+  (`.claude/settings.json`), so a new worktree is not a cold build; scripts
+  must use `${CARGO_TARGET_DIR:-target}`. Disk: `git worktree remove` once a
+  branch lands; sweep with `rm -rf $CARGO_TARGET_DIR/debug/incremental`.
 - Releases are manual per platform: `docs/releasing.md`.
 
 ## Decisions (ADRs)
@@ -197,8 +187,11 @@ gate apply at every size.
 - Sonnet by default; opus for judgment (large reviews), not volume.
 - Don't re-run the full suite to confirm a subagent's report; spot-check.
 - Never brute-force a flake with repeated runs — read the code path.
-- Per-task review gates are optional (ask the user first); the final
-  whole-branch review is not.
+- Reviews have a stopping rule: no per-task gates; one final opus review
+  per phase or branch. Fix its Critical/Important findings in one wave, check
+  that wave with one scoped sonnet pass, then stop — Minor findings go to
+  the user as a list, never into more commits. A reviewer always finds
+  something; that alone is not a reason for another round.
 - Give a diff as a file, never pasted into the prompt.
 
 ## Guardrails

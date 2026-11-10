@@ -23,32 +23,56 @@ impl App {
                     Direction::Down => GameKey::PageDown,
                 });
             }
-            PointerHit::Region(Region::Rail) if self.hub_at().is_some() => self.hub_on_rail = true,
+            PointerHit::Region(Region::Rail) if self.hub_at().is_some() => {
+                self.pointer_focus_rail();
+            }
             PointerHit::Region(Region::Page) if self.hub_at().is_some() => self.focus_hub_page(),
             _ => {}
         }
     }
 
-    /// A rail click turns to the page and puts the cursor on the rail; on
-    /// the held page it only does the second.
+    /// A rail click is what the keys do: `Esc` to the rail (unless the page
+    /// holds `Esc`), then `↑`/`↓` along it, the shorter way round. On the
+    /// held page it is the first alone.
     fn pointer_page(&mut self, key: HubPageKey) {
         let Some((hub, page, _)) = self.hub_at() else {
             return;
         };
-        if hub.kind().pages(self)[page].key != key {
-            self.turn_hub_to(hub, &key);
+        if !self.pointer_focus_rail() {
+            return;
         }
-        self.hub_on_rail = true;
+        let pages = hub.kind().pages(self);
+        let Some(to) = pages.iter().position(|p| p.key == key) else {
+            return;
+        };
+        let forward = (to + pages.len() - page) % pages.len();
+        if forward <= pages.len() - forward {
+            (0..forward).for_each(|_| self.handle_key(GameKey::Down));
+        } else {
+            (0..pages.len() - forward).for_each(|_| self.handle_key(GameKey::Up));
+        }
     }
 
+    /// A tab click is `Tab` pressed until the tab is shown.
     fn pointer_tab(&mut self, to: usize) {
         let Some((hub, page, tab)) = self.hub_at() else {
             return;
         };
-        let pages = hub.kind().pages(self);
-        if to != tab && to < pages[page].tabs.len() {
-            self.show_hub_tab(hub, &pages[page], to);
+        let tabs = hub.kind().pages(self)[page].tabs.len();
+        if to < tabs {
+            (0..(to + tabs - tab) % tabs).for_each(|_| self.handle_key(GameKey::Tab));
         }
+    }
+
+    /// Puts the cursor on the rail as `Esc` does, and answers whether it is
+    /// there. A page holding `Esc` for a question of its own
+    /// (`screen_claims`) keeps the cursor: the pointer escapes nothing a key
+    /// cannot.
+    fn pointer_focus_rail(&mut self) -> bool {
+        if !self.hub_on_rail && !self.screen_claims(GameKey::Esc) {
+            self.hub_on_rail = true;
+        }
+        self.hub_on_rail
     }
 
     /// The wheel is `↑`/`↓` on whichever half of the hub is under it.
@@ -57,7 +81,11 @@ impl App {
             return;
         }
         match over {
-            PointerHit::Page(_) | PointerHit::Region(Region::Rail) => self.hub_on_rail = true,
+            PointerHit::Page(_) | PointerHit::Region(Region::Rail) => {
+                if !self.pointer_focus_rail() {
+                    return;
+                }
+            }
             PointerHit::Row(_) | PointerHit::More(_) | PointerHit::Region(Region::Page) => {
                 self.focus_hub_page()
             }

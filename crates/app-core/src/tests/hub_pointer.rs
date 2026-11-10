@@ -224,3 +224,45 @@ fn a_second_click_changes_what_enter_changes() {
     assert_eq!(place(&mouse), place(&kb));
     assert_ne!(place(&mouse), before, "Enter did something");
 }
+
+/// A question the page is asking holds Esc (`screen_claims`), so no key
+/// reaches the rail from there; the pointer must not either.
+#[test]
+fn the_rail_is_not_reachable_by_mouse_where_no_key_reaches_it() {
+    use GameKey::*;
+    let (mut mouse, _) = pair(41214, &[Char('b'), Right]);
+    mouse.quit_unsaved_pending = true;
+    assert!(
+        mouse.screen_claims(Esc),
+        "the page holds Esc for its question"
+    );
+    let held = place(&mouse);
+    assert!(!mouse.hub_on_rail);
+    click(&mut mouse, PointerHit::Region(Region::Rail));
+    assert_eq!(place(&mouse), held);
+    let other = HubPageKey::Named("Build");
+    click(&mut mouse, PointerHit::Page(other));
+    assert_eq!(place(&mouse), held, "a rail entry click is Esc then Down");
+    let held_page = mouse.hub_page().cloned().unwrap();
+    click(&mut mouse, PointerHit::Page(held_page));
+    assert_eq!(place(&mouse), held);
+    mouse.handle_pointer_event(PointerEvent {
+        hover: Some(PointerHit::Region(Region::Rail)),
+        wheel: -1,
+        ..Default::default()
+    });
+    assert_eq!(place(&mouse), held, "the wheel over the rail is Down on it");
+}
+
+/// A page turn by click walks the rail with the keys, so a far page is
+/// reached the way `↑` reaches it, in the shorter direction.
+#[test]
+fn a_far_rail_click_walks_the_rail_with_the_keys() {
+    use GameKey::*;
+    let (mut mouse, mut kb) = pair(41215, &[Char('b')]);
+    let pages = Hub::Base.kind().pages(&mouse);
+    let last = pages.last().unwrap().key;
+    click(&mut mouse, PointerHit::Page(last));
+    keys(&mut kb, &[Up]);
+    assert_eq!(place(&mouse), place(&kb));
+}

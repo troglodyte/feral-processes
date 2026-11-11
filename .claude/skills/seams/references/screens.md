@@ -173,6 +173,8 @@
   `Hub::kind`, and the impl — a `match hub` anywhere else is the trap
   coming back, and gui choosing a draw path by hub rather than by mode is
   the same trap (`render/mod.rs`'s `page_rows` is by mode).
+- **The research tree draws inside the hub content rect and claims no key while the rail has focus.** `Left` at the tree's left-most column returns to the rail (`screen_claims`, like any page); a click on a node selects it and a second click on the selected node works it (a click is Enter on the highlighted row, so it is select-then-Enter). The tree used to take the whole frame and swallow the rail's arrows.
+- **Hub pages draw no key footer; the key bar carries their keys.** `draw_rows_in` strips `Row::Keys` and the blank spacer above it for a hub page, while a popup still draws it. The trap: a popup row builder reused as a hub page brings its footer with it, so a new footer must be a `Row::Keys` row (never a hand-built text row, which the strip cannot see) and its keys must also go on `screen_keys`, or the hint is lost from the hub page.
 - **A pointer target is registered by the draw that places it
   (`Painter::target`), `gui/src/pointer.rs` is the only reader of egui pointer
   input, and every `PointerHit` ends in a key the keyboard already presses

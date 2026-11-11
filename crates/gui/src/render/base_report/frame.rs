@@ -452,18 +452,24 @@ pub(super) fn keybar_groups(
     let mut nav = vec![keycap("←", "list"), keycap("[ ]", "page")];
     nav.extend(hub_keys);
     let mut acts = screen_keys(mode);
-    acts.extend(page_keys.iter().map(|(key, verb)| keycap(key, verb)));
-    [
-        Some(acts),
-        Some(nav),
-        cycle,
-        Some(vec![keycap("Esc", "list")]),
-    ]
-    .into_iter()
-    .flatten()
-    .filter(|g| !g.is_empty())
-    .map(group)
-    .collect()
+    // An `Esc` among the page's keys replaces the rail's: it steps back
+    // inside the page first.
+    let esc = page_keys
+        .iter()
+        .find(|(key, _)| *key == "Esc")
+        .map_or("list", |(_, verb)| verb);
+    acts.extend(
+        page_keys
+            .iter()
+            .filter(|(key, _)| *key != "Esc")
+            .map(|(key, verb)| keycap(key, verb)),
+    );
+    [Some(acts), Some(nav), cycle, Some(vec![keycap("Esc", esc)])]
+        .into_iter()
+        .flatten()
+        .filter(|g| !g.is_empty())
+        .map(group)
+        .collect()
 }
 
 /// What the cursor does on `mode`'s own rows, for the keybar's first group.
@@ -779,6 +785,28 @@ mod tests {
         );
         assert!(!text(&offered, true).contains("train your AI"));
         assert!(!text(&[], false).contains("train your AI"));
+    }
+
+    /// With a Deploy category open Esc steps back to the categories, and the
+    /// bar says `back`, not `list`.
+    #[test]
+    fn esc_is_labelled_back_where_it_steps_back_inside_the_page() {
+        let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
+        let page = pages.iter().position(|p| p.offers(Mode::Build)).unwrap();
+        let text = |keys: &[(&str, &str)]| -> String {
+            keybar_groups(Mode::Build, &pages, page, false, &[], keys)
+                .iter()
+                .flatten()
+                .map(|(t, _, _)| t.as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        };
+        assert!(text(&[]).contains("Esc list"), "{}", text(&[]));
+        let open = text(&[("Esc", "back")]);
+        assert!(
+            open.contains("Esc back") && !open.contains("Esc list"),
+            "{open}"
+        );
     }
 
     /// A structure's page reads like the base report's: its own keys, then

@@ -564,16 +564,27 @@ fn capital_t_trains_the_ai_from_the_graph_too() {
 /// The keybar names `T` only while training is on offer, and `U` only with
 /// the dev console on, as the retired list footer did.
 #[test]
-fn research_page_keys_name_t_and_u_only_when_they_work() {
+fn page_keys_name_t_and_u_only_when_they_work() {
     let mut app = app_in_base_with_a_research_node(530);
     open_command(&mut app, "Research");
     assert_eq!(app.mode, Mode::Research);
-    assert!(app.research_page_keys().iter().all(|(k, _)| *k != "T"));
+    assert!(app.page_keys().iter().all(|(k, _)| *k != "T"));
 
     let mut app = app_with_a_stalled_base_ai(531);
     open_command(&mut app, "Research");
-    assert!(app.research_page_keys().contains(&("T", "train your AI")));
-    assert!(app.research_page_keys().iter().all(|(k, _)| *k != "U"));
+    assert!(app.page_keys().contains(&("T", "train your AI")));
+    assert!(app.page_keys().iter().all(|(k, _)| *k != "U"));
     app.enable_dev_console_for_test();
-    assert!(app.research_page_keys().iter().any(|(k, _)| *k == "U"));
+    assert!(app.page_keys().iter().any(|(k, _)| *k == "U"));
+}
+
+/// A Deploy category steps back to the categories on Esc, and the key bar is
+/// told so rather than saying the rail.
+#[test]
+fn page_keys_label_esc_back_inside_an_open_deploy_category() {
+    let mut app = test_app(532);
+    app.mode = Mode::Build;
+    assert!(app.page_keys().iter().all(|(k, _)| *k != "Esc"));
+    app.build_category = Some(feral_processes_engine::structures::StructureCategory::Extractor);
+    assert!(app.page_keys().contains(&("Esc", "back")));
 }

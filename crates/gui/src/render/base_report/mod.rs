@@ -80,7 +80,7 @@ impl HubFrame {
             page,
             screen,
             extra_keys: kind.extra_keys(app),
-            page_keys: app.research_page_keys(),
+            page_keys: app.page_keys(),
             hover: app.pointer_hover,
         })
     }

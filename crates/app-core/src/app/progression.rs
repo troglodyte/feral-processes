@@ -200,11 +200,14 @@ impl App {
                 .is_some_and(|v| v.training_available)
     }
 
-    /// The research page's keys that only exist in some states, as
-    /// `(key, verb)` for the keybar: `T` while training is on offer, `U`
-    /// with the dev console on.
-    pub fn research_page_keys(&self) -> Vec<(&'static str, &'static str)> {
+    /// A page's keys that only exist in some states, as `(key, verb)` for the
+    /// keybar: `T` while training is on offer, `U` with the dev console on,
+    /// and `Esc` when it steps back inside the page instead of to the rail.
+    pub fn page_keys(&self) -> Vec<(&'static str, &'static str)> {
         let mut keys = Vec::new();
+        if self.mode == Mode::Build && self.build_category.is_some() {
+            keys.push(("Esc", "back"));
+        }
         if self.mode == Mode::Research && self.training_offered(ResearchTree::Base) {
             keys.push(("T", "train your AI"));
         }

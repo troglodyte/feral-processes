@@ -85,7 +85,7 @@ fn hub_cases() -> Vec<(App, Mode)> {
     let mut app = template_app("base-ai-stalled");
     app.mode = Mode::Research;
     app.settle_hub();
-    assert!(!app.research_page_keys().is_empty(), "training is on offer");
+    assert!(!app.page_keys().is_empty(), "training is on offer");
     cases.push((app, Mode::Research));
     cases
 }

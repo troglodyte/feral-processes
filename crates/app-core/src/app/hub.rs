@@ -490,8 +490,7 @@ impl App {
     pub(crate) fn screen_claims(&mut self, key: GameKey) -> bool {
         match key {
             // The tree view draws over the whole hub, so once the cursor is
-            // in it the page keys wait and Esc steps back to the list view
-            // first. Tab still switches trees, which the view redraws in
+            // in it the page keys wait and Esc returns to the rail. Tab still switches trees, which the view redraws in
             // place. From the rail they stay the rail's, or `]` would stop
             // on the Research page.
             GameKey::Esc | GameKey::Char('[' | ']' | '{' | '}')

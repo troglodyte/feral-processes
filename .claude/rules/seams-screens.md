@@ -71,7 +71,7 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   for a jump that names none (it adopts a page only when exactly one offers
   the screen, and never a BESIDE YOU structure page), and the `shared_screens_are_pinned` census forces the
   explicit door for any screen several pages share.**
-- **The research tree draws inside the hub content rect and claims no key while the rail has focus; `Left` at its left-most column returns to the rail, and a click on a node selects it and a second click works it.**
+- **The research tree draws inside the hub content rect and claims no key while the rail has focus; `Left` at its left-most column and `Esc` return to the rail (`G` is the list switch), and a click on a node selects it and a second click works it.**
 - **A hub page shows no key hints of its own: `draw_rows_in` strips `Row::Keys` (and the blank spacer above it), popups still draw it, and a hub page's keys live on `screen_keys` for the key bar.**
 - **A pointer target is registered by the draw that places it (`Painter::target`), `gui/src/pointer.rs` is the only reader of egui pointer input, and every `PointerHit` ends in a key the keyboard already presses (`App::handle_pointer_event`), so a click can do nothing a key cannot.**
 - **A Broker's board is derived, never stored** — seeded off `(world seed,

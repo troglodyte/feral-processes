@@ -862,7 +862,8 @@ fn left_in_the_research_tree_view_stays_in_the_page() {
 
 /// The tree view draws over the whole hub, so with the cursor in it the
 /// page keys do nothing under it, Tab switches trees in the view, and Esc
-/// steps back to the list view before the next one reaches the rail.
+/// returns to the rail with the tree still shown, as Left from its left
+/// edge does.
 #[test]
 fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
     let mut app = test_app(30115);
@@ -890,12 +891,13 @@ fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
         assert!(app.research_graph_view, "{key:?} left the tree view");
     }
     app.handle_key(GameKey::Esc);
-    assert!(!app.research_graph_view, "Esc leaves the tree view first");
+    assert!(app.hub_on_rail, "Esc in the tree returns to the rail");
+    assert!(app.research_graph_view, "and the tree stays shown");
     assert_eq!(app.mode, Mode::Research);
-    assert!(!app.hub_on_rail);
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Char('G'));
     app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "the list view's Esc goes to the rail");
-    assert_eq!(app.mode, Mode::Research);
+    assert!(app.hub_on_rail, "the list view's Esc goes to the rail too");
 }
 
 /// From the rail the tree view claims nothing, so `]` walks past the

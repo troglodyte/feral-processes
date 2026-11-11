@@ -300,10 +300,10 @@ fn enter_on_an_unreachable_node_refuses_without_filing() {
     assert_eq!(app.mode, Mode::Research, "the screen stays open");
 }
 
-/// The graph draws over the whole hub, so Esc backs out of it to the list
-/// first, and the list's Esc goes to the rail.
+/// Esc in the tree returns to the rail, as Left from its left edge does;
+/// `G` is what switches to the list.
 #[test]
-fn esc_leaves_the_graph_view_before_the_screen() {
+fn esc_in_the_graph_view_returns_to_the_rail() {
     let mut app = test_app(525);
     open_command(&mut app, "Research");
     assert!(
@@ -311,10 +311,8 @@ fn esc_leaves_the_graph_view_before_the_screen() {
         "precondition: the graph is the default"
     );
     app.handle_key(GameKey::Esc);
-    assert!(!app.research_graph_view, "the first Esc leaves the graph");
-    assert!(!app.hub_on_rail);
-    app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "the list's Esc goes to the rail");
+    assert!(app.hub_on_rail, "Esc goes to the rail");
+    assert!(app.research_graph_view, "and does not switch to the list");
 }
 
 // ---------------------------------------------------------------------------

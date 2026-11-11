@@ -134,11 +134,11 @@ pub(crate) fn open_structure_page(app: &mut App) {
     }
 }
 
-/// Steps a research tab out of its tree view (the default), whose Esc
-/// leaves the tree before the tab.
+/// Steps a research tab out of its tree view (the default) with `G`: the
+/// tree's Esc goes to the rail instead.
 pub(crate) fn leave_the_research_tree_view(app: &mut App) {
     if app.research_graph_view {
-        app.handle_key(GameKey::Esc);
+        app.handle_key(GameKey::Char('G'));
     }
     assert!(!app.research_graph_view);
 }

@@ -525,8 +525,9 @@ impl App {
             // goes to the rail. (Right is the page's on every page, so it
             // needs no claim.)
             GameKey::Left if self.quit_unsaved_pending => true,
-            // The research tree view walks its nodes with every arrow.
-            GameKey::Left if self.research_tree_shown() => true,
+            // The research tree view walks its nodes with every arrow, once
+            // the cursor is in it; from the rail Left stays the rail's.
+            GameKey::Left if self.research_tree_shown() && !self.hub_on_rail => true,
             GameKey::Left if self.on_level_row() => true,
             // The Trader tab's arrows are the basket's: Left lowers the
             // highlighted row, so the rail is Esc away. With no wagon there

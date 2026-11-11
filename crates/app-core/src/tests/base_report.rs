@@ -933,3 +933,45 @@ fn the_study_tab_with_no_station_has_no_rows() {
     assert_eq!(app.mode, Mode::PinSubject);
     assert!(app.game.as_ref().unwrap().pinned_subject().is_none());
 }
+
+/// Resting on Research with the tree view up, the rail has focus: every
+/// arrow is the rail's, Left included, and Esc closes the hub.
+#[test]
+fn resting_on_research_leaves_the_rail_keys_to_the_rail() {
+    let mut app = test_app(30117);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.hub_on_rail = true;
+    app.handle_key(GameKey::Down);
+    assert!(app.hub_on_rail);
+    assert!(!is_research_mode(app.mode), "Down moved the rail on");
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.mode, Mode::Research);
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail, "Left on the rail stays on the rail");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "Esc on the rail closes the hub");
+}
+
+#[test]
+fn right_from_the_rail_enters_the_tree() {
+    let mut app = test_app(30118);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.hub_on_rail = true;
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail, "Right enters the tree");
+    assert_eq!(app.mode, Mode::Research);
+}
+
+fn is_research_mode(mode: Mode) -> bool {
+    matches!(
+        mode,
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch
+    )
+}

@@ -294,7 +294,8 @@ mod tests {
                     Row::Text(t)
                     | Row::TextColored(t, _)
                     | Row::Detail(t, _)
-                    | Row::TextEntry { text: t, .. } => t,
+                    | Row::TextEntry { text: t, .. }
+                    | Row::Keys(t) => t,
                     Row::Item { text, suffix, .. } => {
                         format!("{text}|{}", suffix.unwrap_or_default())
                     }
@@ -385,7 +386,8 @@ mod tests {
                     Row::Text(t)
                     | Row::TextColored(t, _)
                     | Row::Detail(t, _)
-                    | Row::TextEntry { text: t, .. } => t.clone(),
+                    | Row::TextEntry { text: t, .. }
+                    | Row::Keys(t) => t.clone(),
                     Row::Item {
                         text, tag, suffix, ..
                     } => {
@@ -456,7 +458,8 @@ mod tests {
                 Row::Text(t)
                 | Row::TextColored(t, _)
                 | Row::Detail(t, _)
-                | Row::TextEntry { text: t, .. } => t.clone(),
+                | Row::TextEntry { text: t, .. }
+                | Row::Keys(t) => t.clone(),
                 Row::Item { text, .. } => text.clone(),
             })
             .collect::<Vec<_>>()

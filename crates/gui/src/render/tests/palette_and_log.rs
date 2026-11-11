@@ -379,7 +379,8 @@ fn no_game_menu_row_overflows_the_hub_content_at_1280x720() {
                     Row::Text(t)
                     | Row::TextColored(t, _)
                     | Row::Detail(t, _)
-                    | Row::TextEntry { text: t, .. } => t,
+                    | Row::TextEntry { text: t, .. }
+                    | Row::Keys(t) => t,
                     Row::Item { text, .. } => text,
                 };
                 let width = p.measure_ui_advance(text, m.font_size);

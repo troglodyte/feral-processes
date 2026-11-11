@@ -1,7 +1,7 @@
 use super::*;
 
 /// Every `Mode`, as the status-line census below drives them.
-const ALL_MODES: [Mode; 178] = [
+pub(super) const ALL_MODES: [Mode; 178] = [
     Mode::Dossier,
     Mode::TacticalBattle,
     Mode::TacticalRoutine,

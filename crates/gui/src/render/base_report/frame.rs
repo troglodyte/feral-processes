@@ -537,9 +537,48 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
         Mode::Transfer => vec![
             keycap("↑/↓", "select"),
             keycap("-/+", "take/put"),
+            keycap("0-9", "amount"),
+            keycap("Bksp", "erase"),
+            keycap("Shift+←/→", "to the end"),
+            keycap("Ctrl+←/→", "halve the gap"),
+            keycap("A", "take all"),
+            keycap("N", "clear"),
             keycap("Enter", "transfer"),
         ],
-        Mode::DepotFilter => vec![keycap("↑/↓", "select"), keycap("+/-", "allow/deny")],
+        Mode::Caravan => vec![
+            keycap("↑/↓", "select"),
+            keycap("←/→", "set a row"),
+            keycap("Shift+←/→", "to the end"),
+            keycap("Ctrl+←/→", "halve the gap"),
+            keycap("A", "all your cargo"),
+            keycap("N", "clear"),
+            keycap("I", "inspect"),
+            keycap("Enter", "trade"),
+        ],
+        Mode::DepotFilter => vec![
+            keycap("↑/↓", "select"),
+            keycap("+/-", "allow/deny"),
+            keycap("A", "allow all"),
+            keycap("D", "deny all"),
+        ],
+        Mode::Build | Mode::BuildProgram | Mode::MachineRecipe | Mode::FarmRecipe => {
+            vec![keycap("↑/↓", "select"), keycap("Enter", "choose")]
+        }
+        Mode::Craft => vec![
+            keycap("↑/↓", "select"),
+            keycap("a-z", "filter"),
+            keycap("Enter", "compile"),
+        ],
+        Mode::RigTool => vec![
+            keycap("↑/↓", "select"),
+            keycap("R", "pull the tool"),
+            keycap("Enter", "fit"),
+        ],
+        Mode::SpliceRig => vec![
+            keycap("↑/↓", "select"),
+            keycap("I", "install"),
+            keycap("R", "remove"),
+        ],
         Mode::GameplayOptions | Mode::GraphicsOptions => {
             vec![keycap("↑/↓", "select"), keycap("Enter", "toggle")]
         }

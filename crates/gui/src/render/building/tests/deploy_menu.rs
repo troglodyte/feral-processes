@@ -289,7 +289,8 @@ fn no_deploy_row_overflows_its_popup_in_pixels() {
                 Row::Text(t)
                 | Row::TextColored(t, _)
                 | Row::Detail(t, _)
-                | Row::TextEntry { text: t, .. } => t.clone(),
+                | Row::TextEntry { text: t, .. }
+                | Row::Keys(t) => t.clone(),
                 // `draw_row`'s own prefix on an item row.
                 Row::Item { text, .. } => format!("     {text}"),
             };

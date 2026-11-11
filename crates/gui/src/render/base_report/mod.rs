@@ -82,6 +82,18 @@ impl HubFrame {
         })
     }
 
+    /// The key names the bar spells on this page with the cursor in it, for
+    /// the census holding a dropped footer against what the bar still says.
+    #[cfg(test)]
+    pub(super) fn bar_keys(&self) -> Vec<String> {
+        frame::keybar_groups(self.mode, &self.pages, self.page, false, &self.extra_keys)
+            .into_iter()
+            .flatten()
+            .filter(|(_, _, is_key)| *is_key)
+            .map(|(text, _, _)| text)
+            .collect()
+    }
+
     /// The rows of the page this frame is drawn for are pointer targets.
     fn row_targets(&self) -> Option<RowTargets> {
         Some(RowTargets { hover: self.hover })
@@ -326,7 +338,8 @@ pub(in crate::render) mod fit {
             Row::Text(t)
             | Row::TextColored(t, _)
             | Row::Detail(t, _)
-            | Row::TextEntry { text: t, .. } => t,
+            | Row::TextEntry { text: t, .. }
+            | Row::Keys(t) => t,
             Row::Item { text, .. } => text,
         }
     }

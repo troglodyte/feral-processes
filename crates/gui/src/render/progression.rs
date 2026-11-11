@@ -722,7 +722,7 @@ mod tests {
 
     fn hint_of(rows: &[Row]) -> &str {
         match rows.last() {
-            Some(Row::Text(t)) => t,
+            Some(Row::Keys(t)) => t,
             _ => panic!("the last row is the hint"),
         }
     }
@@ -1189,7 +1189,8 @@ mod tests {
                         Row::Text(text) => text.clone(),
                         Row::TextColored(text, _)
                         | Row::Detail(text, _)
-                        | Row::TextEntry { text, .. } => text.clone(),
+                        | Row::TextEntry { text, .. }
+                        | Row::Keys(text) => text.clone(),
                         Row::Item { text, .. } => format!("  {text}"),
                     };
                     measured += 1;
@@ -1273,7 +1274,8 @@ mod tests {
                 Row::Text(t)
                 | Row::TextColored(t, _)
                 | Row::Detail(t, _)
-                | Row::TextEntry { text: t, .. } => t.as_str(),
+                | Row::TextEntry { text: t, .. }
+                | Row::Keys(t) => t.as_str(),
                 Row::Item { text, .. } => text.as_str(),
             })
             .collect();

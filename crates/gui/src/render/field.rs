@@ -157,9 +157,11 @@ fn buff_panel_width(rows: &[Row], title: &str, painter: &Painter, m: &Metrics) -
                 }
                 w
             }
-            Row::Text(_) | Row::TextColored(..) | Row::Detail(_, _) | Row::TextEntry { .. } => {
-                painter.measure_ui(row_label_text(row), m.font_size).width
-            }
+            Row::Text(_)
+            | Row::Keys(_)
+            | Row::TextColored(..)
+            | Row::Detail(_, _)
+            | Row::TextEntry { .. } => painter.measure_ui(row_label_text(row), m.font_size).width,
         };
         width = width.max(w);
     }
@@ -725,9 +727,8 @@ mod tests {
                     Row::Text(t)
                     | Row::TextColored(t, _)
                     | Row::Detail(t, _)
-                    | Row::TextEntry { text: t, .. } => {
-                        (p.measure_ui(t, m.font_size).width, t.clone())
-                    }
+                    | Row::TextEntry { text: t, .. }
+                    | Row::Keys(t) => (p.measure_ui(t, m.font_size).width, t.clone()),
                 };
                 assert!(
                     drawn <= room,

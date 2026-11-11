@@ -128,7 +128,7 @@ fn the_b_rail_has_its_five_sections_in_order() {
             .unwrap_or_else(|| panic!("{title} is not on the rail: {rail:?}"))
     };
     assert_eq!(
-        tabs_of("Alder"),
+        tabs_of("Alder south-east"),
         ["Status", "Goods", "Routes", "Jobs", "Log"]
     );
     assert_eq!(tabs_of("Caravans"), ["Schedule", "In flight", "Trader"]);

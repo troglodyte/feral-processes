@@ -192,8 +192,8 @@ fn the_rail_is_towns_then_outposts_then_caravans() {
     let app = app_with_far_sites(7104);
     let rail = rail(&app);
     let titles: Vec<&str> = rail.iter().map(|(t, _, _)| t.as_str()).collect();
-    assert_eq!(titles[0], "Alder");
-    assert_eq!(titles[1], "Birch");
+    assert_eq!(titles[0], "Alder south-east");
+    assert_eq!(titles[1], "Birch south-east");
     assert!(titles[2].starts_with("Outpost"), "{titles:?}");
     assert!(titles[3].starts_with("Outpost"), "{titles:?}");
     assert_eq!(titles[4..], ["Caravans", "Sorties"]);
@@ -774,11 +774,14 @@ fn app_at_base_with_an_unvisited_ally(seed: u32) -> (App, SettlementKey) {
 fn an_unvisited_allied_town_is_on_the_rail_by_name() {
     let (app, key) = app_at_base_with_an_unvisited_ally(7150);
     let titles: Vec<String> = rail(&app).into_iter().map(|(t, _, _)| t).collect();
-    assert_eq!(titles, ["Test Settlement", "Caravans", "Sorties"]);
+    assert_eq!(
+        titles,
+        ["Test Settlement south-east", "Caravans", "Sorties"]
+    );
     let site = HubPageKey::Site(RouteDestinationId::Settlement(key));
     assert_eq!(
         Hub::Base.kind().pages(&app)[page_of(&app, &site)].title,
-        "Test Settlement"
+        "Test Settlement south-east"
     );
 }
 
@@ -1093,4 +1096,22 @@ fn an_outpost_inside_a_towns_reach_still_answers_its_doors() {
             app.handle_key(GameKey::Esc);
         }
     }
+}
+
+#[test]
+fn town_pages_draw_no_kind_glyph() {
+    use feral_processes_engine::RouteDestinationId as Dest;
+    let app = app_with_far_sites(7101);
+    let pages = Hub::Base.kind().pages(&app);
+    let towns: Vec<_> = pages
+        .iter()
+        .filter(|p| matches!(p.key, HubPageKey::Site(Dest::Settlement(_))))
+        .collect();
+    assert_eq!(towns.len(), 2);
+    assert!(towns.iter().all(|p| p.glyph.is_none()));
+    let outpost = pages
+        .iter()
+        .find(|p| matches!(p.key, HubPageKey::Site(Dest::Outpost(_))))
+        .unwrap();
+    assert!(outpost.glyph.is_some());
 }

@@ -69,7 +69,7 @@ pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
         pages.push(HubPage {
             key: HubPageKey::Site(entry.site),
             title: entry.name,
-            glyph: Some(entry.glyph),
+            glyph: (entry.section != SiteSection::Settlements).then_some(entry.glyph),
             section: (last != Some(entry.section)).then(|| section_title(entry.section)),
             tabs: tabs.to_vec(),
             marked: entry.attention,

@@ -491,8 +491,8 @@ fn the_rail_lists_towns_by_name_then_outposts_by_name() {
     let rail = game.site_rail();
 
     let names: Vec<&str> = rail.iter().map(|e| e.name.as_str()).collect();
-    assert_eq!(names[0], "Alpha");
-    assert_eq!(names[1], "Zeta");
+    assert_eq!(names[0], "Alpha east");
+    assert_eq!(names[1], "Zeta east");
     assert_eq!(&names[2..], ["Outpost east", "Outpost south"]);
     assert_eq!(rail[0].section, SiteSection::Settlements);
     assert_eq!(rail[0].glyph, 's');
@@ -532,7 +532,7 @@ fn an_unvisited_town_is_on_the_rail_by_name() {
     let rail = game.site_rail();
 
     let listed: Vec<&str> = rail.iter().map(|e| e.name.as_str()).collect();
-    assert_eq!(listed, vec!["Hidden", "Seen"]);
+    assert_eq!(listed, vec!["Hidden east", "Seen east"]);
     assert_eq!(rail[0].site, town_site(key));
 }
 
@@ -777,4 +777,42 @@ fn the_log_reads_newest_first_with_banded_ages() {
     assert_eq!(log[0].age, "just now");
     assert_eq!(log[1].text, "First.");
     assert_eq!(log[1].age, "long ago");
+}
+
+#[test]
+fn town_rail_label_appends_the_heading_from_the_base() {
+    use crate::game::sites::town_rail_label;
+    assert_eq!(
+        town_rail_label("Tally Yard", (10, -10), Some((0, 0))),
+        "Tally Yard north-east"
+    );
+}
+
+#[test]
+fn town_rail_label_is_bare_at_the_base_or_without_one() {
+    use crate::game::sites::town_rail_label;
+    assert_eq!(
+        town_rail_label("Tally Yard", (0, 0), Some((0, 0))),
+        "Tally Yard"
+    );
+    assert_eq!(town_rail_label("Tally Yard", (50, 50), None), "Tally Yard");
+}
+
+#[test]
+fn same_named_towns_stay_separate_pages() {
+    let mut game = game();
+    forget_towns(&mut game);
+    let anchor = game.anchor_position().expect("a base");
+    let (a, b) = (
+        SettlementKey { rx: 1, ry: 0 },
+        SettlementKey { rx: 2, ry: 0 },
+    );
+    add_town(&mut game, a, "Twin", true, (anchor.0 + 600, anchor.1));
+    add_town(&mut game, b, "Twin", true, (anchor.0 - 600, anchor.1));
+
+    let rail = game.site_rail();
+
+    assert_eq!(rail.len(), 2);
+    assert_ne!(rail[0].site, rail[1].site);
+    assert_ne!(rail[0].name, rail[1].name);
 }

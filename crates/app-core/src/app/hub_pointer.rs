@@ -124,6 +124,16 @@ impl App {
     fn pointer_row(&mut self, row: usize) {
         let second = !self.hub_on_rail && self.menu_selected == row;
         self.focus_hub_page();
+        // The tree's arrows move across columns, not down a list, so a click
+        // on a node lands the cursor on it directly; the second click is
+        // still the keyboard's `Enter`.
+        if self.research_tree_shown() {
+            self.menu_selected = row;
+            if second {
+                self.handle_key(GameKey::Enter);
+            }
+            return;
+        }
         let (key, steps) = if row >= self.menu_selected {
             (GameKey::Down, row - self.menu_selected)
         } else {

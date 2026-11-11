@@ -243,6 +243,17 @@ const BACK_RANK_DESATURATION: f32 = 0.55;
 /// `tuning/`.
 const CRITICAL_HP_DIVISOR: i32 = 3;
 
+/// The research tree a research screen shows, `None` on any other mode.
+fn research_tree_of(mode: Mode) -> Option<ResearchTree> {
+    match mode {
+        Mode::Research => Some(ResearchTree::Base),
+        Mode::RoutineResearch => Some(ResearchTree::Routines),
+        Mode::AffixResearch => Some(ResearchTree::Affixes),
+        Mode::WeaponResearch => Some(ResearchTree::Weapons),
+        _ => None,
+    }
+}
+
 /// Whether a program is close enough to deletion to warrant the warning
 /// colour. The single definition both the battle pane and the roster
 /// call, so the threshold cannot come to mean two different things on two
@@ -1258,6 +1269,27 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
         );
         return;
     }
+    // The research tree view is a page of the hub like any other: it draws
+    // in the frame's content rect, key bar and refusal line included.
+    if let Some(frame) = &hub_frame
+        && graph_view
+        && let Some(tree) = research_tree_of(app.mode)
+    {
+        base_report::draw_hub_custom(
+            frame,
+            app.mode,
+            on_rail,
+            refusal,
+            painter,
+            m,
+            |content, targets| {
+                research_graph::draw_research_graph(
+                    game, tree, selected, content, targets, painter, m,
+                );
+            },
+        );
+        return;
+    }
     // A hub page whose screen is also a popup: the same rows, in the hub's
     // frame instead. Every other hub screen is drawn by `draw_base_report`,
     // further down.
@@ -1345,17 +1377,11 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             ),
             None,
         )),
-        // The list view is a tab; the tree view draws over the hub, as
-        // it does anywhere, and claims every arrow (`App::screen_claims`).
-        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch
-            if !graph_view =>
-        {
-            let tree = match app.mode {
-                Mode::Research => ResearchTree::Base,
-                Mode::RoutineResearch => ResearchTree::Routines,
-                Mode::AffixResearch => ResearchTree::Affixes,
-                _ => ResearchTree::Weapons,
-            };
+        // The list view is a tab; the tree view is drawn above, in the same
+        // frame, and claims every arrow once the cursor is in it
+        // (`App::screen_claims`).
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch => {
+            let tree = research_tree_of(app.mode).expect("the arm names a research mode");
             let (_, rows) = progression::research_page_rows(game, tree, selected, dev_console);
             Some((rows, None))
         }
@@ -1779,27 +1805,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
                 draw_respec_confirm(&quote, "talent", selected, refusal, painter, m);
             }
         }
-        Mode::Research if graph_view => research_graph::draw_research_graph(
-            game,
-            ResearchTree::Base,
-            selected,
-            refusal,
-            painter,
-            m,
-            dev_console,
-        ),
         Mode::Research => draw_research_menu(
             game,
             ResearchTree::Base,
-            selected,
-            refusal,
-            painter,
-            m,
-            dev_console,
-        ),
-        Mode::RoutineResearch if graph_view => research_graph::draw_research_graph(
-            game,
-            ResearchTree::Routines,
             selected,
             refusal,
             painter,
@@ -1815,27 +1823,9 @@ fn draw_mode_overlay(app: &mut App, refusal: Option<&str>, painter: &Painter, m:
             m,
             dev_console,
         ),
-        Mode::AffixResearch if graph_view => research_graph::draw_research_graph(
-            game,
-            ResearchTree::Affixes,
-            selected,
-            refusal,
-            painter,
-            m,
-            dev_console,
-        ),
         Mode::AffixResearch => draw_research_menu(
             game,
             ResearchTree::Affixes,
-            selected,
-            refusal,
-            painter,
-            m,
-            dev_console,
-        ),
-        Mode::WeaponResearch if graph_view => research_graph::draw_research_graph(
-            game,
-            ResearchTree::Weapons,
             selected,
             refusal,
             painter,

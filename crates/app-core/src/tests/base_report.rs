@@ -849,8 +849,12 @@ fn left_in_the_research_tree_view_stays_in_the_page() {
         app.handle_key(GameKey::Char('G'));
     }
     assert!(app.research_graph_view);
+    app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Left);
     assert!(!app.hub_on_rail, "Left moved the tree cursor");
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail, "off the first column it is the rail's");
+    app.hub_on_rail = false;
     app.handle_key(GameKey::Char('G'));
     app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail, "the list view's Left goes to the rail");
@@ -967,6 +971,47 @@ fn right_from_the_rail_enters_the_tree() {
     app.handle_key(GameKey::Right);
     assert!(!app.hub_on_rail, "Right enters the tree");
     assert_eq!(app.mode, Mode::Research);
+}
+
+/// Left from the tree's left-most column is the rail's again (ADR 0045).
+#[test]
+fn left_from_the_trees_left_edge_returns_to_the_rail() {
+    let mut app = test_app(30119);
+    app.handle_key(GameKey::Char('b'));
+    // The rail rests on Research the way a player reaches it.
+    for _ in 0..40 {
+        if app.mode == Mode::Research {
+            break;
+        }
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(app.mode, Mode::Research);
+    assert!(app.research_graph_view, "the tree is the default view");
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail, "Right enters the tree");
+    for _ in 0..40 {
+        app.handle_key(GameKey::Left);
+    }
+    assert!(app.hub_on_rail, "Left off the first column is the rail's");
+    assert_eq!(app.mode, Mode::Research);
+}
+
+/// The guard on the Left claim: on the rail the tree claims no arrow, so
+/// Left cannot reach its handler and step the cursor behind the rail's back.
+#[test]
+fn the_tree_claims_no_arrow_while_the_rail_has_focus() {
+    let mut app = test_app(30120);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.hub_on_rail = true;
+    for key in [GameKey::Left, GameKey::Right, GameKey::Up, GameKey::Down] {
+        assert!(!app.screen_claims(key), "{key:?} claimed from the rail");
+    }
+    app.hub_on_rail = false;
+    assert!(app.screen_claims(GameKey::Left), "in the tree Left is its");
 }
 
 fn is_research_mode(mode: Mode) -> bool {

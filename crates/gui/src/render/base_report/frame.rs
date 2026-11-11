@@ -516,6 +516,14 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
             .iter()
             .map(|(key, verb)| keycap(key, verb))
             .collect(),
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch => {
+            vec![
+                keycap("↑/↓ ←/→", "move"),
+                keycap("Enter", "work"),
+                keycap("G", "list"),
+                keycap("A", "abandon"),
+            ]
+        }
         Mode::Perks => vec![keycap("a-z", "buy a level")],
         Mode::PhaseKeys => vec![keycap("↑/↓", "read")],
         Mode::DownedPrograms => vec![keycap("↑/↓", "select"), keycap("Enter", "extract")],

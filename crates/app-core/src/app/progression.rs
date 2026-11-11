@@ -173,6 +173,12 @@ impl App {
                 return;
             };
             let landed = game.research_graph(tree).step(from, dir);
+            // No column to the left: the tree's edge is the rail's door
+            // (ADR 0045), as a list's left edge is.
+            if dir == GraphDir::Left && landed == *from {
+                self.hub_on_rail = true;
+                return;
+            }
             // A scan of 34 entries per keypress. An index map would be a
             // second cursor to keep in step with `research_nodes()`, which
             // re-sorts by state.

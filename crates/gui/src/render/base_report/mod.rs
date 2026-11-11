@@ -129,6 +129,22 @@ pub(super) fn draw_hub_page(
     draw_rows_in(content, rows, !on_rail, frame.row_targets(), painter, m);
 }
 
+/// A hub page that draws itself: the frame, then `draw` over its content
+/// rect with the same pointer targets a row list has. The research tree is
+/// the one such page.
+pub(super) fn draw_hub_custom(
+    frame: &HubFrame,
+    mode: Mode,
+    on_rail: bool,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+    draw: impl FnOnce(Rect, Option<RowTargets>),
+) {
+    let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
+    draw(content, frame.row_targets());
+}
+
 /// `draw_hub_page` in two columns: the rows the cursor walks on the left,
 /// and what they add up to on the right, which no cursor reaches — the
 /// Workbench's build pages, whose output reads beside the parts making it.

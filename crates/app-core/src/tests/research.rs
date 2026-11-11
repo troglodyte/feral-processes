@@ -253,14 +253,22 @@ fn holding_an_arrow_at_the_edge_of_the_grid_does_nothing() {
     open_command(&mut app, "Research");
     for _ in 0..40 {
         app.handle_key(GameKey::Up);
-        app.handle_key(GameKey::Left);
     }
-    let corner = selected_research_id(&app);
+    let top = selected_research_id(&app);
     for _ in 0..10 {
         app.handle_key(GameKey::Up);
+    }
+    assert_eq!(top, selected_research_id(&app), "the top edge clamps");
+    // The left edge is the rail's door (ADR 0045), not a clamp: the cursor
+    // stays where it was and the focus goes out.
+    for _ in 0..10 {
         app.handle_key(GameKey::Left);
     }
-    assert_eq!(corner, selected_research_id(&app), "the corner clamps");
+    assert_eq!(top, selected_research_id(&app));
+    assert!(
+        app.hub_on_rail,
+        "Left off the first column returns to the rail"
+    );
     assert_eq!(app.mode, Mode::Research, "and the screen stays open");
 }
 

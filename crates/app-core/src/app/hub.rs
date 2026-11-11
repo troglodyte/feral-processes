@@ -543,7 +543,7 @@ impl App {
         }
     }
 
-    fn research_tree_shown(&self) -> bool {
+    pub(crate) fn research_tree_shown(&self) -> bool {
         self.research_graph_view && is_research_tree(self.mode)
     }
 

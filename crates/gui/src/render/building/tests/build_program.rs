@@ -268,7 +268,7 @@ fn the_picker_still_says_what_each_program_is_doing() {
         "the post is not on the row: {text}"
     );
     assert!(text.contains("idle"), "{text}");
-    for heading in ["Base staff", "In your party"] {
+    for heading in ["Bench", "In your party"] {
         assert!(
             !text.contains(heading),
             "a role heading survived the sort: {text}"

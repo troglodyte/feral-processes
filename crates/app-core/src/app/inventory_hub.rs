@@ -16,7 +16,7 @@ pub const YOU_TABS: &[HubTab] = &[
 /// The Roster entry's tabs: every program you own, then the errands that
 /// act on programs.
 pub const ROSTER_TABS: &[HubTab] = &[
-    HubTab::new("Roster", Mode::Companion),
+    HubTab::new("Party", Mode::Companion),
     HubTab::new("Errands", Mode::PartyPrograms),
 ];
 

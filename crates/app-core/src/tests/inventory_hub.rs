@@ -402,3 +402,11 @@ fn an_equip_swap_opened_from_a_companion_still_returns_to_the_companion() {
     app.handle_key(GameKey::Esc);
     assert_eq!(app.mode, Mode::CompanionEquip);
 }
+
+#[test]
+fn roster_strip_does_not_echo_its_title() {
+    let pages = Hub::Inventory.kind().pages(&test_app(9501));
+    let roster = pages.iter().find(|p| p.title == "Roster").unwrap();
+    assert!(roster.tabs.iter().all(|t| t.name != roster.title));
+    assert_eq!(roster.tabs[0].name, "Party");
+}

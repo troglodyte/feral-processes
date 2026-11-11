@@ -432,7 +432,7 @@ pub(super) fn keybar_groups(
             Some(nav),
             Some(hub_keys),
             cycle,
-            Some(vec![keycap("Esc", "back")]),
+            Some(vec![keycap("Esc", "close")]),
         ]
         .into_iter()
         .flatten()
@@ -440,14 +440,14 @@ pub(super) fn keybar_groups(
         .map(group)
         .collect();
     }
-    let mut nav = vec![keycap("←", "menu"), keycap("[ ]", "page")];
+    let mut nav = vec![keycap("←", "list"), keycap("[ ]", "page")];
     nav.extend(hub_keys);
     let acts = screen_keys(mode);
     [
         Some(acts),
         Some(nav),
         cycle,
-        Some(vec![keycap("Esc", "menu")]),
+        Some(vec![keycap("Esc", "list")]),
     ]
     .into_iter()
     .flatten()
@@ -632,9 +632,9 @@ mod tests {
             let rail = text(true);
             assert!(rail.contains("page"), "{mode:?}: {rail}");
             assert!(rail.contains("open"), "{mode:?}: {rail}");
-            assert!(rail.contains("back"), "{mode:?}: {rail}");
+            assert!(rail.contains("close"), "{mode:?}: {rail}");
             let rows = text(false);
-            assert!(rows.contains("menu"), "{mode:?}: {rows}");
+            assert!(rows.contains("list"), "{mode:?}: {rows}");
         }
     }
 
@@ -662,7 +662,7 @@ mod tests {
             assert!(!multi.contains("screen"), "{multi}");
         }
         let page_half = bar(&pages, staff, false).join("|");
-        assert!(page_half.contains("[ ] page") && page_half.contains("← menu"));
+        assert!(page_half.contains("[ ] page") && page_half.contains("← list"));
 
         let sectioned = [
             page("Aa", Some("Towns and cities"), false),
@@ -703,7 +703,7 @@ mod tests {
     #[test]
     fn a_structure_page_names_its_keys_and_the_way_back_like_any_hub_page() {
         let rows = bar_text(TAB, false);
-        for want in ["take/put", "←", "menu", "page", "work it"] {
+        for want in ["take/put", "←", "list", "page", "work it"] {
             assert!(rows.contains(want), "{want:?} missing: {rows}");
         }
     }

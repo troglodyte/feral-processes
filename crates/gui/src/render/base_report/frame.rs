@@ -534,6 +534,7 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
                 keycap("A", "abandon"),
             ]
         }
+        Mode::Dispatch => vec![keycap("↑/↓", "select"), keycap("S", "send a squad")],
         Mode::Perks => vec![keycap("a-z", "buy a level")],
         Mode::PhaseKeys => vec![keycap("↑/↓", "read")],
         Mode::DownedPrograms => vec![keycap("↑/↓", "select"), keycap("Enter", "extract")],

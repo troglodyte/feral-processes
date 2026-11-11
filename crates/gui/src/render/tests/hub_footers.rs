@@ -5,13 +5,32 @@ use super::refusals::ALL_MODES;
 use super::*;
 use crate::paint::{painted_text, with_painter};
 use crate::render::popup::DROPPED_KEY_HINTS;
-use feral_processes_app_core::{App, KEY_HINT_SEP};
+use feral_processes_app_core::{App, GameKey, KEY_HINT_SEP};
 
 fn dropped_after_draw(app: &mut App, fx: &mut Fx) -> (Vec<String>, Vec<String>) {
     DROPPED_KEY_HINTS.with(|d| d.borrow_mut().clear());
     let (_, shapes) = with_painter(|p| draw(app, fx, p, false, false));
     let dropped = DROPPED_KEY_HINTS.with(|d| d.borrow().clone());
     (painted_text(&shapes), dropped)
+}
+
+/// The census app playing a `dev-saves/` template, for the states a fresh run
+/// cannot reach (a Relay, a breeding bay, a stalled AI).
+fn template_app(name: &str) -> App {
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let text = std::fs::read_to_string(root.join("dev-saves").join(format!("{name}.ron"))).unwrap();
+    let data = feral_processes_engine::save::from_ron(&text).unwrap();
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let nth = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!(
+        "fp_gui_template_{}_{nth}_{name}.bin",
+        std::process::id()
+    ));
+    feral_processes_engine::save::save_to_file(&path, &data).unwrap();
+    let mut app = census_app();
+    app.game = Some(feral_processes_engine::Game::load(&path, &root.join("assets")).unwrap());
+    let _ = std::fs::remove_file(&path);
+    app
 }
 
 /// Every hub screen, drawn on its page, in the states that change its rows.
@@ -39,6 +58,35 @@ fn hub_cases() -> Vec<(App, Mode)> {
     app.settle_hub();
     app.build_category = Some(category);
     cases.push((app, Mode::Build));
+
+    // The pages whose footers only show in some world: Sorties needs a
+    // Relay, a bay's Info tab a bay beside you, Train your AI a stalled AI.
+    let mut app = template_app("settlements");
+    app.mode = Mode::Dispatch;
+    app.settle_hub();
+    assert!(base_report::HubFrame::of(&app, Mode::Dispatch).is_some());
+    cases.push((app, Mode::Dispatch));
+
+    let mut app = template_app("breeding");
+    // Walk the BESIDE YOU rail until an entry opens on the Breed page.
+    app.handle_key(GameKey::Char('c'));
+    for _ in 0..8 {
+        app.handle_key(GameKey::Right);
+        if app.mode == Mode::Breed {
+            break;
+        }
+        app.handle_key(GameKey::Left);
+        app.handle_key(GameKey::Char(']'));
+    }
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::StructureManifest, "the bay's Info tab");
+    cases.push((app, Mode::StructureManifest));
+
+    let mut app = template_app("base-ai-stalled");
+    app.mode = Mode::Research;
+    app.settle_hub();
+    assert!(!app.research_page_keys().is_empty(), "training is on offer");
+    cases.push((app, Mode::Research));
     cases
 }
 
@@ -72,6 +120,8 @@ fn key_chars(chip: &str) -> Vec<String> {
         c if c.starts_with("Type to filter") => return vec!["a-z".to_string()],
         c if c.starts_with("Type digits") => return vec!["0-9".to_string()],
         c if c.starts_with("Backspace") => return vec!["Bksp".to_string()],
+        // "Any key back" names no key; the bar's Esc is the way out.
+        c if c.starts_with("Any") => return Vec::new(),
         _ => {}
     }
     token

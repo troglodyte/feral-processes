@@ -78,6 +78,6 @@ pub(super) fn structure_rows(game: &mut Game, entity: Option<Entity>) -> Option<
         rows.push(text_row(line));
     }
     rows.push(text_row(""));
-    rows.push(text_row(bay_footer(&slots)));
+    rows.push(Row::Keys(bay_footer(&slots)));
     Some(rows)
 }

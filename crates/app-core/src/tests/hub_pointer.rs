@@ -330,3 +330,31 @@ fn the_wheel_never_activates_a_page() {
     assert_eq!(place(&mouse), place(&kb));
     assert!(mouse.hub_on_rail);
 }
+
+/// A tree node is a pointer target numbered by the index the cursor uses;
+/// the first click selects it, the second works it (ADR 0046).
+#[test]
+fn a_click_on_a_tree_node_selects_it_and_a_second_click_works_it() {
+    use GameKey::*;
+    let mut app = test_app(41210);
+    app.handle_key(Char('b'));
+    for _ in 0..40 {
+        if app.mode == Mode::Research {
+            break;
+        }
+        app.handle_key(Down);
+    }
+    assert_eq!(app.mode, Mode::Research);
+    assert!(app.research_graph_view && app.hub_on_rail);
+    click(&mut app, PointerHit::Row(1));
+    assert!(!app.hub_on_rail);
+    assert_eq!(app.menu_selected, 1);
+    let before = app.game.as_ref().unwrap().active_research_progress();
+    click(&mut app, PointerHit::Row(1));
+    assert_eq!(app.menu_selected, 1);
+    let after = app.game.as_ref().unwrap().active_research_progress();
+    assert!(
+        before != after || app.status_line.is_some() || app.mode != Mode::Research,
+        "the second click worked the node (Enter), whatever it answered"
+    );
+}

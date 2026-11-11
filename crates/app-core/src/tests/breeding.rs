@@ -276,3 +276,23 @@ fn a_full_bays_breed_page_refuses_a_pick() {
     assert_eq!(app.mode, Mode::Breed, "nothing is picked");
     assert_eq!(app.status_line.as_deref(), Some("no free bay"));
 }
+
+/// The Info tab's key bar offers `B` exactly when pressing it would open the
+/// breed page: a free slot.
+#[test]
+fn the_bays_info_tab_names_b_only_while_a_slot_is_free() {
+    let mut app = app_with_a_breeding_bay(8112, 1, false);
+    open_the_bay_in_the_hub(&mut app);
+    app.handle_key(GameKey::Tab);
+    assert_eq!(app.mode, Mode::StructureManifest, "the Info tab");
+    let keys = Hub::Inventory.kind().extra_keys(&app);
+    assert!(keys.contains(&("B", "breed")), "{keys:?}");
+
+    app.handle_key(GameKey::Char('B'));
+    pick_row(&mut app, 0);
+    pick_row(&mut app, 0);
+    app.handle_key(GameKey::Enter);
+    assert_eq!(app.mode, Mode::StructureManifest);
+    let keys = Hub::Inventory.kind().extra_keys(&app);
+    assert!(keys.iter().all(|(k, _)| *k != "B"), "{keys:?}");
+}

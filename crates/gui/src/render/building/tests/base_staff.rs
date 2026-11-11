@@ -89,7 +89,8 @@ fn the_widest_base_staff_row_stays_inside_the_content_rect() {
             Row::Text(text)
             | Row::TextColored(text, _)
             | Row::Detail(text, _)
-            | Row::TextEntry { text, .. } => text.clone(),
+            | Row::TextEntry { text, .. }
+            | Row::Keys(text) => text.clone(),
             Row::Item { text, .. } => text.clone(),
         };
         assert!(
@@ -111,7 +112,8 @@ fn the_widest_base_staff_row_stays_inside_the_content_rect() {
                     Row::Text(text)
                     | Row::TextColored(text, _)
                     | Row::Detail(text, _)
-                    | Row::TextEntry { text, .. } => text.clone(),
+                    | Row::TextEntry { text, .. }
+                    | Row::Keys(text) => text.clone(),
                     Row::Item { text, .. } => format!("     {text}"),
                 };
                 let drawn = p.measure_ui_advance(&text, m.font_size);

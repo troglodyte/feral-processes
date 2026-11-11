@@ -849,8 +849,12 @@ fn left_in_the_research_tree_view_stays_in_the_page() {
         app.handle_key(GameKey::Char('G'));
     }
     assert!(app.research_graph_view);
+    app.handle_key(GameKey::Right);
     app.handle_key(GameKey::Left);
     assert!(!app.hub_on_rail, "Left moved the tree cursor");
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail, "off the first column it is the rail's");
+    app.hub_on_rail = false;
     app.handle_key(GameKey::Char('G'));
     app.handle_key(GameKey::Left);
     assert!(app.hub_on_rail, "the list view's Left goes to the rail");
@@ -858,7 +862,8 @@ fn left_in_the_research_tree_view_stays_in_the_page() {
 
 /// The tree view draws over the whole hub, so with the cursor in it the
 /// page keys do nothing under it, Tab switches trees in the view, and Esc
-/// steps back to the list view before the next one reaches the rail.
+/// returns to the rail with the tree still shown, as Left from its left
+/// edge does.
 #[test]
 fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
     let mut app = test_app(30115);
@@ -886,12 +891,13 @@ fn the_research_tree_view_keeps_the_hubs_keys_until_esc() {
         assert!(app.research_graph_view, "{key:?} left the tree view");
     }
     app.handle_key(GameKey::Esc);
-    assert!(!app.research_graph_view, "Esc leaves the tree view first");
+    assert!(app.hub_on_rail, "Esc in the tree returns to the rail");
+    assert!(app.research_graph_view, "and the tree stays shown");
     assert_eq!(app.mode, Mode::Research);
-    assert!(!app.hub_on_rail);
+    app.hub_on_rail = false;
+    app.handle_key(GameKey::Char('G'));
     app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "the list view's Esc goes to the rail");
-    assert_eq!(app.mode, Mode::Research);
+    assert!(app.hub_on_rail, "the list view's Esc goes to the rail too");
 }
 
 /// From the rail the tree view claims nothing, so `]` walks past the
@@ -932,4 +938,87 @@ fn the_study_tab_with_no_station_has_no_rows() {
     app.handle_key(GameKey::Enter);
     assert_eq!(app.mode, Mode::PinSubject);
     assert!(app.game.as_ref().unwrap().pinned_subject().is_none());
+}
+
+/// Resting on Research with the tree view up, the rail has focus: every
+/// arrow is the rail's, Left included, and Esc closes the hub.
+#[test]
+fn resting_on_research_leaves_the_rail_keys_to_the_rail() {
+    let mut app = test_app(30117);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.hub_on_rail = true;
+    app.handle_key(GameKey::Down);
+    assert!(app.hub_on_rail);
+    assert!(!is_research_mode(app.mode), "Down moved the rail on");
+    app.handle_key(GameKey::Up);
+    assert_eq!(app.mode, Mode::Research);
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Left);
+    assert!(app.hub_on_rail, "Left on the rail stays on the rail");
+    app.handle_key(GameKey::Esc);
+    assert_eq!(app.mode, Mode::Playing, "Esc on the rail closes the hub");
+}
+
+#[test]
+fn right_from_the_rail_enters_the_tree() {
+    let mut app = test_app(30118);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.hub_on_rail = true;
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail, "Right enters the tree");
+    assert_eq!(app.mode, Mode::Research);
+}
+
+/// Left from the tree's left-most column is the rail's again (ADR 0045).
+#[test]
+fn left_from_the_trees_left_edge_returns_to_the_rail() {
+    let mut app = test_app(30119);
+    app.handle_key(GameKey::Char('b'));
+    // The rail rests on Research the way a player reaches it.
+    for _ in 0..40 {
+        if app.mode == Mode::Research {
+            break;
+        }
+        app.handle_key(GameKey::Down);
+    }
+    assert_eq!(app.mode, Mode::Research);
+    assert!(app.research_graph_view, "the tree is the default view");
+    assert!(app.hub_on_rail);
+    app.handle_key(GameKey::Right);
+    assert!(!app.hub_on_rail, "Right enters the tree");
+    for _ in 0..40 {
+        app.handle_key(GameKey::Left);
+    }
+    assert!(app.hub_on_rail, "Left off the first column is the rail's");
+    assert_eq!(app.mode, Mode::Research);
+}
+
+/// The guard on the Left claim: on the rail the tree claims no arrow, so
+/// Left cannot reach its handler and step the cursor behind the rail's back.
+#[test]
+fn the_tree_claims_no_arrow_while_the_rail_has_focus() {
+    let mut app = test_app(30120);
+    open_hub_screen(&mut app, Mode::Research);
+    if !app.research_graph_view {
+        app.handle_key(GameKey::Char('G'));
+    }
+    app.hub_on_rail = true;
+    for key in [GameKey::Left, GameKey::Right, GameKey::Up, GameKey::Down] {
+        assert!(!app.screen_claims(key), "{key:?} claimed from the rail");
+    }
+    app.hub_on_rail = false;
+    assert!(app.screen_claims(GameKey::Left), "in the tree Left is its");
+}
+
+fn is_research_mode(mode: Mode) -> bool {
+    matches!(
+        mode,
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch
+    )
 }

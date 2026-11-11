@@ -10,6 +10,10 @@ use feral_processes_app_core::TextField;
 #[derive(Clone)]
 pub(super) enum Row {
     Text(String),
+    /// A line of key hints. A popup draws it as it would a `Text`; a hub
+    /// page skips it (`draw_rows_in`), because the hub's key bar already
+    /// carries the page's keys.
+    Keys(String),
     TextColored(String, Color),
     Item {
         text: String,
@@ -382,8 +386,47 @@ pub(super) fn wrapped_colored_rows(text: &str, color: Color, size: PopupSize) ->
 /// last item are what `popup_layout` pins as the footer.
 pub(super) fn push_key_footer(rows: &mut Vec<Row>, chips: &[&str]) {
     rows.push(text_row(""));
-    rows.push(text_row(key_hints(chips)));
+    rows.push(keys_row(chips));
 }
+
+/// A hint line of `chips`, a `Row::Keys`.
+pub(super) fn keys_row(chips: &[&str]) -> Row {
+    Row::Keys(key_hints(chips))
+}
+
+/// `rows` without its key-hint lines and the blank spacer directly above
+/// each, which is what a hub page draws. The dropped lines go to
+/// `record_dropped_keys` for the census that holds them against the bar.
+fn without_key_hints(rows: &[Row]) -> Vec<Row> {
+    let mut kept: Vec<Row> = Vec::with_capacity(rows.len());
+    for row in rows {
+        if let Row::Keys(line) = row {
+            record_dropped_keys(line);
+            if matches!(kept.last(), Some(Row::Text(t)) if t.is_empty()) {
+                kept.pop();
+            }
+        } else {
+            kept.push(row.clone());
+        }
+    }
+    kept
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The key-hint lines `without_key_hints` has dropped on this thread,
+    /// for `base_report::frame`'s census to read back.
+    pub(super) static DROPPED_KEY_HINTS: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+fn record_dropped_keys(line: &str) {
+    DROPPED_KEY_HINTS.with(|d| d.borrow_mut().push(line.to_string()));
+}
+
+#[cfg(not(test))]
+fn record_dropped_keys(_line: &str) {}
 
 /// The first footer line of every basket screen (caravan, market, dispatch);
 /// the second line carries the screen's own actions.
@@ -877,7 +920,8 @@ pub(super) fn draw_rows_in(
     m: &Metrics,
 ) {
     let shown = (rect.h / m.line_height).floor().max(0.0) as usize;
-    let layout = page_rows(rows, shown, 0, rect.h);
+    let rows = without_key_hints(rows);
+    let layout = page_rows(&rows, shown, 0, rect.h);
     draw_layout_rows(
         &layout,
         focused,
@@ -1085,7 +1129,9 @@ pub(super) const fn row_prefix(selected: bool) -> &'static str {
 /// prefix and the icon slot exactly where a row is tightest.
 pub(super) fn row_label_text(row: &Row) -> String {
     match row {
-        Row::Text(s) | Row::TextColored(s, _) | Row::TextEntry { text: s, .. } => s.clone(),
+        Row::Text(s) | Row::Keys(s) | Row::TextColored(s, _) | Row::TextEntry { text: s, .. } => {
+            s.clone()
+        }
         Row::Detail(s, _) => format!("{}{s}", row_prefix(false)),
         Row::Item {
             text,
@@ -1169,7 +1215,7 @@ pub(super) fn draw_row(
         return cy;
     }
     match row {
-        Row::Text(s) => {
+        Row::Text(s) | Row::Keys(s) => {
             painter.ui(s, x + m.pad, cy, m.font_size, TEXT_DIM);
         }
         Row::TextColored(s, color) => {
@@ -1525,7 +1571,7 @@ mod tests {
     /// description torn off the list.
     fn key_footer_rows(rows: &[Row]) -> usize {
         match rows {
-            [.., Row::Text(spacer), Row::Text(hint)]
+            [.., Row::Text(spacer), Row::Keys(hint)]
                 if spacer.is_empty() && hint.contains("Esc ") =>
             {
                 2

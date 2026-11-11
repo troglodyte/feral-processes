@@ -1,7 +1,7 @@
 use super::*;
 
 /// Every `Mode`, as the status-line census below drives them.
-const ALL_MODES: [Mode; 178] = [
+pub(super) const ALL_MODES: [Mode; 178] = [
     Mode::Dossier,
     Mode::TacticalBattle,
     Mode::TacticalRoutine,
@@ -338,6 +338,27 @@ fn a_refusal_sits_between_the_title_and_the_first_row() {
         refusal < first_row,
         "the refusal was drawn below the first option instead of over it"
     );
+}
+
+/// The tree view lives in the hub's content rect, and a refusal costs that
+/// rect a line: with the rail resting on Research the sentence is drawn once,
+/// above the tree's own header, never over it.
+#[test]
+fn a_refusal_over_the_tree_in_the_hub_is_drawn_once_above_the_tree() {
+    let mut app = census_app();
+    let mut fx = Fx::new();
+    app.mode = Mode::Research;
+    app.research_graph_view = true;
+    app.hub_on_rail = true;
+    app.status_line = Some(CENSUS_REFUSAL.to_string());
+    let (_, shapes) = crate::paint::with_painter(|p| draw(&mut app, &mut fx, p, false, false));
+    let drawn = crate::paint::painted_text(&shapes);
+    let count = drawn.iter().filter(|t| t.contains(CENSUS_REFUSAL)).count();
+    assert_eq!(count, 1, "the refusal is painted once");
+    let at = |want: &str| drawn.iter().position(|t| t.contains(want));
+    let refusal = at(CENSUS_REFUSAL).unwrap();
+    let header = at("research project").expect("the tree drew its header");
+    assert!(refusal < header, "the refusal sits above the tree");
 }
 
 /// **The empty program picker, painted.** A fresh run owns no programs,

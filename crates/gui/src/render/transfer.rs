@@ -112,23 +112,23 @@ pub(super) fn body_rows(
         ));
     }
     body.push(text_row(""));
-    body.push(text_row(key_hints(&[
+    body.push(keys_row(&[
         "Up/Down select",
         "Type digits",
         "Backspace erase",
         "- take",
         "+ put",
-    ])));
-    body.push(text_row(key_hints(&[
+    ]));
+    body.push(keys_row(&[
         "Shift+Left/Right to the end",
         "Ctrl+Left/Right halves the gap",
-    ])));
-    body.push(text_row(key_hints(&[
+    ]));
+    body.push(keys_row(&[
         "[A] take everything",
         "[N] clear",
         "Enter transfer",
         "Esc back",
-    ])));
+    ]));
     body
 }
 

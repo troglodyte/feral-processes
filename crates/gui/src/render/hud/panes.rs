@@ -625,7 +625,9 @@ fn crew_rows(d: &PaneData) -> Vec<Row> {
                     text(vec![dim(format!("  {t}"))])
                 }
                 PopupRow::Text(t) => text(vec![dim(format!("  {t}"))]),
-                PopupRow::TextEntry { text: t, .. } => text(vec![dim(format!("  {t}"))]),
+                PopupRow::TextEntry { text: t, .. } | PopupRow::Keys(t) => {
+                    text(vec![dim(format!("  {t}"))])
+                }
             });
         }
     }

@@ -19,9 +19,12 @@ use crate::paint::{Color, Painter, Rect};
 use crate::text::Metrics;
 use feral_processes_engine::{Game, ResearchGraph, ResearchId, ResearchTree};
 
-use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row, key_hints};
+use super::hud;
+use super::popup::RowTargets;
+use super::popup::{DESCRIPTION_INDENT, description_rows_at, draw_row};
 use super::progression::{conversion_rows, flag, material_rows, row_color, unlock_rows};
-use super::{BORDER, PANEL_BG, RED, SELECT_BG, TEXT_DIM};
+use super::{PANEL_BG, SELECT_BG, TEXT_DIM};
+use feral_processes_app_core::PointerHit;
 
 /// Fraction of the window width the detail panel takes.
 const PANEL_FRACTION: f32 = 0.30;
@@ -244,19 +247,26 @@ pub(super) fn columns_for(painter: &Painter, width: f32, size: u16) -> usize {
     (width / advance).floor() as usize
 }
 
-pub(super) fn geometry(
-    screen_w: f32,
-    screen_h: f32,
-    graph: &ResearchGraph,
-    m: &Metrics,
-) -> GraphGeometry {
+/// `area` is where the tree lives — the hub's content rect — and every
+/// measure is taken inside it, never off the window.
+pub(super) fn geometry(area: Rect, graph: &ResearchGraph, m: &Metrics) -> GraphGeometry {
     let header = m.line_height + m.pad;
     let footer = m.line_height + m.pad;
-    let body_y = header;
-    let body_h = (screen_h - header - footer).max(1.0);
-    let split = screen_w * (1.0 - PANEL_FRACTION);
-    let pane = Rect::new(m.pad, body_y, (split - m.pad * 2.0).max(1.0), body_h);
-    let panel = Rect::new(split, body_y, (screen_w - split - m.pad).max(1.0), body_h);
+    let body_y = area.y + header;
+    let body_h = (area.h - header - footer).max(1.0);
+    let split = area.x + area.w * (1.0 - PANEL_FRACTION);
+    let pane = Rect::new(
+        area.x + m.pad,
+        body_y,
+        (split - area.x - m.pad * 2.0).max(1.0),
+        body_h,
+    );
+    let panel = Rect::new(
+        split,
+        body_y,
+        (area.x + area.w - split - m.pad).max(1.0),
+        body_h,
+    );
 
     // A box is sized off the font, not off the pane: a mod that doubles the
     // tree's width scrolls further, and every box stays as legible as the
@@ -403,34 +413,25 @@ const EDGE_DIM: Color = Color::new(0.35, 0.35, 0.42, 1.0);
 /// An edge into the selected node.
 const EDGE_LIVE: Color = Color::new(0.25, 0.85, 0.85, 1.0);
 
-/// The research tree as a flow chart. `draw_research_menu`'s signature
-/// exactly, so the `Mode::Research`/`Mode::RoutineResearch` arms are one
-/// guard and two calls that differ in nothing but `tree`.
+/// The research tree as a flow chart, drawn inside `area` — the hub
+/// content rect — and nowhere else. The hub frame owns the backdrop, the
+/// key bar and the refusal line (it shrinks `area` by the line), so this
+/// draws none of them. `targets` is `Some` when the page has the focus: each
+/// drawn box is then a `Row(i)`, `i` being the index `selected` uses.
 pub(super) fn draw_research_graph(
     game: &mut Game,
     tree: ResearchTree,
     selected: usize,
-    refusal: Option<&str>,
+    area: Rect,
+    targets: Option<RowTargets>,
     painter: &Painter,
     m: &Metrics,
-    dev_unlock: bool,
 ) {
-    let (screen_w, screen_h) = (painter.screen_w(), painter.screen_h());
-    // The graph draws no popup, so it owes its own backdrop — and it has to
-    // come first, or the map behind shows through every box and edge and
-    // nothing on the tree is discernible. `draw_frame_map_cursor`'s shape:
-    // the panel fill across the whole window, then the border.
-    painter.rect(0.0, 0.0, screen_w, screen_h, PANEL_BG);
-    painter.rect_lines(0.0, 0.0, screen_w, screen_h, 2.0, BORDER);
     let currency = game.item_name(&game.research_currency()).to_string();
     let graph = game.research_graph(tree);
     let nodes = game.research_nodes(tree);
     let active = game.active_research_progress();
-    let train_offered = tree == ResearchTree::Base
-        && game
-            .base_ai_view()
-            .is_some_and(|view| view.training_available);
-    let geo = geometry(screen_w, screen_h, &graph, m);
+    let geo = geometry(area, &graph, m);
 
     // The same sentence the list's header carries, through the same
     // derivation — `research_header` — because a player flipping between the
@@ -441,41 +442,15 @@ pub(super) fn draw_research_graph(
     // to read the unfiltered project instead — `research_header`'s own doc.
     painter.ui(
         super::progression::research_header(active.as_ref()),
-        m.pad,
-        m.line_height,
+        area.x + m.pad,
+        area.y + m.line_height,
         m.font_size,
         Color::new(0.25, 0.85, 0.85, 1.0),
     );
-    painter.ui(
-        &{
-            let mut hints = vec![
-                "[G] list",
-                "Arrows move",
-                "Tab tree",
-                "Enter work",
-                "[A] abandon",
-            ];
-            if train_offered {
-                hints.push("[T] train your AI");
-            }
-            if dev_unlock {
-                hints.push("[U] unlock");
-            }
-            hints.push("Esc list");
-            key_hints(&hints)
-        },
-        geo.panel.x,
-        m.line_height,
-        m.small(),
-        TEXT_DIM,
-    );
 
     // An empty tree is a supported install, and a fresh run's routine tree:
-    // the header is drawn, and a refusal, and nothing else.
+    // the header is drawn and nothing else.
     let Some(node) = nodes.get(selected.min(nodes.len().saturating_sub(1))) else {
-        if let Some(refusal) = refusal {
-            draw_refusal(refusal, painter, m);
-        }
         return;
     };
     let selected_id = node.id.clone();
@@ -538,6 +513,22 @@ pub(super) fn draw_research_graph(
             let r = geo.cell_rect(cell.tier, cell.slot, offset);
             if !intersects(&r, &geo.pane) {
                 continue;
+            }
+            if let Some(targets) = targets
+                && let Some(index) = nodes.iter().position(|n| n.id == cell.id)
+            {
+                // Only the part of the box inside the pane is a target, or
+                // a panned box would be clickable across the detail panel.
+                let hit = PointerHit::Row(index);
+                let x0 = r.x.max(geo.pane.x);
+                let y0 = r.y.max(geo.pane.y);
+                let x1 = (r.x + r.w).min(geo.pane.x + geo.pane.w);
+                let y1 = (r.y + r.h).min(geo.pane.y + geo.pane.h);
+                let seen = Rect::new(x0, y0, (x1 - x0).max(0.0), (y1 - y0).max(0.0));
+                if targets.hover == Some(hit) {
+                    p.rect(seen.x, seen.y, seen.w, seen.h, hud::palette::HOVER_BG);
+                }
+                p.target(seen, hit);
             }
             if node.id == selected_id {
                 p.rect(r.x, r.y, r.w, r.h, SELECT_BG);
@@ -624,18 +615,17 @@ pub(super) fn draw_research_graph(
         cy = draw_row(row, geo.panel.x, geo.panel.w, cy, max_y, painter, m);
     }
 
-    // The footer carries the refusal when there is one and the view hint
-    // otherwise: a refusal is transient and the more urgent of the two, and
-    // two strings on one row is how a message gets overdrawn.
-    if let Some(refusal) = refusal {
-        draw_refusal(refusal, painter, m);
-    } else if let Some(hint) = view_hint(geo.hidden(offset)) {
-        painter.ui(hint, m.pad, screen_h - m.pad, m.small(), TEXT_DIM);
+    // The refusal is the hub frame's line above the content, so the footer
+    // here is the view hint alone.
+    if let Some(hint) = view_hint(geo.hidden(offset)) {
+        painter.ui(
+            hint,
+            area.x + m.pad,
+            area.y + area.h - m.pad,
+            m.small(),
+            TEXT_DIM,
+        );
     }
-}
-
-fn draw_refusal(refusal: &str, painter: &Painter, m: &Metrics) {
-    painter.ui(refusal, m.pad, painter.screen_h() - m.pad, m.font_size, RED);
 }
 
 #[cfg(test)]
@@ -645,6 +635,141 @@ mod tests {
     use crate::paint::with_painter;
     use crate::text::ui_metrics;
     use feral_processes_engine::{DifficultyMode, Game, ResearchCell, ResearchGraph};
+
+    /// A window-sized area, for the geometry censuses that predate the hub.
+    const WINDOW: Rect = Rect::new(0.0, 0.0, 1280.0, 720.0);
+
+    /// The hub's content rect in a 1280x720 window — the room the tree
+    /// really has now, about 22 cells narrower than the window.
+    fn hub_area(m: &Metrics) -> Rect {
+        let char_w = with_painter(|p| p.measure_ui_advance("M", m.font_size)).0;
+        super::super::base_report::content_rect_at(1280.0, 720.0, char_w, m)
+    }
+
+    fn discovered_game(seed: u32) -> Game {
+        let mut game = Game::new(seed, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
+        for def in game.research_defs() {
+            game.discover_research(&def.id, feral_processes_engine::DiscoverySource::Study);
+        }
+        game
+    }
+
+    /// Every shape the tree paints lies inside its area (after the clip a
+    /// pane applies), so it cannot draw under the rail or the key bar.
+    #[test]
+    fn tree_draws_only_inside_its_area() {
+        let mut game = discovered_game(940);
+        let m = ui_metrics(720.0);
+        let area = Rect::new(300.0, 60.0, 900.0, 560.0);
+        let (_, shapes) = with_painter(|p| {
+            draw_research_graph(&mut game, ResearchTree::Base, 0, area, None, p, &m)
+        });
+        assert!(!shapes.is_empty());
+        for cs in &shapes {
+            let seen = cs.shape.visual_bounding_rect().intersect(cs.clip_rect);
+            assert!(
+                seen.min.x >= area.x - 1.0
+                    && seen.min.y >= area.y - 1.0
+                    && seen.max.x <= area.x + area.w + 1.0
+                    && seen.max.y <= area.y + area.h + 1.0,
+                "{:?} strays outside {area:?}",
+                cs.shape
+            );
+        }
+    }
+
+    /// At the hub's width the right-most node is selected, drawn whole
+    /// inside the pane, and the footer counts the columns scrolled off.
+    #[test]
+    fn tree_keeps_the_cursor_in_view_in_a_narrow_area() {
+        let mut game = discovered_game(941);
+        let m = ui_metrics(720.0);
+        let area = hub_area(&m);
+        assert!(area.w < 1280.0 - 100.0, "the hub is narrower: {area:?}");
+        let graph = game.research_graph(ResearchTree::Base);
+        let nodes = game.research_nodes(ResearchTree::Base);
+        let last_tier = graph.cells.iter().map(|c| c.tier).max().unwrap();
+        let far = graph.cells.iter().find(|c| c.tier == last_tier).unwrap();
+        let selected = nodes.iter().position(|n| n.id == far.id).unwrap();
+        let geo = geometry(area, &graph, &m);
+        let offset = geo.offset(far.tier, far.slot);
+        let r = geo.cell_rect(far.tier, far.slot, offset);
+        assert!(r.x >= geo.pane.x - 0.01 && r.x + r.w <= geo.pane.x + geo.pane.w + 0.01);
+        assert!(geo.hidden(offset).0 > 0, "columns are hidden on the left");
+        let (_, shapes) = with_painter(|p| {
+            draw_research_graph(&mut game, ResearchTree::Base, selected, area, None, p, &m)
+        });
+        let text = painted_text(&shapes).join("\n");
+        assert!(text.contains(&nodes[selected].name), "{text}");
+        assert!(text.contains("left"), "the footer counts hidden columns");
+    }
+
+    /// The detail panel still has room to read at the hub's width: a label
+    /// fits a box and the panel keeps a usable number of columns.
+    #[test]
+    fn the_longest_shipped_word_fits_a_box_at_the_hub_width() {
+        let m = ui_metrics(720.0);
+        let geo = geometry(hub_area(&m), &shipped_graph(), &m);
+        with_painter(|p| {
+            assert!(geo.label_columns(p, &m) >= 14);
+            assert!(columns_for(p, geo.panel.w - m.pad * 2.0, m.font_size) >= 20);
+        });
+    }
+
+    /// Each drawn box is one pointer target, a `Row` carrying the index the
+    /// cursor uses; with no targets lent there are none.
+    #[test]
+    fn tree_registers_a_target_per_drawn_cell() {
+        let mut game = discovered_game(942);
+        let m = ui_metrics(720.0);
+        let area = hub_area(&m);
+        let nodes = game.research_nodes(ResearchTree::Base);
+        let graph = game.research_graph(ResearchTree::Base);
+        let geo = geometry(area, &graph, &m);
+        let selected = 0;
+        let offset = {
+            let cell = graph.cell(&nodes[selected].id).unwrap();
+            geo.offset(cell.tier, cell.slot)
+        };
+        let drawn: Vec<usize> = graph
+            .cells
+            .iter()
+            .filter(|c| intersects(&geo.cell_rect(c.tier, c.slot, offset), &geo.pane))
+            .map(|c| nodes.iter().position(|n| n.id == c.id).unwrap())
+            .collect();
+        assert!(drawn.len() > 1);
+        let targets = crate::paint::with_targets(|p| {
+            draw_research_graph(
+                &mut game,
+                ResearchTree::Base,
+                selected,
+                area,
+                Some(RowTargets { hover: None }),
+                p,
+                &m,
+            )
+        });
+        let mut hits: Vec<usize> = targets
+            .iter()
+            .filter_map(|(_, hit)| match hit {
+                PointerHit::Row(i) => Some(*i),
+                _ => None,
+            })
+            .collect();
+        hits.sort_unstable();
+        let mut want = drawn;
+        want.sort_unstable();
+        assert_eq!(hits, want);
+        for (rect, _) in &targets {
+            assert!(
+                rect.x >= geo.pane.x - 0.01 && rect.x + rect.w <= geo.pane.x + geo.pane.w + 0.01
+            );
+        }
+        let none = crate::paint::with_targets(|p| {
+            draw_research_graph(&mut game, ResearchTree::Base, selected, area, None, p, &m)
+        });
+        assert!(none.is_empty());
+    }
 
     fn shipped_graph() -> ResearchGraph {
         let mut game = Game::new(930, DifficultyMode::Forgiving, &test_assets_dir())
@@ -668,7 +793,7 @@ mod tests {
     fn the_selected_node_is_always_fully_in_view_at_1280x720() {
         let g = shipped_graph();
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         assert!(geo.cell_w > 0.0 && geo.cell_h > 0.0);
         for cell in &g.cells {
             let offset = geo.offset(cell.tier, cell.slot);
@@ -707,7 +832,7 @@ mod tests {
     fn a_box_against_the_clip_edge_keeps_its_whole_outline() {
         let g = shipped_graph();
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         for cell in &g.cells {
             let offset = geo.offset(cell.tier, cell.slot);
             let r = geo.cell_rect(cell.tier, cell.slot, offset);
@@ -745,7 +870,7 @@ mod tests {
     fn the_view_never_scrolls_past_the_content() {
         let g = shipped_graph();
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         for cell in &g.cells {
             let (x, y) = geo.offset(cell.tier, cell.slot);
             assert!(
@@ -784,7 +909,7 @@ mod tests {
     fn no_two_edges_in_a_gutter_share_a_lane() {
         let g = shipped_graph();
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         let routes = assign_lanes(&g);
         assert_eq!(routes.len(), g.edges.len(), "every edge is routed");
         for gutter in 0..g.tiers.saturating_sub(1) {
@@ -830,7 +955,7 @@ mod tests {
     fn no_edge_runs_under_a_box_it_does_not_join() {
         let g = shipped_graph();
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         let routes = assign_lanes(&g);
         assert!(
             g.edges.iter().any(|(f, t)| {
@@ -897,7 +1022,7 @@ mod tests {
     fn the_longest_shipped_word_fits_a_box_at_1280x720() {
         let g = shipped_graph();
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         with_painter(|p| {
             let columns = geo.label_columns(p, &m);
             assert!(
@@ -923,7 +1048,7 @@ mod tests {
         }
         let g = game.research_graph(ResearchTree::Base);
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         let nodes = game.research_nodes(ResearchTree::Base);
         with_painter(|p| {
             let columns = geo.label_columns(p, &m);
@@ -984,8 +1109,8 @@ mod tests {
         g.tiers = 20;
         g.widest = 30;
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
-        let shipped = geometry(1280.0, 720.0, &shipped_graph(), &m);
+        let geo = geometry(WINDOW, &g, &m);
+        let shipped = geometry(WINDOW, &shipped_graph(), &m);
         assert_eq!(
             (geo.cell_w, geo.cell_h),
             (shipped.cell_w, shipped.cell_h),
@@ -1011,12 +1136,12 @@ mod tests {
     fn an_empty_tree_produces_no_boxes_and_no_nan() {
         let g = ResearchGraph::default();
         let m = ui_metrics(720.0);
-        let geo = geometry(1280.0, 720.0, &g, &m);
+        let geo = geometry(WINDOW, &g, &m);
         assert!(geo.pane.w.is_finite() && geo.panel.w.is_finite());
         assert!(geo.cell_w.is_finite() && geo.cell_h.is_finite());
     }
 
-    use crate::paint::{painted_fills, painted_rect_stroke_count, painted_text};
+    use crate::paint::{painted_rect_stroke_count, painted_text};
     use feral_processes_engine::ResearchState;
 
     /// Every tier is *reachable*, which is what "the shape is visible" means
@@ -1051,7 +1176,7 @@ mod tests {
                 .position(|n| n.name.contains(name))
                 .unwrap_or_else(|| panic!("{name} is a shipped node"));
             let (_, shapes) = with_painter(|p| {
-                draw_research_graph(&mut game, ResearchTree::Base, selected, None, p, &m, false)
+                draw_research_graph(&mut game, ResearchTree::Base, selected, WINDOW, None, p, &m)
             });
             let text = painted_text(&shapes).join("\n");
             assert!(
@@ -1075,7 +1200,7 @@ mod tests {
         }
         let m = ui_metrics(720.0);
         let (_, shapes) = with_painter(|p| {
-            draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m, false)
+            draw_research_graph(&mut game, ResearchTree::Base, 0, WINDOW, None, p, &m)
         });
         let text = painted_text(&shapes).join("\n");
         assert!(
@@ -1100,41 +1225,9 @@ mod tests {
         assert!(hint.contains("3 more below"), "{hint}");
     }
 
-    /// The hint and a refusal share the footer row, so only one may be
-    /// drawn — and the refusal is the one that wins.
-    #[test]
-    fn a_refusal_takes_the_footer_from_the_view_hint() {
-        let mut game = Game::new(934, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        // Every shipped node, not only the visible ones: this census
-        // measures content against a screen with no scroll, and
-        // `research_nodes` narrows to what has been discovered.
-        for def in game.research_defs() {
-            game.discover_research(&def.id, feral_processes_engine::DiscoverySource::Study);
-        }
-        let m = ui_metrics(720.0);
-        let (_, shapes) = with_painter(|p| {
-            draw_research_graph(
-                &mut game,
-                ResearchTree::Base,
-                0,
-                Some("Not enough data."),
-                p,
-                &m,
-                false,
-            )
-        });
-        let text = painted_text(&shapes).join("\n");
-        assert!(text.contains("Not enough data."), "the refusal is drawn");
-        assert!(
-            !text.contains("Arrows —"),
-            "the view hint must not share the row with it"
-        );
-    }
-
     /// The panel describes the node under the highlight with the *same*
     /// derivations the list uses, so the two views cannot word a node
-    /// differently. Driven off `research_nodes()` rather than a hardcoded
-    /// node, because that vec re-sorts by state.
+    /// differently.
     #[test]
     fn the_panel_draws_the_selected_nodes_materials_and_conversions() {
         let mut game = Game::new(933, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -1155,7 +1248,7 @@ mod tests {
         let want_name = node.name.clone();
         let m = ui_metrics(720.0);
         let (_, shapes) = with_painter(|p| {
-            draw_research_graph(&mut game, ResearchTree::Base, picked, None, p, &m, false)
+            draw_research_graph(&mut game, ResearchTree::Base, picked, WINDOW, None, p, &m)
         });
         let text = painted_text(&shapes).join("\n");
         assert!(text.contains(&want_name), "the panel names the node");
@@ -1188,7 +1281,7 @@ mod tests {
         let m = ui_metrics(720.0);
 
         let (_, shapes) = with_painter(|p| {
-            draw_research_graph(&mut game, ResearchTree::Base, blocked, None, p, &m, false)
+            draw_research_graph(&mut game, ResearchTree::Base, blocked, WINDOW, None, p, &m)
         });
         let painted = painted_text(&shapes);
         assert!(
@@ -1210,10 +1303,6 @@ mod tests {
         assert!(
             text.contains(&opening),
             "the panel carries the sentence that would refuse this row ({opening:?})"
-        );
-        assert!(
-            text.contains("[A] abandon"),
-            "and the footer offers the key the list offers: {text:?}"
         );
     }
 
@@ -1244,100 +1333,20 @@ mod tests {
         assert!(locked > 0, "a fresh run has amber nodes to draw");
         let m = ui_metrics(720.0);
         let (_, shapes) = with_painter(|p| {
-            draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m, false)
+            draw_research_graph(
+                &mut game,
+                ResearchTree::Base,
+                0,
+                Rect::new(0.0, 0.0, 1440.0, 900.0),
+                None,
+                p,
+                &m,
+            )
         });
         assert_eq!(
             painted_rect_stroke_count(&shapes, super::super::progression::LOCKED_BY_PREREQ),
             locked,
             "one amber outline per prereq-locked node"
         );
-    }
-
-    /// A refusal raised on this screen has to be drawn on it. The graph
-    /// draws no popup, so it carries the line itself.
-    #[test]
-    fn a_refusal_is_drawn_on_the_graph() {
-        let mut game = Game::new(935, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let m = ui_metrics(720.0);
-        let (_, shapes) = with_painter(|p| {
-            draw_research_graph(
-                &mut game,
-                ResearchTree::Base,
-                0,
-                Some("Requires Zone 3 first."),
-                p,
-                &m,
-                false,
-            )
-        });
-        assert!(
-            painted_text(&shapes)
-                .join("\n")
-                .contains("Requires Zone 3 first."),
-            "a refusal must reach the screen the player typed into"
-        );
-    }
-
-    /// A tree with nothing listed still carries the refusal: the screen opens
-    /// on the graph, and a fresh run's routine tree lists nothing yet.
-    #[test]
-    fn a_refusal_is_drawn_on_an_empty_tree() {
-        let mut game = Game::new(937, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        assert!(
-            game.research_nodes(ResearchTree::Routines).is_empty(),
-            "a fresh run lists no routine nodes"
-        );
-        let m = ui_metrics(720.0);
-        let (_, shapes) = with_painter(|p| {
-            draw_research_graph(
-                &mut game,
-                ResearchTree::Routines,
-                0,
-                Some("No project to abandon."),
-                p,
-                &m,
-                false,
-            )
-        });
-        assert!(
-            painted_text(&shapes)
-                .join("\n")
-                .contains("No project to abandon."),
-            "an empty tree must still say why nothing happened"
-        );
-    }
-
-    /// The graph draws no popup, so it owes its own backdrop — and it has to
-    /// be the *first* fill on the screen, covering the whole window, or the
-    /// map behind shows through and nothing on the tree is discernible. That
-    /// is how this shipped: every box, edge and label was drawn straight onto
-    /// the world.
-    #[test]
-    fn the_graph_paints_a_backdrop_over_the_whole_window_first() {
-        let mut game = Game::new(936, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-        let m = ui_metrics(720.0);
-        let (_, shapes) = with_painter(|p| {
-            draw_research_graph(&mut game, ResearchTree::Base, 0, None, p, &m, false)
-        });
-        let fills = painted_fills(&shapes);
-        let (index, rect) = *fills.first().expect("the screen paints something");
-        assert_eq!(index, 0, "the backdrop must be the very first shape");
-        assert!(
-            rect.x <= 0.01 && rect.y <= 0.01,
-            "the backdrop starts at the window's origin: {rect:?}"
-        );
-        assert!(
-            rect.w >= p_screen_w() - 0.01 && rect.h >= p_screen_h() - 0.01,
-            "the backdrop covers the whole window: {rect:?}"
-        );
-    }
-
-    /// `with_painter`'s window, which the draw reads off the painter rather
-    /// than being handed.
-    fn p_screen_w() -> f32 {
-        1440.0
-    }
-    fn p_screen_h() -> f32 {
-        900.0
     }
 }

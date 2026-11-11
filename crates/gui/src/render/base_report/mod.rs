@@ -62,6 +62,8 @@ pub(super) struct HubFrame {
     screen: usize,
     /// The hub's own keys, as `(key, verb)`.
     extra_keys: Vec<(&'static str, &'static str)>,
+    /// Keys this page has only in some states, beside its fixed ones.
+    page_keys: Vec<(&'static str, &'static str)>,
     /// What the pointer is over, for the frame and its rows to tint.
     hover: Option<PointerHit>,
 }
@@ -78,8 +80,28 @@ impl HubFrame {
             page,
             screen,
             extra_keys: kind.extra_keys(app),
+            page_keys: app.page_keys(),
             hover: app.pointer_hover,
         })
+    }
+
+    /// The key names the bar spells on this page with the cursor in it, for
+    /// the census holding a dropped footer against what the bar still says.
+    #[cfg(test)]
+    pub(super) fn bar_keys(&self) -> Vec<String> {
+        frame::keybar_groups(
+            self.mode,
+            &self.pages,
+            self.page,
+            false,
+            &self.extra_keys,
+            &self.page_keys,
+        )
+        .into_iter()
+        .flatten()
+        .filter(|(_, _, is_key)| *is_key)
+        .map(|(text, _, _)| text)
+        .collect()
     }
 
     /// The rows of the page this frame is drawn for are pointer targets.
@@ -102,6 +124,7 @@ impl HubFrame {
                 page: self.page,
                 screen: self.screen,
                 extra_keys: &self.extra_keys,
+                page_keys: &self.page_keys,
                 hover: self.hover,
             },
             keybar_mode,
@@ -127,6 +150,22 @@ pub(super) fn draw_hub_page(
 ) {
     let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
     draw_rows_in(content, rows, !on_rail, frame.row_targets(), painter, m);
+}
+
+/// A hub page that draws itself: the frame, then `draw` over its content
+/// rect with the same pointer targets a row list has. The research tree is
+/// the one such page.
+pub(super) fn draw_hub_custom(
+    frame: &HubFrame,
+    mode: Mode,
+    on_rail: bool,
+    refusal: Option<&str>,
+    painter: &Painter,
+    m: &Metrics,
+    draw: impl FnOnce(Rect, Option<RowTargets>),
+) {
+    let content = frame.paint(Some(mode), on_rail, refusal, painter, m);
+    draw(content, frame.row_targets());
 }
 
 /// `draw_hub_page` in two columns: the rows the cursor walks on the left,
@@ -310,7 +349,8 @@ pub(in crate::render) mod fit {
             Row::Text(t)
             | Row::TextColored(t, _)
             | Row::Detail(t, _)
-            | Row::TextEntry { text: t, .. } => t,
+            | Row::TextEntry { text: t, .. }
+            | Row::Keys(t) => t,
             Row::Item { text, .. } => text,
         }
     }

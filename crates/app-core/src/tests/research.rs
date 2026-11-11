@@ -253,14 +253,22 @@ fn holding_an_arrow_at_the_edge_of_the_grid_does_nothing() {
     open_command(&mut app, "Research");
     for _ in 0..40 {
         app.handle_key(GameKey::Up);
-        app.handle_key(GameKey::Left);
     }
-    let corner = selected_research_id(&app);
+    let top = selected_research_id(&app);
     for _ in 0..10 {
         app.handle_key(GameKey::Up);
+    }
+    assert_eq!(top, selected_research_id(&app), "the top edge clamps");
+    // The left edge is the rail's door (ADR 0045), not a clamp: the cursor
+    // stays where it was and the focus goes out.
+    for _ in 0..10 {
         app.handle_key(GameKey::Left);
     }
-    assert_eq!(corner, selected_research_id(&app), "the corner clamps");
+    assert_eq!(top, selected_research_id(&app));
+    assert!(
+        app.hub_on_rail,
+        "Left off the first column returns to the rail"
+    );
     assert_eq!(app.mode, Mode::Research, "and the screen stays open");
 }
 
@@ -292,10 +300,10 @@ fn enter_on_an_unreachable_node_refuses_without_filing() {
     assert_eq!(app.mode, Mode::Research, "the screen stays open");
 }
 
-/// The graph draws over the whole hub, so Esc backs out of it to the list
-/// first, and the list's Esc goes to the rail.
+/// Esc in the tree returns to the rail, as Left from its left edge does;
+/// `G` is what switches to the list.
 #[test]
-fn esc_leaves_the_graph_view_before_the_screen() {
+fn esc_in_the_graph_view_returns_to_the_rail() {
     let mut app = test_app(525);
     open_command(&mut app, "Research");
     assert!(
@@ -303,10 +311,8 @@ fn esc_leaves_the_graph_view_before_the_screen() {
         "precondition: the graph is the default"
     );
     app.handle_key(GameKey::Esc);
-    assert!(!app.research_graph_view, "the first Esc leaves the graph");
-    assert!(!app.hub_on_rail);
-    app.handle_key(GameKey::Esc);
-    assert!(app.hub_on_rail, "the list's Esc goes to the rail");
+    assert!(app.hub_on_rail, "Esc goes to the rail");
+    assert!(app.research_graph_view, "and does not switch to the list");
 }
 
 // ---------------------------------------------------------------------------
@@ -553,4 +559,32 @@ fn capital_t_trains_the_ai_from_the_graph_too() {
     assert!(app.research_graph_view);
     app.handle_key(GameKey::Char('T'));
     assert_eq!(app.mode, Mode::PinSubject);
+}
+
+/// The keybar names `T` only while training is on offer, and `U` only with
+/// the dev console on, as the retired list footer did.
+#[test]
+fn page_keys_name_t_and_u_only_when_they_work() {
+    let mut app = app_in_base_with_a_research_node(530);
+    open_command(&mut app, "Research");
+    assert_eq!(app.mode, Mode::Research);
+    assert!(app.page_keys().iter().all(|(k, _)| *k != "T"));
+
+    let mut app = app_with_a_stalled_base_ai(531);
+    open_command(&mut app, "Research");
+    assert!(app.page_keys().contains(&("T", "train your AI")));
+    assert!(app.page_keys().iter().all(|(k, _)| *k != "U"));
+    app.enable_dev_console_for_test();
+    assert!(app.page_keys().iter().any(|(k, _)| *k == "U"));
+}
+
+/// A Deploy category steps back to the categories on Esc, and the key bar is
+/// told so rather than saying the rail.
+#[test]
+fn page_keys_label_esc_back_inside_an_open_deploy_category() {
+    let mut app = test_app(532);
+    app.mode = Mode::Build;
+    assert!(app.page_keys().iter().all(|(k, _)| *k != "Esc"));
+    app.build_category = Some(feral_processes_engine::structures::StructureCategory::Extractor);
+    assert!(app.page_keys().contains(&("Esc", "back")));
 }

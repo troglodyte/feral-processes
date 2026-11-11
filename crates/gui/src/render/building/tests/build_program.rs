@@ -10,7 +10,8 @@ fn row_text(row: &Row) -> &str {
         Row::Text(t)
         | Row::TextColored(t, _)
         | Row::Detail(t, _)
-        | Row::TextEntry { text: t, .. } => t,
+        | Row::TextEntry { text: t, .. }
+        | Row::Keys(t) => t,
         Row::Item { text, .. } => text,
     }
 }
@@ -268,7 +269,7 @@ fn the_picker_still_says_what_each_program_is_doing() {
         "the post is not on the row: {text}"
     );
     assert!(text.contains("idle"), "{text}");
-    for heading in ["Base staff", "In your party"] {
+    for heading in ["Bench", "In your party"] {
         assert!(
             !text.contains(heading),
             "a role heading survived the sort: {text}"
@@ -332,7 +333,8 @@ fn no_picker_row_overflows_its_popup_in_pixels() {
                     Row::Text(t)
                     | Row::TextColored(t, _)
                     | Row::Detail(t, _)
-                    | Row::TextEntry { text: t, .. } => t.clone(),
+                    | Row::TextEntry { text: t, .. }
+                    | Row::Keys(t) => t.clone(),
                     // `draw_row`'s own prefix on an item row.
                     Row::Item { text, .. } => format!("     {text}"),
                 };

@@ -69,14 +69,8 @@ pub(super) fn dispatch_hub_rows(
         )));
     }
 
-    rows.push(text_row(""));
-    rows.push(text_row(dispatch_hub_footer()));
+    push_key_footer(&mut rows, &["[S] send a squad", "Esc back"]);
     rows
-}
-
-/// Split out for the census below, `board_footer`'s reason.
-fn dispatch_hub_footer() -> String {
-    key_hints(&["[S] send a squad", "Esc back"])
 }
 
 /// The squad picker, opened with `[S]` on the hub for one sortie site.

@@ -91,6 +91,21 @@ impl Heading {
         }
     }
 
+    /// The compass letters, for where a word does not fit.
+    pub fn short_label(self) -> &'static str {
+        match self {
+            Heading::North => "N",
+            Heading::South => "S",
+            Heading::East => "E",
+            Heading::West => "W",
+            Heading::NorthEast => "NE",
+            Heading::NorthWest => "NW",
+            Heading::SouthEast => "SE",
+            Heading::SouthWest => "SW",
+            Heading::Here => "here",
+        }
+    }
+
     /// The glyph the compass block draws. Both shipped fonts carry all
     /// eight — verified in `crates/gui/tests/font_rasterization.rs` — and
     /// `Here` takes a dot rather than an arrow, because there is no

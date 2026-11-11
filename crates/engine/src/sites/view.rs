@@ -30,7 +30,11 @@ pub enum SiteSection {
 #[derive(Clone, Debug, PartialEq)]
 pub struct SiteRailEntry {
     pub site: RouteDestinationId,
+    /// The page's title.
     pub name: String,
+    /// What the narrow rail shows: `name` with the heading in compass
+    /// letters.
+    pub rail_name: String,
     pub glyph: char,
     pub section: SiteSection,
     /// The rail's `!`: needs the player's attention.

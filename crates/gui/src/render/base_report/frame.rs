@@ -73,6 +73,7 @@ pub(super) struct FrameView<'a> {
     pub(super) screen: usize,
     /// The hub's own keys, as `(key, verb)`.
     pub(super) extra_keys: &'a [(&'static str, &'static str)],
+    pub(super) page_keys: &'a [(&'static str, &'static str)],
     /// What the pointer is over, from the app's own record of it.
     pub(super) hover: Option<PointerHit>,
 }
@@ -112,7 +113,14 @@ pub(super) fn paint_frame(
     draw_rail(&l.rail, view, on_rail, live, char_w, painter, m);
     draw_title(&l.title, view, live, painter, m);
     if let Some(mode) = keybar_mode {
-        let groups = keybar_groups(mode, view.pages, view.page, on_rail, view.extra_keys);
+        let groups = keybar_groups(
+            mode,
+            view.pages,
+            view.page,
+            on_rail,
+            view.extra_keys,
+            view.page_keys,
+        );
         for (rect, key) in keycap_targets(l.keybar, &groups, painter, m) {
             let hit = PointerHit::Key(key);
             tint_if_hovered(view, hit, rect, painter);
@@ -286,10 +294,11 @@ fn draw_rail(
         // The `!` keeps its two cells whether or not it is drawn, so a long
         // title gives way to it and never the other way round.
         let room = rail.rows.x + rail.rows.w - char_w * 2.0 - title_x;
+        let name = entry.rail_title.as_deref().unwrap_or(&entry.title);
         let title = if entry.name_cut_at_end {
-            cut_at_end_to_fit(painter, &entry.title, m.font_size, room)
+            cut_at_end_to_fit(painter, name, m.font_size, room)
         } else {
-            elided_to_fit(painter, &entry.title, m.font_size, room)
+            elided_to_fit(painter, name, m.font_size, room)
         };
         painter.ui(title, title_x, base, m.font_size, ink);
         if entry.marked {
@@ -410,6 +419,7 @@ pub(super) fn keybar_groups(
     page: usize,
     on_rail: bool,
     extra_keys: &[(&str, &str)],
+    page_keys: &[(&str, &str)],
 ) -> Vec<Vec<hud::strip::Piece>> {
     let cycle = (!extra_keys.is_empty()).then(|| {
         extra_keys
@@ -432,7 +442,7 @@ pub(super) fn keybar_groups(
             Some(nav),
             Some(hub_keys),
             cycle,
-            Some(vec![keycap("Esc", "back")]),
+            Some(vec![keycap("Esc", "close")]),
         ]
         .into_iter()
         .flatten()
@@ -440,20 +450,27 @@ pub(super) fn keybar_groups(
         .map(group)
         .collect();
     }
-    let mut nav = vec![keycap("←", "menu"), keycap("[ ]", "page")];
+    let mut nav = vec![keycap("←", "list"), keycap("[ ]", "page")];
     nav.extend(hub_keys);
-    let acts = screen_keys(mode);
-    [
-        Some(acts),
-        Some(nav),
-        cycle,
-        Some(vec![keycap("Esc", "menu")]),
-    ]
-    .into_iter()
-    .flatten()
-    .filter(|g| !g.is_empty())
-    .map(group)
-    .collect()
+    let mut acts = screen_keys(mode);
+    // An `Esc` among the page's keys replaces the rail's: it steps back
+    // inside the page first.
+    let esc = page_keys
+        .iter()
+        .find(|(key, _)| *key == "Esc")
+        .map_or("list", |(_, verb)| verb);
+    acts.extend(
+        page_keys
+            .iter()
+            .filter(|(key, _)| *key != "Esc")
+            .map(|(key, verb)| keycap(key, verb)),
+    );
+    [Some(acts), Some(nav), cycle, Some(vec![keycap("Esc", esc)])]
+        .into_iter()
+        .flatten()
+        .filter(|g| !g.is_empty())
+        .map(group)
+        .collect()
 }
 
 /// What the cursor does on `mode`'s own rows, for the keybar's first group.
@@ -516,6 +533,15 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
             .iter()
             .map(|(key, verb)| keycap(key, verb))
             .collect(),
+        Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch => {
+            vec![
+                keycap("↑/↓ ←/→", "move"),
+                keycap("Enter", "work"),
+                keycap("G", "list"),
+                keycap("A", "abandon"),
+            ]
+        }
+        Mode::Dispatch => vec![keycap("↑/↓", "select"), keycap("S", "send a squad")],
         Mode::Perks => vec![keycap("a-z", "buy a level")],
         Mode::PhaseKeys => vec![keycap("↑/↓", "read")],
         Mode::DownedPrograms => vec![keycap("↑/↓", "select"), keycap("Enter", "extract")],
@@ -529,9 +555,48 @@ fn screen_keys(mode: Mode) -> Vec<Vec<hud::strip::Piece>> {
         Mode::Transfer => vec![
             keycap("↑/↓", "select"),
             keycap("-/+", "take/put"),
+            keycap("0-9", "amount"),
+            keycap("Bksp", "erase"),
+            keycap("Shift+←/→", "to the end"),
+            keycap("Ctrl+←/→", "halve the gap"),
+            keycap("A", "take all"),
+            keycap("N", "clear"),
             keycap("Enter", "transfer"),
         ],
-        Mode::DepotFilter => vec![keycap("↑/↓", "select"), keycap("+/-", "allow/deny")],
+        Mode::Caravan => vec![
+            keycap("↑/↓", "select"),
+            keycap("←/→", "set a row"),
+            keycap("Shift+←/→", "to the end"),
+            keycap("Ctrl+←/→", "halve the gap"),
+            keycap("A", "all your cargo"),
+            keycap("N", "clear"),
+            keycap("I", "inspect"),
+            keycap("Enter", "trade"),
+        ],
+        Mode::DepotFilter => vec![
+            keycap("↑/↓", "select"),
+            keycap("+/-", "allow/deny"),
+            keycap("A", "allow all"),
+            keycap("D", "deny all"),
+        ],
+        Mode::Build | Mode::BuildProgram | Mode::MachineRecipe | Mode::FarmRecipe => {
+            vec![keycap("↑/↓", "select"), keycap("Enter", "choose")]
+        }
+        Mode::Craft => vec![
+            keycap("↑/↓", "select"),
+            keycap("a-z", "filter"),
+            keycap("Enter", "compile"),
+        ],
+        Mode::RigTool => vec![
+            keycap("↑/↓", "select"),
+            keycap("R", "pull the tool"),
+            keycap("Enter", "fit"),
+        ],
+        Mode::SpliceRig => vec![
+            keycap("↑/↓", "select"),
+            keycap("I", "install"),
+            keycap("R", "remove"),
+        ],
         Mode::GameplayOptions | Mode::GraphicsOptions => {
             vec![keycap("↑/↓", "select"), keycap("Enter", "toggle")]
         }
@@ -623,7 +688,7 @@ mod tests {
             let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
             let page = pages.iter().position(|p| p.offers(mode)).unwrap();
             let text = |on_rail| -> String {
-                keybar_groups(mode, &pages, page, on_rail, &[])
+                keybar_groups(mode, &pages, page, on_rail, &[], &[])
                     .iter()
                     .flatten()
                     .map(|(t, _, _)| t.as_str())
@@ -632,14 +697,14 @@ mod tests {
             let rail = text(true);
             assert!(rail.contains("page"), "{mode:?}: {rail}");
             assert!(rail.contains("open"), "{mode:?}: {rail}");
-            assert!(rail.contains("back"), "{mode:?}: {rail}");
+            assert!(rail.contains("close"), "{mode:?}: {rail}");
             let rows = text(false);
-            assert!(rows.contains("menu"), "{mode:?}: {rows}");
+            assert!(rows.contains("list"), "{mode:?}: {rows}");
         }
     }
 
     fn bar(pages: &[HubPage], page: usize, on_rail: bool) -> Vec<String> {
-        keybar_groups(Mode::BaseStock, pages, page, on_rail, &[])
+        keybar_groups(Mode::BaseStock, pages, page, on_rail, &[], &[])
             .iter()
             .map(|g| g.iter().map(|(t, _, _)| t.as_str()).collect())
             .collect()
@@ -662,7 +727,7 @@ mod tests {
             assert!(!multi.contains("screen"), "{multi}");
         }
         let page_half = bar(&pages, staff, false).join("|");
-        assert!(page_half.contains("[ ] page") && page_half.contains("← menu"));
+        assert!(page_half.contains("[ ] page") && page_half.contains("← list"));
 
         let sectioned = [
             page("Aa", Some("Towns and cities"), false),
@@ -681,7 +746,7 @@ mod tests {
             feral_processes_engine::StructurePage::Inventory,
         )
         .page()];
-        keybar_groups(Mode::Transfer, &pages, 0, on_rail, extra_keys)
+        keybar_groups(Mode::Transfer, &pages, 0, on_rail, extra_keys, &[])
             .iter()
             .flatten()
             .map(|(t, _, _)| t.as_str())
@@ -698,12 +763,59 @@ mod tests {
         }
     }
 
+    /// A key a page has only in some states (`T` train, `U` unlock) is on the
+    /// bar beside the page's fixed keys, and only with the cursor in the page.
+    #[test]
+    fn a_state_dependent_page_key_is_on_the_bar_off_the_rail_only() {
+        let pages = [feral_processes_app_core::structure_page(
+            feral_processes_engine::StructurePage::Inventory,
+        )
+        .page()];
+        let text = |keys: &[(&str, &str)], on_rail| -> String {
+            keybar_groups(Mode::Research, &pages, 0, on_rail, &[], keys)
+                .iter()
+                .flatten()
+                .map(|(t, _, _)| t.as_str())
+                .collect()
+        };
+        let offered = [("T", "train your AI"), ("U", "unlock")];
+        let rows = text(&offered, false);
+        assert!(
+            rows.contains("train your AI") && rows.contains("unlock"),
+            "{rows}"
+        );
+        assert!(!text(&offered, true).contains("train your AI"));
+        assert!(!text(&[], false).contains("train your AI"));
+    }
+
+    /// With a Deploy category open Esc steps back to the categories, and the
+    /// bar says `back`, not `list`.
+    #[test]
+    fn esc_is_labelled_back_where_it_steps_back_inside_the_page() {
+        let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
+        let page = pages.iter().position(|p| p.offers(Mode::Build)).unwrap();
+        let text = |keys: &[(&str, &str)]| -> String {
+            keybar_groups(Mode::Build, &pages, page, false, &[], keys)
+                .iter()
+                .flatten()
+                .map(|(t, _, _)| t.as_str())
+                .collect::<Vec<_>>()
+                .join("")
+        };
+        assert!(text(&[]).contains("Esc list"), "{}", text(&[]));
+        let open = text(&[("Esc", "back")]);
+        assert!(
+            open.contains("Esc back") && !open.contains("Esc list"),
+            "{open}"
+        );
+    }
+
     /// A structure's page reads like the base report's: its own keys, then
     /// the way back to the rail.
     #[test]
     fn a_structure_page_names_its_keys_and_the_way_back_like_any_hub_page() {
         let rows = bar_text(TAB, false);
-        for want in ["take/put", "←", "menu", "page", "work it"] {
+        for want in ["take/put", "←", "list", "page", "work it"] {
             assert!(rows.contains(want), "{want:?} missing: {rows}");
         }
     }
@@ -726,6 +838,7 @@ mod tests {
                     page: 0,
                     screen: 0,
                     extra_keys: TAB,
+                    page_keys: &[],
                     hover: None,
                 },
                 None,
@@ -758,6 +871,7 @@ mod tests {
             }],
             marked,
             name_cut_at_end: false,
+            rail_title: None,
         }
     }
 
@@ -771,6 +885,7 @@ mod tests {
                     page: selected,
                     screen: 0,
                     extra_keys: &[],
+                    page_keys: &[],
                     hover: None,
                 },
                 None,
@@ -875,6 +990,7 @@ mod tests {
                     page: 0,
                     screen: 1,
                     extra_keys: &[],
+                    page_keys: &[],
                     hover: None,
                 },
                 None,
@@ -977,6 +1093,7 @@ mod tests {
                     page: staff,
                     screen: 0,
                     extra_keys: &[],
+                    page_keys: &[],
                     hover,
                 },
                 live.then_some(Mode::StaffWellbeing),
@@ -1035,6 +1152,7 @@ mod tests {
                         page: staff,
                         screen: 0,
                         extra_keys: &[],
+                        page_keys: &[],
                         hover,
                     },
                     Some(Mode::StaffWellbeing),

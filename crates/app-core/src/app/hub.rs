@@ -56,6 +56,9 @@ pub struct HubPage {
     /// A name the rail may cut: the tail gives way ("Outpost north-e…"),
     /// where a fixed title is elided in the middle.
     pub name_cut_at_end: bool,
+    /// What the narrow rail shows in place of `title`, which the page's own
+    /// heading keeps whole.
+    pub rail_title: Option<String>,
 }
 
 /// A fixed hub's table row: what `HubPage` was. Keeps the tables `const`.
@@ -92,6 +95,7 @@ impl FixedPage {
             tabs: self.tabs.to_vec(),
             marked: false,
             name_cut_at_end: false,
+            rail_title: None,
         }
     }
 }
@@ -490,8 +494,7 @@ impl App {
     pub(crate) fn screen_claims(&mut self, key: GameKey) -> bool {
         match key {
             // The tree view draws over the whole hub, so once the cursor is
-            // in it the page keys wait and Esc steps back to the list view
-            // first. Tab still switches trees, which the view redraws in
+            // in it the page keys wait and Esc returns to the rail. Tab still switches trees, which the view redraws in
             // place. From the rail they stay the rail's, or `]` would stop
             // on the Research page.
             GameKey::Esc | GameKey::Char('[' | ']' | '{' | '}')
@@ -525,8 +528,9 @@ impl App {
             // goes to the rail. (Right is the page's on every page, so it
             // needs no claim.)
             GameKey::Left if self.quit_unsaved_pending => true,
-            // The research tree view walks its nodes with every arrow.
-            GameKey::Left if self.research_tree_shown() => true,
+            // The research tree view walks its nodes with every arrow, once
+            // the cursor is in it; from the rail Left stays the rail's.
+            GameKey::Left if self.research_tree_shown() && !self.hub_on_rail => true,
             GameKey::Left if self.on_level_row() => true,
             // The Trader tab's arrows are the basket's: Left lowers the
             // highlighted row, so the rail is Esc away. With no wagon there
@@ -542,7 +546,7 @@ impl App {
         }
     }
 
-    fn research_tree_shown(&self) -> bool {
+    pub(crate) fn research_tree_shown(&self) -> bool {
         self.research_graph_view && is_research_tree(self.mode)
     }
 
@@ -553,7 +557,7 @@ impl App {
 
 /// The four research trees' screens, which share one handler and its tree
 /// view.
-fn is_research_tree(mode: Mode) -> bool {
+pub(super) fn is_research_tree(mode: Mode) -> bool {
     matches!(
         mode,
         Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch

@@ -69,7 +69,8 @@ pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
         pages.push(HubPage {
             key: HubPageKey::Site(entry.site),
             title: entry.name,
-            glyph: Some(entry.glyph),
+            rail_title: Some(entry.rail_name),
+            glyph: (entry.section != SiteSection::Settlements).then_some(entry.glyph),
             section: (last != Some(entry.section)).then(|| section_title(entry.section)),
             tabs: tabs.to_vec(),
             marked: entry.attention,
@@ -85,6 +86,7 @@ pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
         tabs: CARAVAN_TABS.to_vec(),
         marked: game.route_reports().iter().any(|r| r.stalled),
         name_cut_at_end: false,
+        rail_title: None,
     });
     pages.push(HubPage {
         key: HubPageKey::Named(SORTIES_TITLE),
@@ -94,6 +96,7 @@ pub(crate) fn site_pages(app: &App) -> Vec<HubPage> {
         tabs: SORTIE_TABS.to_vec(),
         marked: false,
         name_cut_at_end: false,
+        rail_title: None,
     });
     pages
 }

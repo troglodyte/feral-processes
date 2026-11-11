@@ -16,7 +16,7 @@ pub const YOU_TABS: &[HubTab] = &[
 /// The Roster entry's tabs: every program you own, then the errands that
 /// act on programs.
 pub const ROSTER_TABS: &[HubTab] = &[
-    HubTab::new("Roster", Mode::Companion),
+    HubTab::new("Party", Mode::Companion),
     HubTab::new("Errands", Mode::PartyPrograms),
 ];
 
@@ -78,6 +78,7 @@ impl HubKind for InventoryHub {
                 tabs: MEMBER_TABS.to_vec(),
                 marked: false,
                 name_cut_at_end: true,
+                rail_title: None,
             });
         }
         pages.push(HubPage {
@@ -143,7 +144,15 @@ impl HubKind for InventoryHub {
         if app.hub_on_rail && app.mode == Mode::ManifestIntro {
             vec![("Enter", "open")]
         } else if !app.hub_on_rail && app.mode == Mode::StructureManifest {
-            vec![("W", "work it"), ("U", "upgrade"), ("X", "demolish")]
+            let mut keys = vec![("W", "work it"), ("U", "upgrade"), ("X", "demolish")];
+            let bay_has_room = app
+                .pending_structure_manifest
+                .zip(app.game.as_ref())
+                .is_some_and(|(bay, game)| super::breeding::bay_has_room(game, bay));
+            if bay_has_room {
+                keys.push(("B", "breed"));
+            }
+            keys
         } else {
             Vec::new()
         }

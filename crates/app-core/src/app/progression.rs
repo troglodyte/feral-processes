@@ -1,5 +1,6 @@
 //! The perk and research pickers.
 
+use super::hub::is_research_tree;
 use crate::*;
 use feral_processes_engine::StatOwner;
 use feral_processes_engine::{GraphDir, ResearchState, ResearchTree};
@@ -89,10 +90,10 @@ impl App {
     /// copied one, since the two screens differ only in which tree
     /// `research_nodes`/`research_graph` are asked for.
     pub(crate) fn handle_research_key(&mut self, key: GameKey, tree: ResearchTree) {
-        // The tree view is drawn over everything, so Esc leaves it for the
-        // list before it leaves the screen.
+        // The tree is the page's own cursor, so Esc hands it back to the
+        // rail as Left from its left edge does; `G` is the list's switch.
         if key == GameKey::Esc && self.research_graph_view {
-            self.research_graph_view = false;
+            self.hub_on_rail = true;
             return;
         }
         if key == GameKey::Esc {
@@ -114,12 +115,7 @@ impl App {
         }
         // The graph has no list row to put "Train your AI" on, so it is a mode
         // key there, `G`'s and `A`'s kind. In the list it is a row as well.
-        let train_offered = tree == ResearchTree::Base
-            && self
-                .game
-                .as_ref()
-                .and_then(|g| g.base_ai_view())
-                .is_some_and(|v| v.training_available);
+        let train_offered = self.training_offered(tree);
         if key == GameKey::Char('T') && train_offered {
             self.train_ai();
             return;
@@ -173,6 +169,12 @@ impl App {
                 return;
             };
             let landed = game.research_graph(tree).step(from, dir);
+            // No column to the left: the tree's edge is the rail's door
+            // (ADR 0045), as a list's left edge is.
+            if dir == GraphDir::Left && landed == *from {
+                self.hub_on_rail = true;
+                return;
+            }
             // A scan of 34 entries per keypress. An index map would be a
             // second cursor to keep in step with `research_nodes()`, which
             // re-sorts by state.
@@ -185,6 +187,34 @@ impl App {
             let id = from.clone();
             self.select_research(&id);
         }
+    }
+
+    /// Whether "Train your AI" is on offer on `tree`'s page: only the base
+    /// tree carries it, and only once the AI has stalled.
+    fn training_offered(&self, tree: ResearchTree) -> bool {
+        tree == ResearchTree::Base
+            && self
+                .game
+                .as_ref()
+                .and_then(|g| g.base_ai_view())
+                .is_some_and(|v| v.training_available)
+    }
+
+    /// A page's keys that only exist in some states, as `(key, verb)` for the
+    /// keybar: `T` while training is on offer, `U` with the dev console on,
+    /// and `Esc` when it steps back inside the page instead of to the rail.
+    pub fn page_keys(&self) -> Vec<(&'static str, &'static str)> {
+        let mut keys = Vec::new();
+        if self.mode == Mode::Build && self.build_category.is_some() {
+            keys.push(("Esc", "back"));
+        }
+        if self.mode == Mode::Research && self.training_offered(ResearchTree::Base) {
+            keys.push(("T", "train your AI"));
+        }
+        if is_research_tree(self.mode) && self.dev_console_enabled() {
+            keys.push(("U", "unlock"));
+        }
+        keys
     }
 
     /// Takes on research `id`, then opens the study picker when it needs a

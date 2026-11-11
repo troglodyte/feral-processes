@@ -314,7 +314,7 @@ fn role_heading(role: ProgramRole) -> &'static str {
         ProgramRole::Siphoned => "Held in Power Siphon",
         ProgramRole::BaseAi => "Base AI",
         ProgramRole::Visiting => "Visiting the bay",
-        ProgramRole::Staff => "Base staff",
+        ProgramRole::Staff => "Bench",
     }
 }
 
@@ -343,9 +343,26 @@ pub(super) fn companion_page_rows(pets: &[PetInfo], selected: usize, columns: us
             rows.push(Row::TextColored(role_heading(p.role).to_string(), TEXT));
             run = Some(p.role);
         }
-        rows.extend(companion_rows(p, i == selected, &[], columns));
+        if p.role == ProgramRole::Staff {
+            rows.push(bench_row(p, i == selected));
+        } else {
+            rows.extend(companion_rows(p, i == selected, &[], columns));
+        }
     }
     rows
+}
+
+/// A base-staff program on the roster: one line, no detail. The jobs and
+/// potentials that fill its full rows are on the Status and Staff pages;
+/// here the bench is only for choosing who joins the party.
+fn bench_row(p: &PetInfo, selected: bool) -> Row {
+    let text = format!("{} Lv{}  HP {}/{}", p.name, p.level, p.hp, p.max_hp);
+    let row = if hp_critical(p.hp, p.max_hp) {
+        critical_item_row(text, selected)
+    } else {
+        tier_row(text, selected, p.fusions, p.rarity)
+    };
+    with_icon(row, p.glyph, glyph_color(p.color))
 }
 
 /// One program's rows in the roster's own format — the identity line and its
@@ -796,7 +813,7 @@ mod tests {
             .collect();
         assert_eq!(
             headings,
-            vec!["In your party", "Base staff"],
+            vec!["In your party", "Bench"],
             "one heading per run, and never one per row"
         );
 
@@ -819,6 +836,64 @@ mod tests {
                 "a heading moved the highlight off the program it belongs to: {lit:?}"
             );
         }
+    }
+
+    fn bench_fixture() -> Vec<PetInfo> {
+        let pet = |name: &str, role: ProgramRole| PetInfo {
+            role,
+            party_slot: matches!(role, ProgramRole::InParty).then_some(0),
+            ..test_pet(name, "w|a|m")
+        };
+        vec![
+            pet("aa", ProgramRole::InParty),
+            pet("cc", ProgramRole::Staff),
+            pet("dd", ProgramRole::Staff),
+        ]
+    }
+
+    #[test]
+    fn staff_render_as_one_bench_line_each() {
+        let pets = bench_fixture();
+        let rows = companion_page_rows(&pets, 0, ROW_WRAP_COLUMNS);
+        let headings: Vec<&str> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::TextColored(t, _) => Some(t.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(headings, vec!["In your party", "Bench"]);
+        let bench_at = rows
+            .iter()
+            .position(|r| matches!(r, Row::TextColored(t, _) if t == "Bench"))
+            .unwrap();
+        let bench = &rows[bench_at + 1..];
+        assert_eq!(bench.len(), 2, "one row per bench program, no detail lines");
+        for (row, name) in bench.iter().zip(["cc", "dd"]) {
+            let Row::Item { text, .. } = row else {
+                panic!("a bench row is an item");
+            };
+            assert!(text.contains(name) && text.contains("HP"), "{text}");
+            for detail in ["Assembly:", "Extraction:", "potential"] {
+                assert!(!text.contains(detail), "{text}");
+            }
+        }
+    }
+
+    #[test]
+    fn bench_selection_ordinals_match_owned_pets() {
+        let pets = bench_fixture();
+        let rows = companion_page_rows(&pets, 2, ROW_WRAP_COLUMNS);
+        let items: Vec<(&str, bool)> = rows
+            .iter()
+            .filter_map(|r| match r {
+                Row::Item { text, selected, .. } => Some((text.as_str(), *selected)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(items.len(), pets.len(), "one Item per pet");
+        assert!(items[2].1 && items[2].0.contains("dd"), "{items:?}");
+        assert_eq!(items.iter().filter(|i| i.1).count(), 1);
     }
 
     /// The fifth role, `role_heading`'s own arm — Task 4's census that the
@@ -853,7 +928,7 @@ mod tests {
                 "Under study",
                 "Held in Power Siphon",
                 "Base AI",
-                "Base staff"
+                "Bench"
             ],
             "the pinned run needs its own heading between the other two"
         );
@@ -1393,7 +1468,8 @@ mod tests {
                 Row::Text(t)
                 | Row::TextColored(t, _)
                 | Row::Detail(t, _)
-                | Row::TextEntry { text: t, .. } => t.clone(),
+                | Row::TextEntry { text: t, .. }
+                | Row::Keys(t) => t.clone(),
                 Row::Item { text, .. } => text.clone(),
             })
             .collect::<Vec<_>>()
@@ -1700,7 +1776,8 @@ mod tests {
                     Row::Text(t)
                     | Row::TextColored(t, _)
                     | Row::Detail(t, _)
-                    | Row::TextEntry { text: t, .. } => t,
+                    | Row::TextEntry { text: t, .. }
+                    | Row::Keys(t) => t,
                     Row::Item { text, .. } => text,
                 };
                 let drawn = p.measure_ui_advance(line, m.font_size);

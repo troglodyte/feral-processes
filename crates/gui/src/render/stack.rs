@@ -1061,7 +1061,8 @@ mod tests {
             Row::Text(t)
             | Row::TextColored(t, _)
             | Row::Detail(t, _)
-            | Row::TextEntry { text: t, .. } => t,
+            | Row::TextEntry { text: t, .. }
+            | Row::Keys(t) => t,
             Row::Item { text, .. } => text,
         }
     }

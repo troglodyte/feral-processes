@@ -56,6 +56,9 @@ pub struct HubPage {
     /// A name the rail may cut: the tail gives way ("Outpost north-e…"),
     /// where a fixed title is elided in the middle.
     pub name_cut_at_end: bool,
+    /// What the narrow rail shows in place of `title`, which the page's own
+    /// heading keeps whole.
+    pub rail_title: Option<String>,
 }
 
 /// A fixed hub's table row: what `HubPage` was. Keeps the tables `const`.
@@ -92,6 +95,7 @@ impl FixedPage {
             tabs: self.tabs.to_vec(),
             marked: false,
             name_cut_at_end: false,
+            rail_title: None,
         }
     }
 }

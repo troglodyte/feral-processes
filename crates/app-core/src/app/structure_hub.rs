@@ -180,6 +180,7 @@ pub(crate) fn beside_pages(app: &App, section: &'static str) -> Vec<HubPage> {
             tabs: s.pages.iter().map(|&p| structure_page(p).tabs[0]).collect(),
             marked: false,
             name_cut_at_end: true,
+            rail_title: None,
         })
         .collect()
 }

@@ -1115,3 +1115,15 @@ fn town_pages_draw_no_kind_glyph() {
         .unwrap();
     assert!(outpost.glyph.is_some());
 }
+
+/// The rail takes compass letters, the page title keeps the heading in words.
+#[test]
+fn a_towns_rail_label_is_short_and_its_title_is_whole() {
+    let app = app_with_far_sites(7105);
+    let pages = Hub::Base.kind().pages(&app);
+    let alder = pages
+        .iter()
+        .find(|p| p.title == "Alder south-east")
+        .expect("Alder");
+    assert_eq!(alder.rail_title.as_deref(), Some("Alder SE"));
+}

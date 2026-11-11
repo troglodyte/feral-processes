@@ -78,6 +78,7 @@ impl HubKind for InventoryHub {
                 tabs: MEMBER_TABS.to_vec(),
                 marked: false,
                 name_cut_at_end: true,
+                rail_title: None,
             });
         }
         pages.push(HubPage {

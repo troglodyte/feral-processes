@@ -294,10 +294,11 @@ fn draw_rail(
         // The `!` keeps its two cells whether or not it is drawn, so a long
         // title gives way to it and never the other way round.
         let room = rail.rows.x + rail.rows.w - char_w * 2.0 - title_x;
+        let name = entry.rail_title.as_deref().unwrap_or(&entry.title);
         let title = if entry.name_cut_at_end {
-            cut_at_end_to_fit(painter, &entry.title, m.font_size, room)
+            cut_at_end_to_fit(painter, name, m.font_size, room)
         } else {
-            elided_to_fit(painter, &entry.title, m.font_size, room)
+            elided_to_fit(painter, name, m.font_size, room)
         };
         painter.ui(title, title_x, base, m.font_size, ink);
         if entry.marked {
@@ -870,6 +871,7 @@ mod tests {
             }],
             marked,
             name_cut_at_end: false,
+            rail_title: None,
         }
     }
 

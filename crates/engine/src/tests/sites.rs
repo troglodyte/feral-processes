@@ -491,6 +491,13 @@ fn the_rail_lists_towns_by_name_then_outposts_by_name() {
     let rail = game.site_rail();
 
     let names: Vec<&str> = rail.iter().map(|e| e.name.as_str()).collect();
+    let short: Vec<&str> = rail.iter().map(|e| e.rail_name.as_str()).collect();
+    assert_eq!(
+        &short[..2],
+        ["Alpha E", "Zeta E"],
+        "towns take compass letters"
+    );
+    assert_eq!(&short[2..], ["Outpost east", "Outpost south"]);
     assert_eq!(names[0], "Alpha east");
     assert_eq!(names[1], "Zeta east");
     assert_eq!(&names[2..], ["Outpost east", "Outpost south"]);
@@ -784,18 +791,19 @@ fn town_rail_label_appends_the_heading_from_the_base() {
     use crate::game::sites::town_rail_label;
     assert_eq!(
         town_rail_label("Tally Yard", (10, -10), Some((0, 0))),
-        "Tally Yard north-east"
+        (
+            "Tally Yard north-east".to_string(),
+            "Tally Yard NE".to_string()
+        )
     );
 }
 
 #[test]
 fn town_rail_label_is_bare_at_the_base_or_without_one() {
     use crate::game::sites::town_rail_label;
-    assert_eq!(
-        town_rail_label("Tally Yard", (0, 0), Some((0, 0))),
-        "Tally Yard"
-    );
-    assert_eq!(town_rail_label("Tally Yard", (50, 50), None), "Tally Yard");
+    let bare = ("Tally Yard".to_string(), "Tally Yard".to_string());
+    assert_eq!(town_rail_label("Tally Yard", (0, 0), Some((0, 0))), bare);
+    assert_eq!(town_rail_label("Tally Yard", (50, 50), None), bare);
 }
 
 #[test]

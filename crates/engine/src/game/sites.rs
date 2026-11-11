@@ -16,15 +16,25 @@ use crate::sites::{
 use crate::tuning::{LIVE_SHELF_RESEARCH, OUTPOST_MAX_INTEGRITY, SITE_LOG_CAP};
 use crate::*;
 
-/// A town's rail label: its name, then the way it lies from the base, so two
-/// towns of one name read apart. Bare at the base itself or with no base.
-pub(crate) fn town_rail_label(name: &str, tile: (i32, i32), anchor: Option<(i32, i32)>) -> String {
+/// A town's rail label as `(full, short)`: its name, then the way it lies
+/// from the base, so two towns of one name read apart. The page title keeps
+/// the full heading; the narrow rail takes the compass letters. Bare at the
+/// base itself or with no base.
+pub(crate) fn town_rail_label(
+    name: &str,
+    tile: (i32, i32),
+    anchor: Option<(i32, i32)>,
+) -> (String, String) {
+    let bare = || (name.to_string(), name.to_string());
     let Some((ax, ay)) = anchor else {
-        return name.to_string();
+        return bare();
     };
     match crate::game::stack::heading(tile.0 - ax, tile.1 - ay) {
-        crate::game::stack::Heading::Here => name.to_string(),
-        heading => format!("{name} {}", heading.label()),
+        crate::game::stack::Heading::Here => bare(),
+        heading => (
+            format!("{name} {}", heading.label()),
+            format!("{name} {}", heading.short_label()),
+        ),
     }
 }
 
@@ -160,7 +170,7 @@ impl Game {
         towns.sort();
         let mut rail = Vec::new();
         for (name, key, tile) in towns {
-            let name = town_rail_label(&name, tile, anchor);
+            let (name, rail_name) = town_rail_label(&name, tile, anchor);
             let site = RouteDestinationId::Settlement(key);
             let attention = self.standing_band(key) == Standing::Hostile
                 || self.gift_available_in(key) == Some(0)
@@ -168,6 +178,7 @@ impl Game {
             let glyph = self.settlement_kind(key).map_or('s', |kind| kind.glyph());
             rail.push(SiteRailEntry {
                 site,
+                rail_name,
                 name,
                 glyph,
                 section: SiteSection::Settlements,
@@ -197,6 +208,7 @@ impl Game {
             let site = RouteDestinationId::Outpost(tile);
             rail.push(SiteRailEntry {
                 site,
+                rail_name: name.clone(),
                 name,
                 glyph: glyph.unwrap_or('o'),
                 section: SiteSection::Outposts,

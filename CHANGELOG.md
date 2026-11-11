@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.58
+
+**The research tree now draws inside the `b` page instead of over it, and Esc, or Left from the tree's left edge, takes you back to the page list.** Before, the tree was drawn over the report. Now it sits inside the page like every other tab, and it takes no keys while the page list has focus.
+
+**Town labels on the rail show which way each town lies from your base, for example "Tally Yard SE".** The page title still spells the direction out in words.
+
+**The Roster's first tab is now called Party and shows your party in full, with the programs you could bring along listed below as a short bench, one line each.** Your base staff in full detail live on `b`'s Staff page, so the Roster no longer repeats them.
+
+**Hub pages no longer draw their own key footer; the key bar along the bottom names every key that works.** That now includes `T` to train and `U` to unlock in Research, `S` to send and `B` to breed. The bar calls the page list "list" ("← list", "Esc list"). Sorties and a bay's Info tab used to draw a footer of their own as well, and with a Deploy category open the bar now says Esc goes back.
+
 ## 0.21.57
 
 **The base report (`b`) now holds everything about your base, your jobs and the places you trade with, grouped under BASE, JOBS, TOWNS, OUTPOSTS and TRAFFIC.** Pages that used to be separate menus are now tabs of one page. Build holds Deploy, Build orders, Dig and Floor. Research holds Projects, Routines, Affixes, Weapons and Study. Production, Stock and Staff gain the pages they used to launch. A new Contracts page shows the contracts you hold beside the Board, and a town job you hold is the same contract on that town's Jobs tab. Abandon it from either place and it is gone from both. The sites list is gone: towns, outposts, caravans and sorties are pages of `b`, which opens anywhere, and `w` opens it on the site beside you. If the page you are on disappears, for example a contract delivered or an outpost lost, you land on the next page in its section.

@@ -562,3 +562,20 @@ fn capital_t_trains_the_ai_from_the_graph_too() {
     app.handle_key(GameKey::Char('T'));
     assert_eq!(app.mode, Mode::PinSubject);
 }
+
+/// The keybar names `T` only while training is on offer, and `U` only with
+/// the dev console on, as the retired list footer did.
+#[test]
+fn research_page_keys_name_t_and_u_only_when_they_work() {
+    let mut app = app_in_base_with_a_research_node(530);
+    open_command(&mut app, "Research");
+    assert_eq!(app.mode, Mode::Research);
+    assert!(app.research_page_keys().iter().all(|(k, _)| *k != "T"));
+
+    let mut app = app_with_a_stalled_base_ai(531);
+    open_command(&mut app, "Research");
+    assert!(app.research_page_keys().contains(&("T", "train your AI")));
+    assert!(app.research_page_keys().iter().all(|(k, _)| *k != "U"));
+    app.enable_dev_console_for_test();
+    assert!(app.research_page_keys().iter().any(|(k, _)| *k == "U"));
+}

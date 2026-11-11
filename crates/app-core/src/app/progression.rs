@@ -1,5 +1,6 @@
 //! The perk and research pickers.
 
+use super::hub::is_research_tree;
 use crate::*;
 use feral_processes_engine::StatOwner;
 use feral_processes_engine::{GraphDir, ResearchState, ResearchTree};
@@ -114,12 +115,7 @@ impl App {
         }
         // The graph has no list row to put "Train your AI" on, so it is a mode
         // key there, `G`'s and `A`'s kind. In the list it is a row as well.
-        let train_offered = tree == ResearchTree::Base
-            && self
-                .game
-                .as_ref()
-                .and_then(|g| g.base_ai_view())
-                .is_some_and(|v| v.training_available);
+        let train_offered = self.training_offered(tree);
         if key == GameKey::Char('T') && train_offered {
             self.train_ai();
             return;
@@ -191,6 +187,31 @@ impl App {
             let id = from.clone();
             self.select_research(&id);
         }
+    }
+
+    /// Whether "Train your AI" is on offer on `tree`'s page: only the base
+    /// tree carries it, and only once the AI has stalled.
+    fn training_offered(&self, tree: ResearchTree) -> bool {
+        tree == ResearchTree::Base
+            && self
+                .game
+                .as_ref()
+                .and_then(|g| g.base_ai_view())
+                .is_some_and(|v| v.training_available)
+    }
+
+    /// The research page's keys that only exist in some states, as
+    /// `(key, verb)` for the keybar: `T` while training is on offer, `U`
+    /// with the dev console on.
+    pub fn research_page_keys(&self) -> Vec<(&'static str, &'static str)> {
+        let mut keys = Vec::new();
+        if self.mode == Mode::Research && self.training_offered(ResearchTree::Base) {
+            keys.push(("T", "train your AI"));
+        }
+        if is_research_tree(self.mode) && self.dev_console_enabled() {
+            keys.push(("U", "unlock"));
+        }
+        keys
     }
 
     /// Takes on research `id`, then opens the study picker when it needs a

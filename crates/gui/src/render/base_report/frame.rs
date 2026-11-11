@@ -73,6 +73,7 @@ pub(super) struct FrameView<'a> {
     pub(super) screen: usize,
     /// The hub's own keys, as `(key, verb)`.
     pub(super) extra_keys: &'a [(&'static str, &'static str)],
+    pub(super) page_keys: &'a [(&'static str, &'static str)],
     /// What the pointer is over, from the app's own record of it.
     pub(super) hover: Option<PointerHit>,
 }
@@ -112,7 +113,14 @@ pub(super) fn paint_frame(
     draw_rail(&l.rail, view, on_rail, live, char_w, painter, m);
     draw_title(&l.title, view, live, painter, m);
     if let Some(mode) = keybar_mode {
-        let groups = keybar_groups(mode, view.pages, view.page, on_rail, view.extra_keys);
+        let groups = keybar_groups(
+            mode,
+            view.pages,
+            view.page,
+            on_rail,
+            view.extra_keys,
+            view.page_keys,
+        );
         for (rect, key) in keycap_targets(l.keybar, &groups, painter, m) {
             let hit = PointerHit::Key(key);
             tint_if_hovered(view, hit, rect, painter);
@@ -410,6 +418,7 @@ pub(super) fn keybar_groups(
     page: usize,
     on_rail: bool,
     extra_keys: &[(&str, &str)],
+    page_keys: &[(&str, &str)],
 ) -> Vec<Vec<hud::strip::Piece>> {
     let cycle = (!extra_keys.is_empty()).then(|| {
         extra_keys
@@ -442,7 +451,8 @@ pub(super) fn keybar_groups(
     }
     let mut nav = vec![keycap("←", "list"), keycap("[ ]", "page")];
     nav.extend(hub_keys);
-    let acts = screen_keys(mode);
+    let mut acts = screen_keys(mode);
+    acts.extend(page_keys.iter().map(|(key, verb)| keycap(key, verb)));
     [
         Some(acts),
         Some(nav),
@@ -670,7 +680,7 @@ mod tests {
             let pages: Vec<HubPage> = BASE_REPORT_PAGES.iter().map(|p| p.page()).collect();
             let page = pages.iter().position(|p| p.offers(mode)).unwrap();
             let text = |on_rail| -> String {
-                keybar_groups(mode, &pages, page, on_rail, &[])
+                keybar_groups(mode, &pages, page, on_rail, &[], &[])
                     .iter()
                     .flatten()
                     .map(|(t, _, _)| t.as_str())
@@ -686,7 +696,7 @@ mod tests {
     }
 
     fn bar(pages: &[HubPage], page: usize, on_rail: bool) -> Vec<String> {
-        keybar_groups(Mode::BaseStock, pages, page, on_rail, &[])
+        keybar_groups(Mode::BaseStock, pages, page, on_rail, &[], &[])
             .iter()
             .map(|g| g.iter().map(|(t, _, _)| t.as_str()).collect())
             .collect()
@@ -728,7 +738,7 @@ mod tests {
             feral_processes_engine::StructurePage::Inventory,
         )
         .page()];
-        keybar_groups(Mode::Transfer, &pages, 0, on_rail, extra_keys)
+        keybar_groups(Mode::Transfer, &pages, 0, on_rail, extra_keys, &[])
             .iter()
             .flatten()
             .map(|(t, _, _)| t.as_str())
@@ -743,6 +753,31 @@ mod tests {
             assert!(bar_text(TAB, on_rail).contains("work it"));
             assert!(!bar_text(&[], on_rail).contains("work it"));
         }
+    }
+
+    /// A key a page has only in some states (`T` train, `U` unlock) is on the
+    /// bar beside the page's fixed keys, and only with the cursor in the page.
+    #[test]
+    fn a_state_dependent_page_key_is_on_the_bar_off_the_rail_only() {
+        let pages = [feral_processes_app_core::structure_page(
+            feral_processes_engine::StructurePage::Inventory,
+        )
+        .page()];
+        let text = |keys: &[(&str, &str)], on_rail| -> String {
+            keybar_groups(Mode::Research, &pages, 0, on_rail, &[], keys)
+                .iter()
+                .flatten()
+                .map(|(t, _, _)| t.as_str())
+                .collect()
+        };
+        let offered = [("T", "train your AI"), ("U", "unlock")];
+        let rows = text(&offered, false);
+        assert!(
+            rows.contains("train your AI") && rows.contains("unlock"),
+            "{rows}"
+        );
+        assert!(!text(&offered, true).contains("train your AI"));
+        assert!(!text(&[], false).contains("train your AI"));
     }
 
     /// A structure's page reads like the base report's: its own keys, then
@@ -773,6 +808,7 @@ mod tests {
                     page: 0,
                     screen: 0,
                     extra_keys: TAB,
+                    page_keys: &[],
                     hover: None,
                 },
                 None,
@@ -818,6 +854,7 @@ mod tests {
                     page: selected,
                     screen: 0,
                     extra_keys: &[],
+                    page_keys: &[],
                     hover: None,
                 },
                 None,
@@ -922,6 +959,7 @@ mod tests {
                     page: 0,
                     screen: 1,
                     extra_keys: &[],
+                    page_keys: &[],
                     hover: None,
                 },
                 None,
@@ -1024,6 +1062,7 @@ mod tests {
                     page: staff,
                     screen: 0,
                     extra_keys: &[],
+                    page_keys: &[],
                     hover,
                 },
                 live.then_some(Mode::StaffWellbeing),
@@ -1082,6 +1121,7 @@ mod tests {
                         page: staff,
                         screen: 0,
                         extra_keys: &[],
+                        page_keys: &[],
                         hover,
                     },
                     Some(Mode::StaffWellbeing),

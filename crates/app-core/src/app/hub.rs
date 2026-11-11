@@ -554,7 +554,7 @@ impl App {
 
 /// The four research trees' screens, which share one handler and its tree
 /// view.
-fn is_research_tree(mode: Mode) -> bool {
+pub(super) fn is_research_tree(mode: Mode) -> bool {
     matches!(
         mode,
         Mode::Research | Mode::RoutineResearch | Mode::AffixResearch | Mode::WeaponResearch

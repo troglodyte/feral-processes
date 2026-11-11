@@ -62,6 +62,8 @@ pub(super) struct HubFrame {
     screen: usize,
     /// The hub's own keys, as `(key, verb)`.
     extra_keys: Vec<(&'static str, &'static str)>,
+    /// Keys this page has only in some states, beside its fixed ones.
+    page_keys: Vec<(&'static str, &'static str)>,
     /// What the pointer is over, for the frame and its rows to tint.
     hover: Option<PointerHit>,
 }
@@ -78,6 +80,7 @@ impl HubFrame {
             page,
             screen,
             extra_keys: kind.extra_keys(app),
+            page_keys: app.research_page_keys(),
             hover: app.pointer_hover,
         })
     }
@@ -86,12 +89,19 @@ impl HubFrame {
     /// the census holding a dropped footer against what the bar still says.
     #[cfg(test)]
     pub(super) fn bar_keys(&self) -> Vec<String> {
-        frame::keybar_groups(self.mode, &self.pages, self.page, false, &self.extra_keys)
-            .into_iter()
-            .flatten()
-            .filter(|(_, _, is_key)| *is_key)
-            .map(|(text, _, _)| text)
-            .collect()
+        frame::keybar_groups(
+            self.mode,
+            &self.pages,
+            self.page,
+            false,
+            &self.extra_keys,
+            &self.page_keys,
+        )
+        .into_iter()
+        .flatten()
+        .filter(|(_, _, is_key)| *is_key)
+        .map(|(text, _, _)| text)
+        .collect()
     }
 
     /// The rows of the page this frame is drawn for are pointer targets.
@@ -114,6 +124,7 @@ impl HubFrame {
                 page: self.page,
                 screen: self.screen,
                 extra_keys: &self.extra_keys,
+                page_keys: &self.page_keys,
                 hover: self.hover,
             },
             keybar_mode,

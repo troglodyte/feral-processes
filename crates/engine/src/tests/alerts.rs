@@ -353,9 +353,9 @@ fn a_clogged_machine_that_then_goes_dark_gets_a_second_alert() {
     assert!(kinds.contains(&AlertKind::MachineStalled(MachineStatus::Unpowered)));
 }
 
-/// Resolving a stall does not remove its alert — only a dismiss does.
+/// Resolving a stall removes its row: the board lists what is still wrong.
 #[test]
-fn a_resolved_stall_leaves_its_alert_on_the_board() {
+fn a_resolved_stall_leaves_the_board() {
     let dir = alert_power_assets("alerts_clog_resolves");
     let mut game = Game::new(19103, DifficultyMode::Forgiving, &dir).unwrap();
     stand_in_base(&mut game);
@@ -370,7 +370,6 @@ fn a_resolved_stall_leaves_its_alert_on_the_board() {
         "the fixture has to actually clog, or the rest of this proves nothing"
     );
     assert_eq!(game.alerts().len(), 1);
-    let count_before = game.alerts()[0].count;
 
     // `take_everything_adjacent` (`Game::transfer_items_at`) ticks once itself
     // on a non-empty take, and `ALERT_NODE`'s one-tick, no-`level` cycle
@@ -384,20 +383,88 @@ fn a_resolved_stall_leaves_its_alert_on_the_board() {
         Some(MachineStatus::Running),
         "the fixture has to actually resume, or this proves nothing"
     );
-    assert_eq!(
-        game.alerts().len(),
-        1,
-        "resolving is not the same as dismissing"
+    assert!(
+        game.alerts().is_empty(),
+        "a running machine has no stall row"
     );
-    assert_eq!(
-        game.alerts()[0].kind,
-        AlertKind::MachineStalled(MachineStatus::Clogged)
+}
+
+fn set_status(
+    status: &mut MachineStatus,
+    next: MachineStatus,
+    board: &mut crate::alerts::AlertBoard,
+) {
+    let mut telemetry = crate::resources::BattleTelemetry::default();
+    crate::systems::set_machine_status(
+        status,
+        next,
+        "Extractor",
+        board,
+        crate::systems::StallSite {
+            telemetry: &mut telemetry,
+            tick: 0,
+            machine: (3, 4),
+            kind: "extractor",
+        },
     );
+}
+
+/// A posted worker off delivering its output is the machine working, not a
+/// blocker: the produce-then-haul loop flipped Running and Unstaffed every
+/// cycle, and was 80-92% of every post in real saves.
+#[test]
+fn a_worker_away_from_its_machine_posts_nothing() {
+    let mut board = crate::alerts::AlertBoard::default();
+    let mut status = MachineStatus::Running;
+    for _ in 0..3 {
+        set_status(&mut status, MachineStatus::Unstaffed, &mut board);
+        set_status(&mut status, MachineStatus::Running, &mut board);
+    }
+    set_status(&mut status, MachineStatus::Unstaffed, &mut board);
     assert_eq!(
-        game.alerts()[0].count,
-        count_before,
-        "resuming does not touch the existing alert's count"
+        status,
+        MachineStatus::Unstaffed,
+        "the status itself still moves"
     );
+    assert!(board.alerts.is_empty(), "{:?}", board.alerts);
+}
+
+/// The trip away is not a resolution: a starved machine whose worker steps
+/// off keeps its row until the machine actually runs.
+#[test]
+fn a_worker_stepping_away_keeps_the_stall_row() {
+    let mut board = crate::alerts::AlertBoard::default();
+    let mut status = MachineStatus::Running;
+    set_status(&mut status, MachineStatus::Starved, &mut board);
+    set_status(&mut status, MachineStatus::Unstaffed, &mut board);
+    assert_eq!(board.alerts.len(), 1);
+    set_status(&mut status, MachineStatus::Running, &mut board);
+    assert!(board.alerts.is_empty());
+}
+
+/// Only this machine's stall rows go: another machine's, and another kind
+/// that happens to share the subject string, stay.
+#[test]
+fn resuming_clears_only_its_own_machine() {
+    let mut board = crate::alerts::AlertBoard::default();
+    crate::alerts::post(
+        &mut board,
+        AlertKind::MachineStalled(MachineStatus::Starved),
+        "extractor@9,9",
+        "other",
+    );
+    crate::alerts::post(
+        &mut board,
+        AlertKind::ProgramDowned,
+        "extractor@3,4",
+        "downed",
+    );
+    let mut status = MachineStatus::Running;
+    set_status(&mut status, MachineStatus::Clogged, &mut board);
+    set_status(&mut status, MachineStatus::Unpowered, &mut board);
+    set_status(&mut status, MachineStatus::Idle, &mut board);
+    let left: Vec<_> = board.alerts.iter().map(|a| a.text.as_str()).collect();
+    assert_eq!(left, vec!["downed", "other"]);
 }
 
 // ---------------------------------------------------------------------------

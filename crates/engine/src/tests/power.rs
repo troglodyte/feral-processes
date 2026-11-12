@@ -753,8 +753,8 @@ fn going_dark_and_coming_back_post_once_and_never_log() {
 
     assert_eq!(
         stall_alerts(&game, MachineStatus::Unpowered),
-        1,
-        "and standing up supply must not re-announce the state it left"
+        0,
+        "standing up supply takes the dark row off rather than re-announcing it"
     );
     assert_eq!(status_of(&game, node), Some(MachineStatus::Idle));
     // A busy base changes machine status thousands of times a session; the

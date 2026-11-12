@@ -252,7 +252,8 @@ One sentence each, the rule alone. The trap is in the `seams` skill; the argumen
   machine's status. **A wait behind a body is not a stranding until
   `BODY_WAIT_GRACE_TICKS`** — both writes ask `hauling::cut_off` first.
 - **`set_machine_status` is the one place a stall is announced, and it
-  posts to the alert board only on transition — never to the message log.**
+  posts to the alert board only on transition — never to the message log;
+  `Unstaffed` never posts, and `Running`/`Idle` clear the machine's rows.**
   Three callers, so "entering a state is news, staying in it is not" cannot
   lapse in one of them.
 - **A production cycle is never logged** — not an extraction, a fizzle or a

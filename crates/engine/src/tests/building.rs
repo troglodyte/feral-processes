@@ -2236,14 +2236,6 @@ fn a_downed_program_at_a_bay(game: &mut Game, wound: i32) -> Entity {
     program
 }
 
-fn recovery_lines(game: &Game) -> Vec<String> {
-    game.message_log(200)
-        .into_iter()
-        .filter(|e| e.text.contains("back on its feet"))
-        .map(|e| e.text)
-        .collect()
-}
-
 #[test]
 fn a_bay_repairs_a_downed_program_and_stands_it_back_up() {
     let mut game = Game::new(3501, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
@@ -2291,24 +2283,23 @@ fn a_downed_program_out_of_reach_of_the_bay_is_not_repaired() {
     assert!(game.world.get::<Downed>(program).is_some());
 }
 
-/// The recovery is news once. `set_machine_status`' rule: entering a state
-/// is news, staying in it is not — and a Bay ticking every beat is exactly
-/// where a per-tick line would go unnoticed until a player read the log.
+/// The recovery is silent: going down is the news, and a recovery line
+/// paired every "breaks off for repairs" in the log.
 #[test]
-fn the_recovery_is_announced_once_and_not_every_tick() {
+fn the_recovery_stands_the_program_up_without_a_log_line() {
     let mut game = Game::new(3503, DifficultyMode::Forgiving, &test_assets_dir()).unwrap();
-    a_downed_program_at_a_bay(&mut game, 3);
+    let program = a_downed_program_at_a_bay(&mut game, 3);
+    let before = game.message_log(200).len();
 
     for _ in 0..30 {
         game.run_repair_bays();
     }
 
-    assert_eq!(
-        recovery_lines(&game).len(),
-        1,
-        "expected exactly one recovery line: {:?}",
-        recovery_lines(&game)
+    assert!(
+        game.world.get::<Downed>(program).is_none(),
+        "the fixture has to actually recover, or this proves nothing"
     );
+    assert_eq!(game.message_log(200).len(), before);
 }
 
 /// Everything the map would draw a recovery mark on, as `(is_structure,

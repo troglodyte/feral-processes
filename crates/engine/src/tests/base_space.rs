@@ -4421,6 +4421,77 @@ fn a_dry_apply_site_announces_once_across_several_ticks() {
     );
 }
 
+fn finish_dry_lines(game: &Game) -> Vec<String> {
+    game.message_log(400)
+        .into_iter()
+        .filter(|m| m.text.contains("can't finish"))
+        .map(|m| m.text)
+        .collect()
+}
+
+/// A box of dry finishes is one drought, not one line per cell: a loaded
+/// save with eleven marked cells said eleven lines on its first tick.
+#[test]
+fn a_box_of_dry_finishes_says_one_line_with_the_count() {
+    let (mut game, _staff) = base_with_a_crew(3277, 1);
+    let far = (WALL.0, WALL.1 + 2);
+    for y in WALL.1..=far.1 {
+        game.world
+            .resource_mut::<base_grid::BaseGrid>()
+            .lay_floor(WALL.0, y);
+    }
+    let apply = FinishOrder::Apply(FloorId::from("cobalt_carpet"));
+    game.toggle_mark_box(WALL, far, Some(&apply));
+
+    pass(&mut game, 80);
+
+    let lines = finish_dry_lines(&game);
+    assert_eq!(lines.len(), 1, "{lines:#?}");
+    assert!(lines[0].contains("3 floor tiles"), "{lines:#?}");
+}
+
+/// Substrate that shows up and is gone again before the crew spends it
+/// lets one cell's latch clear and set again. While the rest of the box is
+/// still waiting, that is the same drought and says nothing new.
+#[test]
+fn a_cell_flickering_out_of_a_drought_does_not_re_announce_it() {
+    let (mut game, _staff) = base_with_a_crew(3278, 1);
+    let far = (WALL.0, WALL.1 + 2);
+    for y in WALL.1..=far.1 {
+        game.world
+            .resource_mut::<base_grid::BaseGrid>()
+            .lay_floor(WALL.0, y);
+    }
+    let apply = FinishOrder::Apply(FloorId::from("cobalt_carpet"));
+    game.toggle_mark_box(WALL, far, Some(&apply));
+    pass(&mut game, 80);
+
+    give(
+        &mut game,
+        &ItemId::from(ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST,
+    );
+    pass(&mut game, 1);
+    let player = game.player_entity();
+    let taken = game.world.get_mut::<Inventory>(player).unwrap().take(
+        ItemId::from(ids::BLANK_SUBSTRATE),
+        crate::tuning::FLOOR_FINISH_COST,
+    );
+    assert_eq!(
+        taken,
+        crate::tuning::FLOOR_FINISH_COST,
+        "the substrate has to still be there to take, or this proves nothing"
+    );
+    pass(&mut game, 80);
+
+    assert_eq!(
+        finish_dry_lines(&game).len(),
+        1,
+        "{:#?}",
+        finish_dry_lines(&game)
+    );
+}
+
 /// A `Strip` site needs no substrate at all, so it must be worked through
 /// the full pipeline even when the base holds none anywhere.
 #[test]

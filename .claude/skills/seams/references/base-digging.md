@@ -191,7 +191,12 @@
   and the Factory that make the fragments and substrate (dig wants sit last in
   `base_wants`, so a cut never outranks production). `Game::drop_dry_dig_wants`
   is the one writer of `DigSite::announced_dry`, both the set and the
-  clear, and it owns both wordings (`DigDryReason::Tile`, `Finish`); neither
+  clear, and it owns both wordings (`DigDryReason::Tile`, `Finish`). The
+  line is said per *drought*, not per cell: only when no wanted site short of
+  the same item was already latched, naming the cell if there is one and
+  counting them if there are more. A per-cell line said a marked box's worth
+  at once, and said a cell again whenever stock flickered past its claim
+  (0.21.59). Neither
   may borrow the *cut off* wording (`CUT_OFF`'s rule — two stalls sharing a
   needle is two tests each satisfied by the other's bug).
   **The trap that moved it out of `dig_wants`**: a budget claimed there

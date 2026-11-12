@@ -136,6 +136,15 @@ pub fn dismiss(board: &mut AlertBoard, index: usize) {
     }
 }
 
+/// Removes every machine-stall row for `subject`: the machine runs again, so
+/// what the board said about it is no longer true. Other kinds sharing the
+/// subject string are left alone.
+pub fn clear_stalls(board: &mut AlertBoard, subject: &str) {
+    board.alerts.retain(|alert| {
+        !(matches!(alert.kind, AlertKind::MachineStalled(_)) && alert.subject == subject)
+    });
+}
+
 /// Drops the oldest entries until the board is at or under
 /// `ALERT_BOARD_CAP`. `post` and `Game::load` both call this — load, so a
 /// hand-edited save cannot exceed the cap.

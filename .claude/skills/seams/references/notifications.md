@@ -111,4 +111,9 @@
   the `ProgramId` at the top. The depots-full latch is `AlertBoard::
   depots_full` rather than a second `Resource`, because a new resource shifts
   query iteration order, and it is not saved, so it resets on load.
-  Resolving a condition never removes its alert. Only the player dismisses.
+  A machine stall is the one exception to "only the player dismisses":
+  `Running` or `Idle` takes that machine's stall rows off
+  (`alerts::clear_stalls`), and `Unstaffed` neither posts nor clears. A
+  worker off hauling flips a machine to `Unstaffed` and back every cycle,
+  which was 80–92% of all posts in real saves (0.21.59). Its actionable
+  reading is `Stranded`. Every other kind stays until dismissed.

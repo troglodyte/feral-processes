@@ -1036,7 +1036,8 @@ pub(crate) struct StallSite<'a> {
 /// **The board, never the message log.** A busy base changes machine status
 /// thousands of times a session, and every stall worth acting on is already
 /// on the board with its unread badge; a log line per transition only buried
-/// the news that isn't. `Running` and `Idle` reach neither.
+/// the news that isn't. `Running` and `Idle` post nothing and take the
+/// machine's stall rows off the board; `Unstaffed` does neither.
 pub(crate) fn set_machine_status(
     status: &mut MachineStatus,
     next: MachineStatus,
@@ -1060,15 +1061,29 @@ pub(crate) fn set_machine_status(
             status: next.as_str().to_string(),
         }
     });
+    let subject = format!("{}@{},{}", site.kind, site.machine.0, site.machine.1);
+    // An exhaustive match, `cell_mark`'s rule: a new `MachineStatus` variant
+    // must say what it does to the board rather than fall out of a list
+    // nobody is forced to revisit.
     let text = match next {
-        MachineStatus::Running => format!("The {name} resumes."),
+        // The machine runs again (or nobody is asked to run it), so what the
+        // board said about it is no longer true. A stall row that outlived
+        // its stall was half of what the player read as noise.
+        MachineStatus::Running | MachineStatus::Idle => {
+            alerts::clear_stalls(board, &subject);
+            return;
+        }
+        // A posted worker off delivering, or walking to its post, is the
+        // machine working. Every produce-then-haul cycle passes through
+        // here, which made this 80-92% of all posts in real saves; the
+        // actionable reading of an absence is `Stranded`. Nor does it clear:
+        // a starved machine whose worker steps off is still starved.
+        MachineStatus::Unstaffed => return,
         MachineStatus::Starved => format!("The {name} is starved — nothing is feeding it."),
         MachineStatus::Clogged => format!("The {name} is clogged — its output buffer is full."),
-        MachineStatus::Unstaffed => format!("The {name} has no one at it — its program is away."),
         MachineStatus::Stranded => {
             format!("The {name} is cut off — its program can't find a way to it.")
         }
-        MachineStatus::Idle => format!("The {name} sits idle — no program is assigned."),
         // "grid", never "Power": `Power` is already the creature meter in the
         // status column (`PowerReserve`), and the two are different resources.
         MachineStatus::Unpowered => format!("The {name} is dark — the grid can't power it."),
@@ -1077,11 +1092,6 @@ pub(crate) fn set_machine_status(
         // machine and a program to post, and a supplier has neither. What it
         // needs is a stocked buffer on one of its four orthogonal
         // neighbours — see `game::base::power::is_fuelled`.
-        //
-        // **Once, on the edge, and then silent.** This door only posts on
-        // transition, so a base left dry says this a single time rather than
-        // once a tick forever. The standing signal is the status bar's
-        // `[GRID]` readout and the supplier's own red glyph.
         MachineStatus::Dry => {
             format!("The {name} is out of fuel — no Power Cells beside it.")
         }
@@ -1094,27 +1104,7 @@ pub(crate) fn set_machine_status(
             )
         }
     };
-    // Only the stall states reach the board — `Running` and `Idle` are
-    // not blockers, and posting them would put a resolved-machine entry on
-    // a list that a stall's own resolution never removes. An exhaustive
-    // match rather than `matches!` with a fixed list, `cell_mark`'s rule: a
-    // ninth `MachineStatus` variant must say whether it is a blocker rather
-    // than silently falling out of a list nobody is forced to revisit.
-    let is_blocker = match next {
-        MachineStatus::Starved
-        | MachineStatus::Clogged
-        | MachineStatus::Unstaffed
-        | MachineStatus::Stranded
-        | MachineStatus::Unpowered
-        | MachineStatus::Dry
-        | MachineStatus::Uncharged
-        | MachineStatus::Unconfigured => true,
-        MachineStatus::Running | MachineStatus::Idle => false,
-    };
-    if is_blocker {
-        let subject = format!("{}@{},{}", site.kind, site.machine.0, site.machine.1);
-        alerts::post(board, AlertKind::MachineStalled(next), subject, text);
-    }
+    alerts::post(board, AlertKind::MachineStalled(next), subject, text);
 }
 
 /// Recomputes the base's power ledger and parks it in `resources::PowerGrid`

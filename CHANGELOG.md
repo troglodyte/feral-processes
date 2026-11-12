@@ -53,6 +53,16 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.59
+
+**The alert board no longer fills up with "has no one at it" while a machine is working normally.** A worker walking off to drop its output used to post that alert on every trip. In real saves it made up 80–92% of everything the board received, and one row had reached ×3,255. A worker that cannot get back to its machine still shows as "cut off".
+
+**A machine's stall alert now leaves the board once the machine runs again**, or once nobody is assigned to it. The board lists what is still wrong. Other alerts still stay until you dismiss them.
+
+**A floor job that runs short of materials now says so once, with a count**, for example "Your crew can't finish 11 floor tiles — each needs 3 Blank Substrate to spare." It used to log one line per tile, and log a tile again whenever stock arrived and ran out before the crew could use it. A single tile is still named by its coordinates.
+
+**Fewer routine lines in the base log.** A finished floor tile, a program loading the Teardown Rig and a program leaving the Repair Bay no longer log a line. "The rig strips …" and "… breaks off for repairs" still do.
+
 ## 0.21.58
 
 **The research tree now draws inside the `b` page instead of over it, and Esc, or Left from the tree's left edge, takes you back to the page list.** Before, the tree was drawn over the report. Now it sits inside the page like every other tab, and it takes no keys while the page list has focus.

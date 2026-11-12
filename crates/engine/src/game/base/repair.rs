@@ -166,13 +166,10 @@ impl Game {
             if stats.hp < stats.max_hp {
                 continue;
             }
-            // **On the transition and nowhere else**, `set_machine_status`'
-            // rule: entering a state is news, staying in it is not. The
-            // marker coming off is what makes this an edge — a program
-            // already at full carries no `Downed` and is not in this query.
+            // Silent: going down for repairs is the news, and the program
+            // walking back to work says the rest. A recovery line paired
+            // every "breaks off for repairs" in the log.
             self.world.entity_mut(program).remove::<Downed>();
-            let name = self.creature_label(program);
-            self.log_base(format!("{name} is back on its feet."));
         }
     }
 

@@ -1019,9 +1019,23 @@ impl CrewFields {
 /// Which of the two things `Game::announce_dig_dry` ran short for — a tile
 /// is short of Core Fragments, a finish of Blank Substrate. A cut is never
 /// one of them: cutting spends nothing and is never held back.
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum DigDryReason {
     Tile,
     Finish,
+}
+
+impl DigDryReason {
+    const ALL: [DigDryReason; 2] = [DigDryReason::Tile, DigDryReason::Finish];
+
+    /// A finish order spends substrate; anything else is a tile.
+    fn of(site: &DigSite) -> Self {
+        if site.finish.is_some() {
+            DigDryReason::Finish
+        } else {
+            DigDryReason::Tile
+        }
+    }
 }
 
 impl Game {
@@ -2437,6 +2451,8 @@ impl Game {
             .filter(|(_, kind)| *kind == TaskKind::Excavate)
             .map(|(site, _)| *site)
             .collect();
+        let latched = DigDryReason::ALL.map(|reason| self.dig_drought_latched(&sites, reason));
+        let mut newly_dry: Vec<(DigDryReason, (i32, i32))> = Vec::new();
         for site in sites {
             let Some(at) = self.world.get::<Position>(site).copied() else {
                 continue;
@@ -2469,16 +2485,18 @@ impl Game {
             if finish.is_some() {
                 need_substrate += claim;
             }
-            if *budget < claim {
-                self.announce_dig_dry(site, at.x, at.y, reason);
+            let is_dry = *budget < claim;
+            if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
+                dig.announced_dry = is_dry;
+            }
+            if is_dry {
+                newly_dry.push((reason, (at.x, at.y)));
                 dry.push(site);
                 continue;
             }
             *budget -= claim;
-            if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
-                dig.announced_dry = false;
-            }
         }
+        self.announce_dig_droughts(latched, &newly_dry);
         wanted.retain(|(site, kind)| *kind != TaskKind::Excavate || !dry.contains(site));
         self.sync_dig_order(crate::items::ids::CORE_FRAGMENT, need_fragments);
         self.sync_dig_order(crate::items::ids::BLANK_SUBSTRATE, need_substrate);
@@ -2538,39 +2556,69 @@ impl Game {
         }
     }
 
-    /// Says once that there is nothing anywhere to floor or finish `site`'s
-    /// cell with. `Game::announce_dry`'s twin — the same latch rule, on
-    /// `DigSite::announced_dry` rather than `BuildSite::announced_dry` — and
-    /// a second function rather than a shared one because a dig site names
-    /// a cell, not a bill of materials: there is no `outstanding()` to read
-    /// back and format, only the one item each kind of job spends.
-    /// `reason` picks the wording and the item it names.
-    fn announce_dig_dry(&mut self, site: Entity, x: i32, y: i32, reason: DigDryReason) {
-        if self
-            .world
-            .get::<DigSite>(site)
-            .is_none_or(|d| d.announced_dry)
-        {
-            return;
+    /// Whether any of `sites` was already latched dry of `reason`'s item
+    /// before this pass. A drought is news once for the whole plan, not once
+    /// per cell: the per-site latch alone said a marked box's worth of lines
+    /// at once, and said a cell again whenever stock flickered past its
+    /// claim.
+    fn dig_drought_latched(&self, sites: &[Entity], reason: DigDryReason) -> bool {
+        sites.iter().any(|site| {
+            self.world
+                .get::<DigSite>(*site)
+                .is_some_and(|d| d.announced_dry && DigDryReason::of(d) == reason)
+        })
+    }
+
+    /// Announces each item the plan has newly run dry of — only where no
+    /// site short of it was `latched` before this pass.
+    fn announce_dig_droughts(&mut self, latched: [bool; 2], dry: &[(DigDryReason, (i32, i32))]) {
+        for (reason, was_latched) in DigDryReason::ALL.into_iter().zip(latched) {
+            if was_latched {
+                continue;
+            }
+            let cells: Vec<(i32, i32)> = dry
+                .iter()
+                .filter(|(r, _)| *r == reason)
+                .map(|(_, cell)| *cell)
+                .collect();
+            self.announce_dig_dry(reason, &cells);
         }
-        if let Some(mut dig) = self.world.get_mut::<DigSite>(site) {
-            dig.announced_dry = true;
-        }
+    }
+
+    /// Says that the dig plan has run dry of `reason`'s item, naming the cell
+    /// when there is one and counting them when there are more.
+    /// `Game::announce_dry`'s latch rule raised from the site to the plan:
+    /// `drop_dry_dig_wants` calls this only on the edge, when no site short
+    /// of the same item was already latched. `cells` empty says nothing.
+    fn announce_dig_dry(&mut self, reason: DigDryReason, cells: &[(i32, i32)]) {
         // "to spare" rather than "in store" throughout: under the budget a
         // site can be dry while the base holds stock, because the units are
         // claimed by the jobs ahead of it.
-        let line = match reason {
+        let line = match (reason, cells) {
+            (_, []) => return,
             // Deliberately not "the marked cell at", which is the *cut off*
             // announcement's own wording a few hundred lines up: two stalls
             // sharing a phrase is two tests each satisfied by the other's
             // bug.
-            DigDryReason::Tile => format!(
+            (DigDryReason::Tile, [(x, y)]) => format!(
                 "Your crew has nothing to floor the cut cell at ({x}, {y}) with — it needs {} x{} to spare.",
                 self.item_name(&ItemId::from(crate::items::ids::CORE_FRAGMENT)),
                 crate::tuning::FLOOR_TILE_COST
             ),
-            DigDryReason::Finish => format!(
+            (DigDryReason::Tile, many) => format!(
+                "Your crew has nothing to floor {} cut cells with — each needs {} x{} to spare.",
+                many.len(),
+                self.item_name(&ItemId::from(crate::items::ids::CORE_FRAGMENT)),
+                crate::tuning::FLOOR_TILE_COST
+            ),
+            (DigDryReason::Finish, [(x, y)]) => format!(
                 "Your crew can't finish the floor at ({x}, {y}) — it needs {} {} to spare.",
+                crate::tuning::FLOOR_FINISH_COST,
+                self.item_name(&ItemId::from(crate::items::ids::BLANK_SUBSTRATE))
+            ),
+            (DigDryReason::Finish, many) => format!(
+                "Your crew can't finish {} floor tiles — each needs {} {} to spare.",
+                many.len(),
                 crate::tuning::FLOOR_FINISH_COST,
                 self.item_name(&ItemId::from(crate::items::ids::BLANK_SUBSTRATE))
             ),

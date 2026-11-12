@@ -880,17 +880,10 @@ impl Game {
                     // announce it.
                     return;
                 }
-                let name = self
-                    .world
-                    .resource::<crate::floors::FloorDb>()
-                    .get(&id)
-                    .map(|def| def.name.clone())
-                    .unwrap_or_else(|| id.as_str().to_string());
+                // Silent: a finished tile is a production cycle, seen on the
+                // map, and a box of them was one log line per cell.
                 self.world.resource_mut::<BaseGrid>().set_finish(x, y, id);
                 self.world.despawn(site);
-                self.log_base(format!(
-                    "Your crew finishes the floor at ({x}, {y}) with {name}."
-                ));
             }
             FinishOrder::Strip => {
                 let removed = self.world.resource_mut::<BaseGrid>().clear_finish(x, y);

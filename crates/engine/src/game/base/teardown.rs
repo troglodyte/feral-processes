@@ -277,7 +277,8 @@ impl Game {
                 return;
             }
             let tool = self.rig_tool(rig);
-            let label = self.downed_program_label(&held);
+            // Silent: the strip line that follows names the program and what
+            // it yielded, and saying the load as well was two lines a strip.
             if let Some(mut hopper) = self.world.get_mut::<Hopper>(rig) {
                 hopper.queue.push(crate::components::HopperEntry {
                     program: held,
@@ -285,7 +286,6 @@ impl Game {
                 });
             }
             self.world.entity_mut(worker).remove::<CarryingProgram>();
-            self.log_base(format!("A program loads the rig with {label}."));
             return;
         }
 

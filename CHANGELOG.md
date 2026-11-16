@@ -53,6 +53,14 @@ had reached 669 KB:
 When this file passes 200 KB, move its oldest releases into a new file of
 the same kind and list it here.
 
+## 0.21.60
+
+**A Status part now names its condition the way battle does and says what it does**, for example "Locked (can't have Integrity restored)". Before, the part's research text, label and the routines built from it used words found nowhere else in the game: "a repair lock", "a stall", "exposure", "throttling". Weapon status riders and exploits in gear crafting use the same wording now.
+
+**The Breed page tells you up front when you have no Breeding Seed.** Before, you could pick both parents and only be refused on the confirm page. Now the first page shows a line saying you need a seed and that wild programs drop them, and picking the first parent refuses straight away.
+
+**Moving the pointer onto a control plays a soft tick.** This covers list rows, tabs, the page list, keycaps, the "n more" markers and the sprite editor's buttons and swatches. Map tiles, the drawing canvas and empty background stay silent, and so does dragging.
+
 ## 0.21.59
 
 **The alert board no longer fills up with "has no one at it" while a machine is working normally.** A worker walking off to drop its output used to post that alert on every trip. In real saves it made up 80–92% of everything the board received, and one row had reached ×3,255. A worker that cannot get back to its machine still shows as "cut off".

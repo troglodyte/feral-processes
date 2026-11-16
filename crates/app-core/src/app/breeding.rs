@@ -38,6 +38,17 @@ impl App {
             self.refuse(BreedRefusal::NoFreeSlot.reason());
             return;
         }
+        // Likewise a breed with no seed to spend: `Game::breed` would refuse
+        // it only on the confirm page.
+        if key == GameKey::Enter
+            && self
+                .game
+                .as_ref()
+                .is_some_and(|g| g.breeding_seeds_held() == 0)
+        {
+            self.refuse(BreedRefusal::NoSeed.reason());
+            return;
+        }
         if let Some(parent) = self.pick_parent(key, None) {
             self.pending_breed_first = Some(parent);
             self.mode = Mode::BreedSecond;

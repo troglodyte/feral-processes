@@ -43,13 +43,13 @@ impl WeaponPart {
             WeaponPart::Rider(status) => {
                 let (chance, rounds, _) = t::GEAR_RIDER[status.index()];
                 format!(
-                    "{:.0}% chance a hit leaves {} for {rounds} rounds.",
+                    "{:.0}% chance a hit leaves the target {} for {rounds} rounds.",
                     chance * 100.0,
-                    status.name()
+                    status.explained()
                 )
             }
             WeaponPart::Exploit(status) => format!(
-                "Hits {}% harder against a target with {}.",
+                "Hits {}% harder against a target that is {}.",
                 t::GEAR_EXPLOIT_PERCENT[status.index()],
                 status.name()
             ),

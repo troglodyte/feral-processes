@@ -13,7 +13,8 @@
 //! of them, and a refusal says what the key's would.
 
 use crate::{
-    App, EditorButton, GameKey, HubPageKey, Mode, PointerButton, PointerPhase, TargetMark,
+    App, EditorButton, GameKey, HubPageKey, Mode, PointerButton, PointerPhase, SoundEvent,
+    TargetMark,
 };
 
 /// Which way a scroll marker or the wheel moves the list.
@@ -56,6 +57,25 @@ pub enum PointerHit {
     Region(Region),
 }
 
+impl PointerHit {
+    /// A control: something one click acts on. The map, the canvas and a
+    /// region's background are swept across, and a tick per cell would
+    /// rattle.
+    pub fn ticks_on_hover(self) -> bool {
+        match self {
+            PointerHit::Swatch(_)
+            | PointerHit::Button(_)
+            | PointerHit::Subject(_)
+            | PointerHit::Page(_)
+            | PointerHit::Tab(_)
+            | PointerHit::Row(_)
+            | PointerHit::Key(_)
+            | PointerHit::More(_) => true,
+            PointerHit::Cell(..) | PointerHit::MapTile(..) | PointerHit::Region(_) => false,
+        }
+    }
+}
+
 /// One frame of pointer input, resolved against the frame just drawn. The
 /// reader in gui builds it; nothing in it is a pixel.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -84,6 +104,13 @@ impl App {
     /// turns a press or the wheel into the keys it stands for.
     pub fn handle_pointer_event(&mut self, event: PointerEvent) {
         let entered = self.hover_entered(event.hover);
+        // A drag is a stroke or a scroll, not the pointer looking around.
+        if !event.drag
+            && event.hover != self.pointer_hover
+            && event.hover.is_some_and(PointerHit::ticks_on_hover)
+        {
+            self.pending_sounds.push(SoundEvent::Hover);
+        }
         self.pointer_hover = event.hover;
         self.aim_follows(entered);
         self.pointer_stroke(&event);

@@ -191,14 +191,13 @@ fn the_c_hub_keeps_its_own_breed_page_with_a_bay_standing() {
 }
 
 #[test]
-fn a_missing_seed_is_refused_on_the_confirm_page() {
+fn a_missing_seed_is_refused_on_the_first_pick() {
     let mut app = app_with_a_breeding_bay(8107, 0, false);
     open_the_bay_sheet(&mut app);
     app.handle_key(GameKey::Char('B'));
     pick_row(&mut app, 0);
-    pick_row(&mut app, 0);
-    app.handle_key(GameKey::Enter);
-    assert_eq!(app.mode, Mode::BreedConfirm);
+    assert_eq!(app.mode, Mode::Breed);
+    assert_eq!(app.pending_breed_first, None);
     assert_eq!(app.status_line.as_deref(), Some("no breeding seed"));
 }
 

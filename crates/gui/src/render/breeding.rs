@@ -59,6 +59,10 @@ fn label_of(pets: &[PetInfo], e: Option<Entity>) -> String {
 /// The first-parent rows, shared by the popup and the two hubs' Breed
 /// pages, whose keybar stands in for the footer. The bay's slots head them,
 /// so the base report's page shows the child hatching as the sheet does.
+/// The first page says up front that a breed needs a seed, rather than the
+/// player picking two parents to be refused on the confirm.
+const NO_SEED_LINE: &str = "(you need a Breeding Seed: wild programs drop them)";
+
 pub(super) fn breed_page_rows(game: &mut Game, bay: Option<Entity>, selected: usize) -> Vec<Row> {
     let pets = game.owned_pets();
     let candidates: Vec<&PetInfo> = pets.iter().collect();
@@ -73,6 +77,9 @@ pub(super) fn breed_page_rows(game: &mut Game, bay: Option<Entity>, selected: us
         rows.push(text_row(""));
     }
     rows.push(text_row("Breed which program? Pick the first of two."));
+    if game.breeding_seeds_held() == 0 {
+        rows.push(text_row(NO_SEED_LINE));
+    }
     if candidates.is_empty() {
         rows.push(text_row("(you have no compiled programs)"));
     }
@@ -294,6 +301,7 @@ mod tests {
             CONFIRM_NOTES[1].to_string(),
             key_hints(&["Enter breed", "Esc back"]),
             "Breed which program? Pick the first of two.".to_string(),
+            NO_SEED_LINE.to_string(),
         ];
         assert_fits(&lines, PopupSize::Small);
         assert_fits(

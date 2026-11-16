@@ -272,10 +272,13 @@ fn describe(frame: Frame, f: &Folded) -> String {
         });
     }
     if let Some(status) = f.rider {
-        line.push_str(&format!(" May leave a target with {}.", status.name()));
+        line.push_str(&format!(" May leave a target {}.", status.explained()));
     }
     if let Some(status) = f.exploit {
-        line.push_str(&format!(" Hits harder against {}.", status.name()));
+        line.push_str(&format!(
+            " Hits harder against a target that is {}.",
+            status.name()
+        ));
     }
     line
 }

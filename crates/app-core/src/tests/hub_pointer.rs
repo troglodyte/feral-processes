@@ -358,3 +358,58 @@ fn a_click_on_a_tree_node_selects_it_and_a_second_click_works_it() {
         "the second click worked the node (Enter), whatever it answered"
     );
 }
+
+fn hover(app: &mut App, hit: Option<PointerHit>) -> Vec<SoundEvent> {
+    app.handle_pointer_event(PointerEvent {
+        hover: hit,
+        ..Default::default()
+    });
+    app.take_sounds()
+}
+
+#[test]
+fn moving_onto_a_control_ticks_once() {
+    let mut app = test_app(41290);
+    app.handle_key(GameKey::Char('b'));
+    app.take_sounds();
+    assert_eq!(
+        hover(&mut app, Some(PointerHit::Row(0))),
+        [SoundEvent::Hover]
+    );
+    assert_eq!(hover(&mut app, Some(PointerHit::Row(0))), []);
+    assert_eq!(
+        hover(&mut app, Some(PointerHit::Tab(0))),
+        [SoundEvent::Hover]
+    );
+    assert_eq!(hover(&mut app, None), []);
+    assert_eq!(
+        hover(&mut app, Some(PointerHit::Key(GameKey::Esc))),
+        [SoundEvent::Hover]
+    );
+}
+
+#[test]
+fn the_map_the_canvas_and_backgrounds_stay_silent() {
+    let mut app = test_app(41291);
+    app.take_sounds();
+    for hit in [
+        PointerHit::MapTile(3, 4),
+        PointerHit::MapTile(3, 5),
+        PointerHit::Cell(1, 1),
+        PointerHit::Region(Region::Page),
+    ] {
+        assert_eq!(hover(&mut app, Some(hit)), [], "{hit:?}");
+    }
+}
+
+#[test]
+fn a_drag_across_controls_does_not_tick() {
+    let mut app = test_app(41292);
+    app.take_sounds();
+    app.handle_pointer_event(PointerEvent {
+        hover: Some(PointerHit::Swatch(2)),
+        drag: true,
+        ..Default::default()
+    });
+    assert_eq!(app.take_sounds(), []);
+}

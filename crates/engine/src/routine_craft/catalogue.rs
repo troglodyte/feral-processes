@@ -395,16 +395,35 @@ impl StatusKind {
         StatusKind::ALL.into_iter().find(|k| k.id() == *id)
     }
 
-    /// The word a description uses for the condition.
+    /// The condition's name as the battle screen shows it: the
+    /// `assets/statuses/` def's `name`, which a test holds this to.
     pub fn name(self) -> &'static str {
         match self {
-            StatusKind::Bleed => "bleeding",
-            StatusKind::Stun => "a stall",
-            StatusKind::Exposed => "exposure",
-            StatusKind::Poison => "poison",
-            StatusKind::Throttled => "throttling",
-            StatusKind::Locked => "a repair lock",
+            StatusKind::Bleed => "Bleeding",
+            StatusKind::Stun => "Stunned",
+            StatusKind::Exposed => "Exposed",
+            StatusKind::Poison => "Poisoned",
+            StatusKind::Throttled => "Throttled",
+            StatusKind::Locked => "Locked",
         }
+    }
+
+    /// What the condition does, so a description never leaves the player
+    /// guessing at a name. No figures: those live in the status def.
+    pub fn effect(self) -> &'static str {
+        match self {
+            StatusKind::Bleed => "loses Integrity each round",
+            StatusKind::Stun => "loses its next action",
+            StatusKind::Exposed => "Evasion cut",
+            StatusKind::Poison => "loses Integrity each round; doses stack",
+            StatusKind::Throttled => "ATK cut",
+            StatusKind::Locked => "can't have Integrity restored",
+        }
+    }
+
+    /// The name with its effect beside it, for a sentence.
+    pub fn explained(self) -> String {
+        format!("{} ({})", self.name(), self.effect())
     }
 }
 

@@ -51,9 +51,9 @@ pub(super) fn sentence(def: &AbilityDef, s: &Split) -> String {
             let mut line = format!("Damage {}{kind} to {to}", band(*power, *spread));
             if let (Some(rider), Some(kind)) = (status, s.status) {
                 line.push_str(&format!(
-                    ", with a {:.0}% chance of {}",
+                    ", with a {:.0}% chance to leave it {}",
                     rider.chance * 100.0,
-                    kind.name()
+                    kind.explained()
                 ));
             }
             line
@@ -97,7 +97,9 @@ pub(super) fn sentence(def: &AbilityDef, s: &Split) -> String {
             }
         },
         AbilityEffect::Debuff { duration, .. } => {
-            let what = s.status.map_or("a condition", StatusKind::name);
+            let what = s
+                .status
+                .map_or("a condition".to_string(), StatusKind::explained);
             format!("Inflict {what} on {to} for {duration} rounds")
         }
         AbilityEffect::Cleanse => format!("Clear status conditions from {to}"),
@@ -227,9 +229,9 @@ pub fn part_effect(part: &Subroutine) -> String {
         Subroutine::Status(kind) => {
             let (chance, duration, _) = t::CRAFT_RIDER[kind.index()];
             format!(
-                "On Damage, a {:.0}% chance to leave {} for {}; on Debuff, inflicts it.",
+                "On Damage: a {:.0}% chance to leave the target {} for {}. On Debuff: always.",
                 chance * 100.0,
-                kind.name(),
+                kind.explained(),
                 rounds(duration),
             )
         }
@@ -281,6 +283,21 @@ mod tests {
             bleed.contains(&format!("{:.0}%", chance * 100.0)),
             "{bleed}"
         );
+    }
+
+    /// A Status part names its condition the way the battle screen does,
+    /// not with a noun found nowhere else ("a repair lock").
+    #[test]
+    fn a_status_part_uses_the_battle_name() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/statuses");
+        let (db, _) = crate::statuses::StatusDb::load_dir(&dir).unwrap();
+        for kind in StatusKind::ALL {
+            let def = db.get(&kind.id()).expect("shipped status");
+            let part = Subroutine::Status(kind);
+            assert!(part.label().ends_with(&def.name), "{}", part.label());
+            let line = part_effect(&part);
+            assert!(line.contains(&def.name), "{line}");
+        }
     }
 
     #[test]
